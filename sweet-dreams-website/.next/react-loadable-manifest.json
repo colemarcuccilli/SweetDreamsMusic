@@ -4,11 +4,5 @@
     "files": [
       "static/chunks/src_components_Meteors_js.js"
     ]
-  },
-  "components/SpaceThemedServicesSection.js -> ./SolarSystem": {
-    "id": "components/SpaceThemedServicesSection.js -> ./SolarSystem",
-    "files": [
-      "static/chunks/src_components_SolarSystem_js.js"
-    ]
   }
 }

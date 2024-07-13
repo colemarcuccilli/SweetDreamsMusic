@@ -1,12 +1,6 @@
-import React from 'react';
-import SpaceThemedServicesSection from '../components/SpaceThemedServicesSection';
-import Navigation from '../components/Navigation';
+// pages/index.js
+import SolarSystem from '../components/SolarSystem';
 
-export default function HomePage() {
-  return (
-    <div className="min-h-screen bg-black">
-      <Navigation />
-      <SpaceThemedServicesSection />
-    </div>
-  );
+export default function Home() {
+  return <SolarSystem />;
 }

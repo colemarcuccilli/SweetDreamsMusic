@@ -1,6 +1,13 @@
+const path = require('path');
+
 module.exports = {
-    webpack: (config) => {
-      config.externals = [...config.externals, { canvas: 'canvas' }];
-      return config;
-    },
-  };
+  webpack: (config, { isServer }) => {
+    if (!isServer) {
+      config.module.rules.push({
+        test: /\.css$/,
+        use: ['style-loader', 'css-loader'],
+      });
+    }
+    return config;
+  },
+};
