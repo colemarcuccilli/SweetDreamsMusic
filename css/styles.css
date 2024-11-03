@@ -1,7 +1,7 @@
 /* Base Styles */
 :root {
     --primary-color: #e66a31;    /* Purple */
-    --accent-color: #11944a;     /* Blue */
+    --accent-color: #046e5e;     /* Blue */
     --dark-bg: #0a0a0a;
     --card-bg: #1a1a1a;
     --text-color: #ffffff;
@@ -25,8 +25,7 @@ body {
     margin: 0 auto;
     padding: 0 20px;
 }
-
-/* Hero Section */
+/* Hero Section Adjustments */
 .hero {
     position: relative;
     height: 100vh;
@@ -36,20 +35,19 @@ body {
     overflow: hidden;
 }
 
-/* Hero Section Adjustments */
+/* Adjustments for the 4x4 grid behind the logo */
 .thumbnails-container {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     grid-template-rows: repeat(4, 1fr);
     width: 100%;
     height: 100%;
-    gap: 5px; /* Adjust spacing */
+    gap: 5px;
     position: absolute;
     top: 0;
     left: 0;
-    z-index: 1;
+    z-index: 1; /* Keeps it behind the logo */
 }
-
 .background-tile {
     background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
     opacity: 0.1;
@@ -63,12 +61,6 @@ body {
     object-fit: cover;
 }
 
-/* Animation keyframes */
-@keyframes pulse {
-    0% { opacity: 0.05; }
-    100% { opacity: 0.2; }
-}
-
 .hero-content {
     position: relative;
     z-index: 2;
@@ -76,13 +68,12 @@ body {
     color: white;
     padding: 20px;
 }
-
-.hero-content {
-    position: relative;
-    z-index: 2;
-    text-align: center;
-    padding: 20px;
+/* Animation keyframes */
+@keyframes pulse {
+    0% { opacity: 0.05; }
+    100% { opacity: 0.2; }
 }
+
 
 .hero-title {
     font-size: clamp(3rem, 8vw, 6rem);
@@ -97,7 +88,12 @@ body {
     opacity: 0.9;
 }
 
-/* Buttons */
+.promo-banner {
+    font-size: 1.5rem;
+    color: var(--primary-color);
+    margin-bottom: 10px;
+}
+
 .cta-button {
     display: inline-block;
     padding: 15px 40px;
@@ -147,63 +143,29 @@ body {
     opacity: 0.8;
 }
 
-/* Services Section */
-.section-title {
-    text-align: center;
-    font-size: 2.5rem;
-    color: var(--text-color);
-    margin-bottom: 50px;
-    position: relative;
+
+
+.social-links {
+    display: flex;
+    gap: 15px;
+    margin-top: 10px;
 }
 
-.squiggly {
-    position: absolute;
-    bottom: -10px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 100px;
-    height: 3px;
-    background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+.social-links a {
+    font-size: 1.5rem;
+    color: var(--accent-color);
+    transition: color 0.3s;
 }
 
-/* Services Grid */
-#services {
-    background-color: var(--dark-bg);
-    color: var(--text-color);
-    padding: 100px 0;
+.social-links a:hover {
+    color: var(--primary-color);
 }
-
-/* Services Grid Layout */
-.services-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr); /* 3 cards per row */
-    gap: 20px;
-    padding: 20px 0;
-    justify-items: center; /* Centers the cards */
-}
-
-/* Toggle Flip Effect for Service Cards */
-.service-card {
-    width: 100%;
-    max-width: 400px;
-    height: 300px;
-    perspective: 1000px;
-    overflow: hidden;
-    position: relative;
-    cursor: pointer;
-}
-
 .card-inner {
     width: 100%;
     height: 100%;
     transition: transform 0.8s ease;
     transform-style: preserve-3d;
     position: relative;
-}
-
-.service-card:hover .card-inner,
-.service-card.flipped .card-inner {
-    transform: rotateY(180deg); /* Flip effect on hover or if 'flipped' class is added */
 }
 
 .card-front, .card-back {
@@ -243,36 +205,53 @@ body {
     font-weight: bold;
 }
 
-.service-card i {
-    font-size: 2.5rem;
-    margin-bottom: 15px;
-    color: var(--primary-color);
-}
 
-.service-card h3 {
+.social-links a {
     font-size: 1.5rem;
-    font-weight: 700;
+    color: var(--accent-color);
+    transition: color 0.3s;
+}
+
+.social-links a:hover {
     color: var(--primary-color);
-    margin-bottom: 15px;
 }
 
-.service-card p {
-    font-size: 1rem;
-    color: rgba(255, 255, 255, 0.85);
+/* Pricing Section Styling */
+#pricing {
+    color: var(--text-color);
+    text-align: center;
+    padding: 100px 0;
 }
 
-/* Responsive Adjustments */
-@media (max-width: 768px) {
-    .services-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
+.pricing-info {
+    font-size: 1.1rem;
+    margin-bottom: 20px;
+    color: rgba(255, 255, 255, 0.75);
 }
 
-@media (max-width: 480px) {
-    .services-grid {
-        grid-template-columns: 1fr;
-    }
+.pricing-table {
+    width: 100%;
+    max-width: 600px;
+    margin: 0 auto;
+    border-collapse: collapse;
 }
+
+.pricing-table th, .pricing-table td {
+    padding: 12px 15px;
+    text-align: left;
+}
+
+.pricing-table th {
+    font-weight: bold;
+}
+
+/* Calendly Section with White Background */
+#booking {
+    background-color: #ffffff; /* Set background to white */
+    color: var(--dark-bg); /* Set text color to match dark background */
+    padding: 60px 0;
+}
+
 
 .book-button {
     display: inline-block;
@@ -296,6 +275,71 @@ body {
     border-radius: 15px;
     margin-top: 60px;
     text-align: center;
+}
+
+/* Logo Styling */
+header {
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+}
+
+/* Centered Logo Styling */
+.logo-container {
+    position: absolute;
+    top: 20%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 3; /* Ensure it sits above the grid */
+}
+
+.logo {
+    max-width: 400px; /* Adjust size as needed */
+    width: 100%;
+    height: auto;
+}
+
+/* Hero Section without Title */
+.hero .title, .hero .subtitle {
+    display: none; /* Remove titles from the hero section */
+}
+
+/* Calendly Section with White Background */
+#booking {
+    background-color: #ffffff;
+    color: #000000; /* Ensure text contrast */
+    padding: 60px 0;
+}
+
+/* Calendly Section Styling */
+.calendly-section {
+    background-color: #ffffff; /* White background to match the Calendly widget */
+    color: #0a0a0a; /* Dark text color for contrast */
+    padding: 60px 0;
+    text-align: center;
+}
+
+.calendly-section .section-title {
+    font-size: 2rem;
+    color: #e5802f; /* Match the primary color */
+    margin-bottom: 10px;
+}
+
+.calendly-section .section-subtitle {
+    font-size: 1.1rem;
+    color: #333;
+    margin-bottom: 30px;
+    opacity: 0.8;
+}
+
+/* Calendly Widget Container */
+.calendly-inline-widget {
+    width: 100%;
+    max-width: 600px; /* Set max width for widget */
+    margin: 0 auto;
+    border-radius: 8px; /* Rounded corners */
+    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2); /* Subtle shadow */
+    overflow: hidden; /* Ensures content stays within rounded edges */
 }
 
 .info-header {
@@ -351,10 +395,7 @@ body {
     .stats-grid {
         grid-template-columns: 1fr;
     }
-    
-    .services-grid {
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    }
+
     
     .section {
         padding: 60px 0;
@@ -644,7 +685,6 @@ body {
 }
 
 .hours-card {
-    background: var(--card-bg);
     padding: 30px;
     border-radius: 10px;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
@@ -668,7 +708,7 @@ body {
 }
 
 .exclusive {
-    background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+    background: linear-gradient, var(--primary-color);
     color: white;
 }
 
@@ -697,11 +737,6 @@ body {
     opacity: 0.7;
 }
 
-.service-card {
-    position: relative;
-    perspective: 1000px;
-    height: 250px;
-}
 
 .card-front {
     position: relative; /* So flip-arrow positions correctly */
@@ -732,15 +767,210 @@ body {
     background-color: rgba(255, 255, 255, 0.05);
 }
 
-/* Responsive Grid Adjustments */
-@media (max-width: 1024px) {
+
+/* Services Section */
+.section-title {
+    text-align: center;
+    font-size: 2.5rem;
+    color: var(--text-color);
+    margin-bottom: 50px;
+    position: relative;
+}
+
+.squiggly {
+    position: absolute;
+    bottom: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100px;
+    height: 3px;
+    background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+}
+
+
+/* Service Cards */
+.service-card {
+    background: #1a1a1a; /* Dark gray card background for both services sections */
+    padding: 20px;
+    border-radius: 8px;
+    text-align: center;
+    transition: transform 0.3s ease;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.service-card:hover {
+    transform: translateY(-5px);
+}
+
+.service-card h3 {
+    font-size: 1.3rem;
+    color: var(--primary-color);
+    margin-bottom: 5px;
+}
+
+.service-card p {
+    font-size: 1rem;
+    color: rgba(255, 255, 255, 0.85);
+}
+/* Icon Styling */
+.service-card i {
+    font-size: 3rem;
+    color: var(--primary-color);
+    margin-bottom: 15px;
+}
+
+
+
+/* Card Flip Animation */
+.card-inner {
+    width: 100%;
+    height: 100%;
+    transition: transform 0.8s ease;
+    transform-style: preserve-3d;
+    position: relative;
+}
+
+.service-card:hover .card-inner,
+.service-card.flipped .card-inner {
+    transform: rotateY(180deg); /* Flip effect on hover or if 'flipped' class is added */
+}
+
+/* Card Front & Back */
+.card-front, .card-back {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    backface-visibility: hidden;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    top: 0;
+    left: 0;
+}
+
+.card-front {
+    background: var(--card-bg);
+}
+
+.card-back {
+    background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+    color: #ffffff;
+    transform: rotateY(180deg);
+}
+
+.card-back ul {
+    list-style: none;
+    padding: 0;
+    text-align: center;
+}
+
+.card-back li {
+    margin: 8px 0;
+    font-size: 1.1rem;
+    font-weight: bold;
+}
+
+/* Services Grid for Cards */
+.services-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* 2 columns for the 2x2 card layout */
+    gap: 20px;
+    max-width: 600px; /* Limit width for proper alignment */
+}
+
+/* Other Services Section */
+#other-services {
+    padding: 100px 0;
+    background-color: var(--card-bg);
+    color: var(--text-color);
+    text-align: center;
+}
+
+.service-cards-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 20px;
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+/* Service Details for "Other Services" */
+.service-details h3 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    margin-bottom: 8px;
+}
+
+.service-details p {
+    font-size: 1rem;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+
+/* Right Side: Title, Subtext, CTA, and Social Icons */
+.services-text {
+    max-width: 500px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.services-title {
+    font-size: 2rem;
+    color: var(--primary-color);
+    margin-bottom: 10px;
+}
+
+.services-subtext {
+    font-size: 1rem;
+    color: rgba(255, 255, 255, 0.8);
+    margin-bottom: 20px;
+}
+/* Services Section Container */
+#services {
+    padding: 60px 0;
+    display: flex;
+    justify-content: center;
+}
+/* Services Section Background */
+#services, #other-services {
+    background-color: #121212; /* A dark gray background for consistency */
+    color: var(--text-color);
+    padding: 60px 0;
+}
+
+.services-content {
+    display: flex;
+    gap: 40px; /* Space between cards and text */
+    max-width: 1200px;
+    align-items: flex-start;
+    justify-content: space-between;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .services-content {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+    
     .services-grid {
-        grid-template-columns: repeat(2, 1fr); /* 2 cards per row on smaller screens */
+        grid-template-columns: 1fr; /* 1 card per row on mobile */
+    }
+    
+    .services-text {
+        max-width: 100%;
+        align-items: center;
     }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
     .services-grid {
-        grid-template-columns: 1fr; /* 1 card per row on mobile */
+        grid-template-columns: repeat(2, 1fr); /* 2 cards per row on smaller screens */
     }
 }

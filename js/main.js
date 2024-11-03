@@ -88,3 +88,17 @@ function openTab(event, tabName) {
     document.getElementById(tabName).classList.add('active');
     event.currentTarget.classList.add('active');
 }
+
+// JavaScript for Scroll-Triggered Animation for Other Services Cards
+window.addEventListener('scroll', () => {
+    const serviceCards = document.querySelectorAll('#other-services .service-card');
+    const triggerPoint = window.innerHeight * 0.85;
+
+    serviceCards.forEach((card) => {
+        const cardTop = card.getBoundingClientRect().top;
+        
+        if (cardTop < triggerPoint) {
+            card.classList.add('active');
+        }
+    });
+});
