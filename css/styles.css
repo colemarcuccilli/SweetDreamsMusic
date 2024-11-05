@@ -94,21 +94,57 @@ body {
     margin-bottom: 10px;
 }
 
+/* Button Styling */
 .cta-button {
     display: inline-block;
     padding: 15px 40px;
-    background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+    background: var(--primary-color);
     color: white;
     text-decoration: none;
     border-radius: 30px;
     font-size: 1.2rem;
     font-weight: 600;
+    position: relative; /* For glare effect positioning */
+    overflow: hidden; /* To ensure the glare effect stays within the button */
     transition: transform 0.3s ease;
 }
 
 .cta-button:hover {
     transform: translateY(-2px);
 }
+
+/* Glare Effect */
+.cta-button::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: -50%;
+    width: 200%;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.3);
+    transform: skewX(-30deg);
+    transition: all 0.5s;
+    opacity: 0.5;
+    filter: blur(8px);
+}
+
+/* Glare Animation */
+@keyframes glare {
+    0% {
+        left: -50%;
+    }
+    50% {
+        left: 100%;
+    }
+    100% {
+        left: 150%;
+    }
+}
+
+.cta-button::before {
+    animation: glare 5s infinite;
+}
+
 
 /* Stats Section */
 .section {
@@ -973,4 +1009,22 @@ header {
     .services-grid {
         grid-template-columns: repeat(2, 1fr); /* 2 cards per row on smaller screens */
     }
+}
+/* Timeline Styling */
+#evolution {
+    padding: 80px 0;
+    background-color: #121212;
+    color: #ffffff;
+    text-align: center;
+}
+
+.section-title {
+    font-size: 2.5rem;
+    margin-bottom: 20px;
+}
+
+.section-subtitle {
+    font-size: 1.2rem;
+    color: #e0e0e0;
+    margin-bottom: 50px;
 }
