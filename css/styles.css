@@ -1,6 +1,6 @@
 /* Base Styles */
 :root {
-    --primary-color: #e66a31;    /* Purple */
+    --primary-color: #e1791e;    /* Purple */
     --accent-color: #046e5e;     /* Blue */
     --dark-bg: #0a0a0a;
     --card-bg: #1a1a1a;
@@ -66,6 +66,7 @@ body {
     z-index: 2;
     text-align: center;
     color: white;
+    margin-top: 150px;
     padding: 20px;
 }
 /* Animation keyframes */
@@ -323,7 +324,7 @@ header {
 /* Centered Logo Styling */
 .logo-container {
     position: absolute;
-    top: 20%;
+    top: 37%;
     left: 50%;
     transform: translate(-50%, -50%);
     z-index: 3; /* Ensure it sits above the grid */
