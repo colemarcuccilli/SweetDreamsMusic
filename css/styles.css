@@ -78,9 +78,8 @@ body {
     pointer-events: none; /* Disable interaction with videos */
 }
 @media (max-width: 768px) {
-    .thumbnails-container {
-        height: 160vh;
-    }
+    .hero {
+        height 88vh;
 }
 
 .hero-title {
