@@ -60,6 +60,7 @@ body {
     z-index: 2;
     text-align: center;
     color: white;
+    margin-top: 2rem;
     padding: 20px;
     display: flex;
     flex-direction: column;
@@ -461,7 +462,7 @@ header {
     max-width: 400px; /* Adjust size as needed */
     width: 100%;
     height: auto;
-    margin-bottom: 4rem;
+    margin-bottom: 5rem;
 }
 
 /* Hero Section without Title */
