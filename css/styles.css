@@ -79,7 +79,7 @@ body {
 }
 @media (max-width: 768px) {
     .thumbnails-container {
-        height: 88vh;
+        height: 160vh;
     }
 }
 
