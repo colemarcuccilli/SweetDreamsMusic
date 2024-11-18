@@ -77,6 +77,11 @@ body {
 .thumbnails-container video {
     pointer-events: none; /* Disable interaction with videos */
 }
+@media (max-width: 768px) {
+    .thumbnails-container {
+        height: 88vh;
+    }
+}
 
 .hero-title {
     font-size: clamp(3rem, 8vw, 6rem);
