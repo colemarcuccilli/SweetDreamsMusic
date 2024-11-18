@@ -74,6 +74,12 @@ body {
     100% { opacity: 0.2; }
 }
 
+/* Hide thumbnails-container on small screens */
+@media (max-width: 768px) {
+    .thumbnails-container {
+        display: none;
+    }
+}
 
 .hero-title {
     font-size: clamp(3rem, 8vw, 6rem);
