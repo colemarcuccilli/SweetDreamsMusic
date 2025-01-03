@@ -41,12 +41,18 @@ body {
     grid-template-columns: repeat(4, 1fr);
     grid-template-rows: repeat(4, 1fr);
     width: 100%;
-    max-height: 100vh; /* Restricts the height to the viewport */
+    height: 100%;
     gap: 5px;
     position: absolute;
     top: 0;
     left: 0;
     z-index: 1; /* Keeps it behind the logo */
+}
+.background-tile {
+    background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+    opacity: 0.1;
+    border-radius: 8px;
+    animation: pulse 3s infinite alternate ease-in-out;
 }
 
 .thumbnails-container video {
@@ -55,159 +61,14 @@ body {
     object-fit: cover;
 }
 
-video {
-    pointer-events: none; /* Disables interaction with the video */
-    object-fit: cover; /* Ensures the video covers the entire space */
-}
-
-video:hover {
-    cursor: default; /* Ensures the cursor remains the default arrow */
-}
-
 .hero-content {
     position: relative;
     z-index: 2;
     text-align: center;
     color: white;
-    margin-top: 8rem;
+    margin-top: 150px;
     padding: 20px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    height: 100%; /* Make sure it spans the height of the hero section */
 }
-@media (max-width: 768px) {
-    .hero {
-        height: auto;
-        flex-direction: column;
-        align-items: center;
-        justify-content: flex-start;
-        padding: 20px 0; /* Add some padding for spacing */
-    }
-
-    .thumbnails-container {
-        position: relative; /* Make it part of the normal flow */
-        width: 100%;
-        max-height: none; /* Remove height restriction */
-        margin-bottom: 20px; /* Add space below the grid */
-    }
-
-    .logo-container {
-        position: relative; /* Remove absolute positioning */
-        transform: none; /* Reset transform */
-        margin-top: 20px; /* Add space above the logo */
-    }
-
-    .hero-content {
-        position: relative; /* Reset positioning */
-        z-index: 2;
-        text-align: center;
-        padding: 20px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        margin-top: -2.5rem;
-        gap: 15px; /* Add gap between elements */
-    }
-
-    .promo-banner {
-        font-size: 1.2rem; /* Adjust font size for small screens */
-        margin-top: 10px; /* Add space above the promo banner */
-    }
-
-    .cta-button {
-        font-size: 1rem; /* Adjust button font size */
-        padding: 10px 30px; /* Adjust button padding */
-    }
-}
-
-@media (min-width: 768px) and (max-width: 900px) {
-    .hero {
-        height: auto;
-        flex-direction: column;
-        align-items: center;
-        justify-content: flex-start;
-        padding: 30px 0; /* Slightly more padding for spacing */
-    }
-
-    .thumbnails-container {
-        position: relative; /* Maintain normal flow */
-        width: 100%;
-        max-height: none; /* Allow grid to take full height */
-        margin-bottom: 25px; /* More space below the grid */
-    }
-
-    .logo-container {
-        position: relative; /* Keep normal flow positioning */
-        transform: none;
-        margin-top: 25px; /* Adjust margin for proper spacing */
-    }
-
-    .hero-content {
-        position: relative; /* Normal flow positioning */
-        z-index: 2;
-        text-align: center;
-        padding: 20px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 20px; /* Increase gap for better spacing */
-        margin-top: -3.5rem;
-    }
-
-    .promo-banner {
-        font-size: 1.4rem; /* Slightly larger font size */
-        margin-top: 15px; /* Adjust margin */
-    }
-
-    .cta-button {
-        font-size: 1.1rem; /* Slightly larger button font */
-        padding: 12px 35px; /* Adjust button padding */
-    }
-}
-
-@media (min-width: 900px) {
-    .hero {
-        height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        overflow: hidden;
-        padding: 0; /* Reset padding */
-    }
-
-    .logo-container {
-        position: absolute;
-        top: 50%; /* Center vertically */
-        left: 50%;
-        transform: translate(-50%, -50%);
-        z-index: 3; /* Ensure it stays above the grid */
-    }
-
-    .hero-content {
-        position: relative;
-        z-index: 2;
-        text-align: center;
-        padding: 20px;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 25px; /* Ensure enough space between elements */
-    }
-
-    .promo-banner {
-        font-size: 1.5rem; /* Default font size for larger screens */
-        margin-top: 20px; /* Ensure no overlap with the logo */
-    }
-
-    .cta-button {
-        font-size: 1.2rem;
-        padding: 15px 40px; /* Default button padding */
-    }
-}
-
-
 /* Animation keyframes */
 @keyframes pulse {
     0% { opacity: 0.05; }
@@ -473,7 +334,6 @@ header {
     max-width: 400px; /* Adjust size as needed */
     width: 100%;
     height: auto;
-    margin-bottom: 5rem;
 }
 
 /* Hero Section without Title */
