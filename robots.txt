@@ -1,0 +1,6 @@
+User-agent: *
+Disallow: /admin/
+Disallow: /internal/
+Allow: /
+
+Sitemap: https://sweetdreamsmusic.com/sitemap.xml

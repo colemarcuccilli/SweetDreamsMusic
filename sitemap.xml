@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+
+  <!-- Home Page -->
+  <url>
+    <loc>https://sweetdreamsmusic.com/</loc>
+    <lastmod>2025-01-14</lastmod>
+    <priority>1.0</priority>
+    <changefreq>daily</changefreq>
+  </url>
+
+  <!-- Hero Section -->
+  <url>
+    <loc>https://sweetdreamsmusic.com/#hero</loc>
+    <lastmod>2025-01-14</lastmod>
+    <priority>0.9</priority>
+    <changefreq>daily</changefreq>
+  </url>
+
+  <!-- Services Section -->
+  <url>
+    <loc>https://sweetdreamsmusic.com/#services</loc>
+    <lastmod>2025-01-14</lastmod>
+    <priority>0.8</priority>
+    <changefreq>weekly</changefreq>
+  </url>
+
+  <!-- Pricing Section -->
+  <url>
+    <loc>https://sweetdreamsmusic.com/#pricing</loc>
+    <lastmod>2025-01-14</lastmod>
+    <priority>0.8</priority>
+    <changefreq>weekly</changefreq>
+  </url>
+
+  <!-- Booking Section -->
+  <url>
+    <loc>https://sweetdreamsmusic.com/#booking</loc>
+    <lastmod>2025-01-14</lastmod>
+    <priority>0.9</priority>
+    <changefreq>weekly</changefreq>
+  </url>
+
+  <!-- Other Services Section -->
+  <url>
+    <loc>https://sweetdreamsmusic.com/#other-services</loc>
+    <lastmod>2025-01-14</lastmod>
+    <priority>0.7</priority>
+    <changefreq>monthly</changefreq>
+  </url>
+
+  <!-- Portfolio Section -->
+  <url>
+    <loc>https://sweetdreamsmusic.com/#portfolio</loc>
+    <lastmod>2025-01-14</lastmod>
+    <priority>0.7</priority>
+    <changefreq>monthly</changefreq>
+  </url>
+
+  <!-- Studio Hours Section -->
+  <url>
+    <loc>https://sweetdreamsmusic.com/#hours</loc>
+    <lastmod>2025-01-14</lastmod>
+    <priority>0.6</priority>
+    <changefreq>yearly</changefreq>
+  </url>
+
+  <!-- Disclaimer Section -->
+  <url>
+    <loc>https://sweetdreamsmusic.com/#disclaimer</loc>
+    <lastmod>2025-01-14</lastmod>
+    <priority>0.5</priority>
+    <changefreq>yearly</changefreq>
+  </url>
+
+  <!-- Social Media Links -->
+  <url>
+    <loc>https://www.instagram.com/sweetdreamsstudiosss/</loc>
+    <lastmod>2025-01-14</lastmod>
+    <priority>0.4</priority>
+    <changefreq>monthly</changefreq>
+  </url>
+  <url>
+    <loc>https://www.tiktok.com/@sweetdreamsstudios?is_from_webapp=1&sender_device=pc</loc>
+    <lastmod>2025-01-14</lastmod>
+    <priority>0.4</priority>
+    <changefreq>monthly</changefreq>
+  </url>
+
+</urlset>
