@@ -7,7 +7,9 @@
     --hover-glow: rgba(255, 255, 255, 0.1); /* Light Glow on Hover */
     --overlay-tint: rgba(0, 0, 0, 0.3); /* Slightly lighter gray tint for background overlay */
 }
-
+:root {
+    --navbar-height: 60px; /* Define this for dynamic padding */
+}
 /* Prevent Side Scrolling */
 * {
     box-sizing: border-box;
@@ -24,6 +26,10 @@ body {
     width: 100%;
     overflow-x: hidden; /* Disable horizontal scrolling */
     position: relative;
+}
+body, html {
+    height: 100%; /* Ensure full height for scrolling */
+    overflow-y: auto; /* Enable vertical scrolling */
 }
 
 /* Blurred Background Image */
@@ -65,17 +71,16 @@ body::after {
     height: auto;
 }
 
-/* Linktree Styling */
 .linktree {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    height: 100vh;
+    justify-content: flex-start;
+    min-height: 150vh; /* Ensure enough height for scrolling */
     padding: 20px;
     background-color: transparent;
-    overflow: hidden; /* Prevents overflow within this section */
 }
+
 
 .profile {
     text-align: center;
@@ -89,61 +94,6 @@ body::after {
     margin-bottom: 15px;
     border: 3px solid var(--primary-color);
     object-fit: cover;
-}
-
-/* Tabs Styling */
-.tabs-wrapper {
-    width: 100%;
-    display: flex;
-    justify-content: center;
-    margin-bottom: 20px;
-    margin-top: 20px;
-    overflow: hidden; /* Prevents tabs from extending outside container */
-}
-
-.tabs {
-    display: flex;
-    width: 100%;
-    max-width: 400px;
-    border: 2px solid var(--accent-color);
-    border-radius: 8px 8px 0 0;
-    overflow: hidden;
-}
-
-.tab {
-    flex: 1;
-    text-align: center;
-    font-size: 0.9rem;
-    font-weight: bold;
-    text-transform: uppercase;
-    color: var(--text-color);
-    background: var(--dark-bg);
-    padding: 10px 5px;
-    white-space: nowrap;
-    cursor: pointer;
-    transition: background 0.3s ease, color 0.3s ease;
-    box-sizing: border-box;
-}
-
-.tab:hover {
-    background: var(--accent-color);
-    color: var(--dark-bg);
-}
-
-.tab-active {
-    background: var(--primary-color);
-    color: var(--text-color);
-}
-
-.tab-disabled {
-    background: var(--dark-bg);
-    color: var(--hover-glow);
-    pointer-events: none;
-}
-
-/* Ensure consistent tab sizes */
-.tabs .tab {
-    flex-basis: 33.33%;
 }
 
 /* Video Section Styling */
@@ -234,5 +184,87 @@ body::after {
     .tab {
         font-size: 0.8rem;
         padding: 6px 10px;
+    }
+}
+/* Sticky Navbar */
+.sticky-navbar {
+    position: sticky;
+    top: 0; /* Sticks to the top when it gets there */
+    z-index: 100; /* Ensure it's above other elements */
+    background: rgba(18, 18, 18, 0.95); /* Background to differentiate */
+    width: fit-content; /* Width only as wide as necessary */
+    margin: 0 auto; /* Center horizontally */
+    padding: 10px 20px; /* Padding for buttons */
+    border-radius: 8px; /* Rounded corners for aesthetic */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); /* Subtle shadow */
+    transition: all 0.3s ease-in-out; /* Smooth appearance */
+}
+
+
+
+
+/* Shrinking Effect */
+.sticky-navbar.shrink {
+    padding: 8px 15px;
+    font-size: 0.9rem;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+/* Tabs Styling */
+.tabs {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+}
+
+.tab {
+    font-size: clamp(0.9rem, 1vw, 1rem);
+    font-weight: bold;
+    text-transform: uppercase;
+    color: var(--text-color);
+    background: transparent;
+    padding: 6px 12px;
+    border-radius: 20px;
+    text-decoration: none;
+    border: 2px solid transparent;
+    transition: background 0.3s, color 0.3s, border 0.3s;
+}
+
+.tab:hover {
+    background: var(--primary-color);
+    color: var(--dark-bg);
+    border: 2px solid var(--accent-color);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.tab-active {
+    background: var(--primary-color);
+    color: var(--text-color);
+    border: 2px solid var(--accent-color);
+}
+
+.tab-disabled {
+    color: rgba(255, 255, 255, 0.5);
+    pointer-events: none;
+}
+
+
+/* Streaming Links Padding Adjustment */
+.links {
+    margin-top: 20px;
+}
+
+
+/* Navbar Padding Adjustment */
+.linktree {
+    padding-top: calc(var(--navbar-height, 60px) + 20px); /* Ensures no overlap */
+}
+
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .tab {
+        font-size: 0.9rem;
+        padding: 6px 12px;
     }
 }

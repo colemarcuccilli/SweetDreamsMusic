@@ -19,16 +19,17 @@
             <h1>Jay Val Leo</h1>
             <p>New Single: <strong>Die Young</strong> - Out Now!</p>
             
-            <!-- Tabs (Navigation Bar) -->
-            <div class="tabs-wrapper">
-                <div class="tabs">
-                    <a href="https://sweetdreamsmusic.com/dieyoung/" class="tab tab-active">Die Young</a>
-                    <a href="https://sweetdreamsmusic.com/newattire/" class="tab">New Attire</a>
-                    <span class="tab tab-disabled">01/31</span>
-                </div>
+            
+        </div>
+        <!-- Tabs (Navigation Bar) -->
+        <div class="sticky-navbar">
+            <div class="tabs">
+                <a href="https://sweetdreamsmusic.com/dieyoung/" class="tab tab-active">Die Young</a>
+                <a href="https://sweetdreamsmusic.com/newattire/" class="tab">New Attire</a>
+                <span class="tab tab-disabled">01/31</span>
             </div>
         </div>
-
+        
         <!-- Streaming Links Section -->
         <div class="links">
             <a href="https://youtu.be/HiUxLjWxuOc" target="_blank" class="link">
@@ -65,5 +66,16 @@
             <iframe width="560" height="315" src="https://www.youtube.com/embed/HiUxLjWxuOc?si=Eycsg2VmiNIax2Kt" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
         </div>
     </section>
+    <!-- JavaScript goes here -->
+    <script>
+        document.addEventListener("scroll", () => {
+            const navbar = document.querySelector(".sticky-navbar");
+            if (navbar.getBoundingClientRect().top <= 0) {
+                navbar.classList.add("shrink");
+            } else {
+                navbar.classList.remove("shrink");
+            }
+        });
+    </script>
 </body>
 </html>

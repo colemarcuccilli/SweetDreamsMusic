@@ -18,17 +18,17 @@
             <img src="../assets/images/newattirecover.jpeg" alt="Jay Val Leo" class="profile-pic">
             <h1>Jay Val Leo</h1>
             <p>New Single: <strong>New Attire</strong> - Out Now!</p>
-            
-            <!-- Tabs (Navigation Bar) -->
-            <div class="tabs-wrapper">
-                <div class="tabs">
-                    <a href="https://sweetdreamsmusic.com/dieyoung/" class="tab">Die Young</a>
-                    <a href="https://sweetdreamsmusic.com/newattire/" class="tab tab-active">New Attire</a>
-                    <span class="tab tab-disabled">01/31</span>
-                </div>
+        </div>
+        
+        <!-- Sticky Navbar -->
+        <div class="sticky-navbar">
+            <div class="tabs">
+                <a href="https://sweetdreamsmusic.com/dieyoung/" class="tab">Die Young</a>
+                <a href="https://sweetdreamsmusic.com/newattire/" class="tab tab-active">New Attire</a>
+                <span class="tab tab-disabled">01/31</span>
             </div>
         </div>
-
+        
         <!-- Streaming Links Section -->
         <div class="links">
             <a href="https://youtu.be/F57z5TM-ujA?si=0kw8CJXt997BPX5N" target="_blank" class="link">
@@ -53,7 +53,7 @@
                 <img src="../assets/images/X-icon.png" alt="X"> X
             </a>
             <a href="https://www.tiktok.com/@jayvalleo" target="_blank" class="link">
-                <img src="../assets/images/tiktok-icon.png" alt="Tiktok"> TikTok
+                <img src="../assets/images/tiktok-icon.png" alt="TikTok"> TikTok
             </a>
         </div>
     </section>
@@ -65,5 +65,17 @@
             <iframe width="560" height="315" src="https://www.youtube.com/embed/F57z5TM-ujA?si=0kw8CJXt997BPX5N" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
         </div>
     </section>
+
+    <!-- JavaScript to Handle Shrinking Effect -->
+    <script>
+        document.addEventListener("scroll", () => {
+            const navbar = document.querySelector(".sticky-navbar");
+            if (window.scrollY > 100) {
+                navbar.classList.add("shrink");
+            } else {
+                navbar.classList.remove("shrink");
+            }
+        });
+    </script>
 </body>
 </html>
