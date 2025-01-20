@@ -151,6 +151,32 @@
         <a href="#booking" class="cta-button">Book a Session Now</a>
     </div>
 </section>
+<!-- Navbar -->
+<nav class="sticky-navbar">
+    <ul class="navbar-links">
+        <li><a href="#services">Services</a></li>
+        <li><a href="#pricing">Pricing</a></li>
+        <li><a href="#booking">Booking</a></li>
+        <li><a href="#portfolio">Portfolio</a></li>
+        <li><a href="#hours">Hours</a></li>
+    </ul>
+</nav>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const navbar = document.querySelector(".sticky-navbar");
+        let lastScrollY = window.scrollY;
+
+        window.addEventListener("scroll", () => {
+            if (window.scrollY > 50 && lastScrollY < window.scrollY) {
+                navbar.classList.add("shrink");
+            } else if (window.scrollY <= 50) {
+                navbar.classList.remove("shrink");
+            }
+            lastScrollY = window.scrollY;
+        });
+    });
+</script>
+
 
 <!-- Services Section -->
 <section id="services" class="section">
