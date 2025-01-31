@@ -1,9 +1,9 @@
 /* Base Styles */
 :root {
-    --primary-color: #e1791e; /* Engineering Orange */
+    --primary-color: #f5eb8d; /* Engineering Orange */
     --accent-color: #046e5e; /* Lapis Lazuli */
     --dark-bg: #121212; /* Raisin Black */
-    --text-color: #ffffff; /* Floral White */
+    --text-color: #797979a8; /* Floral White */
     --hover-glow: rgba(255, 255, 255, 0.1); /* Light Glow on Hover */
     --overlay-tint: rgba(0, 0, 0, 0.3); /* Slightly lighter gray tint for background overlay */
     --navbar-height: 60px; /* Define this for dynamic padding */
