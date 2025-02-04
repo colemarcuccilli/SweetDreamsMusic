@@ -23,5 +23,5 @@ jobs:
           repo_token: ${{ secrets.GITHU_TOKEN }}
           action: "upload"
           app_location: "/" # Location of your app code
-          api_location: "" # Location of your API code - optional
+          api_location: "api" # Location of your API code - optional
           output_location: "build" # Built app location
