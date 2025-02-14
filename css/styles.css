@@ -46,46 +46,69 @@ body {
     overflow: hidden;
 }
 
-/* Adjustments for the 4x4 grid behind the logo */
+/* 4x4 Video Grid for Hero Section */
 .thumbnails-container {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    grid-template-rows: repeat(4, 1fr);
+    grid-template-columns: repeat(4, 1fr);  /* 4 equal columns */
+    grid-template-rows: repeat(4, 1fr);     /* 4 equal rows */
     width: 100%;
-    height: 100%;
-    gap: 5px;
-    position: absolute;
-    top: 0;
-    left: 0;
-    z-index: 1; /* Keeps it behind the logo */
-}
-.background-tile {
-    background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
-    opacity: 0.1;
-    border-radius: 8px;
-    animation: pulse 3s infinite alternate ease-in-out;
+    height: 100vh; /* Ensures full viewport height */
+    gap: 0; /* No spacing between videos */
 }
 
-.thumbnails-container video {
+.background-tile {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.background-tile video {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    aspect-ratio: auto; /* Removes forced aspect ratio */
 }
 
+
+
+.thumbnails-container video:hover {
+    transform: scale(1.02);
+}
 .hero-content {
     position: relative;
     z-index: 2;
     text-align: center;
     color: white;
-    margin-top: 150px;
+    margin-top: 50px; /* Reduce from 150px */
     padding: 20px;
 }
+
 /* Animation keyframes */
 @keyframes pulse {
     0% { opacity: 0.05; }
     100% { opacity: 0.2; }
 }
+/* Responsive Scaling */
+@media (max-width: 1024px) {
+    .thumbnails-container {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
 
+@media (max-width: 768px) {
+    .thumbnails-container {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 480px) {
+    .thumbnails-container {
+        grid-template-columns: repeat(1, 1fr);
+    }
+}
 
 .hero-title {
     font-size: clamp(3rem, 8vw, 6rem);

@@ -40,12 +40,151 @@
     <meta name="theme-color" content="#000000">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
-
+    <!-- Place this block right after your meta tags in the head section -->
+<style>
+    :root {
+        --primary-color: #e1791e;
+        --accent-color: #046e5e;
+        --dark-bg: #0a0a0a;
+        --card-bg: #1a1a1a;
+        --text-color: #ffffff;
+    }
+    
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+    
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        background: var(--dark-bg);
+        color: var(--text-color);
+        line-height: 1.6;
+    }
+    
+    .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 20px;
+    }
+    
+    .hero {
+        position: relative;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+    
+    .thumbnails-container {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        grid-template-rows: repeat(4, 1fr);
+        width: 100%;
+        height: 100%;
+        gap: 5px;
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: 1;
+    }
+    
+    .thumbnails-container video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    
+    .hero-content {
+        position: relative;
+        z-index: 2;
+        text-align: center;
+        color: white;
+        margin-top: 150px;
+        padding: 20px;
+    }
+    
+    .logo-container {
+        position: absolute;
+        top: 37%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 3;
+    }
+    
+    .logo {
+        max-width: 400px;
+        width: 100%;
+        height: auto;
+    }
+    
+    .promo-banner {
+        font-size: 1.5rem;
+        color: var(--primary-color);
+        margin-bottom: 10px;
+    }
+    
+    .cta-button {
+        display: inline-block;
+        padding: 15px 40px;
+        background: var(--primary-color);
+        color: white;
+        text-decoration: none;
+        border-radius: 30px;
+        font-size: 1.2rem;
+        font-weight: 600;
+        position: relative;
+        overflow: hidden;
+        transition: transform 0.3s ease;
+    }
+    
+    .sticky-navbar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        width: 100%;
+        background: var(--dark-bg);
+        transition: all 0.3s ease;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 20px 0;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+    }
+    
+    .navbar-links {
+        list-style: none;
+        display: flex;
+        gap: 30px;
+        margin: 0;
+        padding: 0;
+    }
+    
+    .navbar-links li a {
+        text-decoration: none;
+        color: var(--text-color);
+        font-size: 1.2rem;
+        font-weight: 600;
+        transition: color 0.3s;
+    }
+    
+    @media (max-width: 768px) {
+        .navbar-links {
+            gap: 15px;
+        }
+    
+        .navbar-links li a {
+            font-size: 1rem;
+        }
+    }
+    </style>
     <!-- Canonical URL -->
     <link rel="canonical" href="https://sweetdreamsmusic.com/">
 
     <!-- Favicon -->
-    <link rel="icon" type="image/webp" href="assets/images/timeline/galaxylogo.webp">
+    <link rel="icon" type="image/webp" href="assets/images/galaxylogo.webp">
 
     <!-- Async CSS Loading -->
     <link rel="stylesheet" href="css/normalize.css" media="print" onload="this.media='all'">
@@ -163,24 +302,24 @@
 
     <!-- Video Thumbnails Container -->
     <div class="thumbnails-container">
-        <!-- Video Thumbnails (4x4 Grid) -->
-        <video alt="Moonlit Sky over Fort Wayne captured by Sweet Dreams Studio" title="Sweet Dreams Music Moon in the Sky above Fort Wayne" src="assets/thumbnails/a1.mov" autoplay loop muted playsinline></video>
-        <video alt="Golden AKG C414 Microphone in Sweet Dreams Studio" title="Sweet Dreams Music Golden AKG C414 Recording Microphone" src="assets/thumbnails/a2.mov" autoplay loop muted playsinline></video>
-        <video alt="Cassette being inserted into a player at Sweet Dreams Studio" title="Sweet Dreams Music Inserting Casset into Casset Player" src="assets/thumbnails/a3.mov" autoplay loop muted playsinline></video>
-        <video alt="Sweet Dreams Studio desktop computer setup with logo displayed" title="Sweet Dreams Music Desktop Computer Logo in Studio" src="assets/thumbnails/a4.mov" autoplay loop muted playsinline></video>
-        <video alt="Vinyl spinning on a record player in Sweet Dreams Studio" title="Sweet Dreams Music spinning a Vinyl on a Record Player." src="assets/thumbnails/b2.mov" autoplay loop muted playsinline></video>
-        <video alt="Artist playing the bongo drum at Sweet Dreams Studio" title="Sweet Dreams Music Playing the Bongo" src="assets/thumbnails/b1.mov" autoplay loop muted playsinline></video>
-        <video alt="Light shining through plants inside Sweet Dreams Studio" title="Sweet Dreams Music Light shining through plants" src="assets/thumbnails/b3.mov" autoplay loop muted playsinline></video>
-        <video alt="Keyboard in Sweet Dreams Studio ready for recording" title="Sweet Dreams Music Keyboard in the Studio" src="assets/thumbnails/b4.mov" autoplay loop muted playsinline></video>
-        <video alt="Zebra art decor adding aesthetic to Sweet Dreams Studio" title="Sweet Dreams Music Zebra on the wall, Esthetic feel" src="assets/thumbnails/c1.mov" autoplay loop muted playsinline></video>
-        <video alt="Large speaker monitors in Sweet Dreams Studio" title="Sweet Dreams Music Big Speaker Monitors in the studio" src="assets/thumbnails/c2.mov" autoplay loop muted playsinline></video>
-        <video alt="Flipping through vinyl records in Sweet Dreams Studio" title="Sweet Dreams Music Flipping through old Vinyls" src="assets/thumbnails/c3.mov" autoplay loop muted playsinline></video>
-        <video alt="Black guitar illuminated by studio lights at Sweet Dreams Studio" title="Sweet Dreams Music showing Black Guitar in the Light" src="assets/thumbnails/c4.mov" autoplay loop muted playsinline></video>
-        <video alt="Jay mixing and mastering in Sweet Dreams Studio" title="Sweet Dreams Music, Jay mixing and Mastering in the studio"src="assets/thumbnails/d1.mov" autoplay loop muted playsinline></video>
-        <video alt="Artist recording vocals in Sweet Dreams Studio booth" title="Sweet Dreams Music, Artist recording in the booth" src="assets/thumbnails/d2.mov" autoplay loop muted playsinline></video>
-        <video alt="API Select SR22 Compressor in action at Sweet Dreams Studio" title="Sweet Dreams Music Api Select SR22 Compressor leveling vocals." src="assets/thumbnails/d3.mov" autoplay loop muted playsinline></video>
-        <video alt="Moog Subsequent 25 Synth creating a melody in Sweet Dreams Studio" title="Sweet Dreams Music Moog Subsequent25 Synth creating an instrumental." src="assets/thumbnails/d4.mov" autoplay loop muted playsinline></video>
+        <video src="assets/thumbnails/a1.webm" autoplay loop muted playsinline loading="lazy" title="Moonlit Sky over Fort Wayne"></video>
+        <video src="assets/thumbnails/a2.webm" autoplay loop muted playsinline loading="lazy" title="Golden AKG C414 Microphone"></video>
+        <video src="assets/thumbnails/a3.webm" autoplay loop muted playsinline loading="lazy" title="Cassette Player in Sweet Dreams Studio"></video>
+        <video src="assets/thumbnails/a4.webm" autoplay loop muted playsinline loading="lazy" title="Studio Desktop with Logo"></video>
+        <video src="assets/thumbnails/b1.webm" autoplay loop muted playsinline loading="lazy" title="Artist Playing the Bongo Drum"></video>
+        <video src="assets/thumbnails/b2.webm" autoplay loop muted playsinline loading="lazy" title="Vinyl Spinning on Record Player"></video>
+        <video src="assets/thumbnails/b3.webm" autoplay loop muted playsinline loading="lazy" title="Light Shining Through Plants"></video>
+        <video src="assets/thumbnails/b4.webm" autoplay loop muted playsinline loading="lazy" title="Keyboard Ready for Recording"></video>
+        <video src="assets/thumbnails/c1.webm" autoplay loop muted playsinline loading="lazy" title="Zebra Wall Art in Studio"></video>
+        <video src="assets/thumbnails/c2.webm" autoplay loop muted playsinline loading="lazy" title="Large Speaker Monitors"></video>
+        <video src="assets/thumbnails/c3.webm" autoplay loop muted playsinline loading="lazy" title="Flipping Through Vinyl Records"></video>
+        <video src="assets/thumbnails/c4.webm" autoplay loop muted playsinline loading="lazy" title="Illuminated Black Guitar"></video>
+        <video src="assets/thumbnails/d1.webm" autoplay loop muted playsinline loading="lazy" title="Jay Mixing & Mastering"></video>
+        <video src="assets/thumbnails/d2.webm" autoplay loop muted playsinline loading="lazy" title="Artist Recording Vocals"></video>
+        <video src="assets/thumbnails/d3.webm" autoplay loop muted playsinline loading="lazy" title="API Select SR22 Compressor"></video>
+        <video src="assets/thumbnails/d4.webm" autoplay loop muted playsinline loading="lazy" title="Moog Subsequent 25 Synth"></video>
     </div>
+    
 
     <!-- Promo Banner and Button -->
     <div class="hero-content">

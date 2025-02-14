@@ -6,52 +6,41 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
             behavior: 'smooth'
         });
     });
-});document.addEventListener("DOMContentLoaded", function () {
+});
+
+document.addEventListener("DOMContentLoaded", function () {
     const thumbnailsContainer = document.querySelector('.thumbnails-container');
 
-    // Ensure videos are appended only once
-    if (!thumbnailsContainer.classList.contains('videos-initialized')) {
-        console.log("Appending videos to the thumbnails-container");
+    // Remove any existing videos to avoid duplicates
+    thumbnailsContainer.innerHTML = '';
 
-        const numRows = 4;
-        const numCols = 4;
-        const videoFiles = [
-            'a1.mov', 'a2.mov', 'a3.mov', 'a4.mov',
-            'b1.mov', 'b2.mov', 'b3.mov', 'b4.mov',
-            'c1.mov', 'c2.mov', 'c3.mov', 'c4.mov',
-            'd1.mov', 'd2.mov', 'd3.mov', 'd4.mov'
-        ];
+    const videoFiles = [
+        'a1.webm', 'a2.webm', 'a3.webm', 'a4.webm',
+        'b1.webm', 'b2.webm', 'b3.webm', 'b4.webm',
+        'c1.webm', 'c2.webm', 'c3.webm', 'c4.webm',
+        'd1.webm', 'd2.webm', 'd3.webm', 'd4.webm'
+    ];
 
-        // Append videos
-        for (let i = 0; i < numRows; i++) {
-            for (let j = 0; j < numCols; j++) {
-                const videoIndex = i * numCols + j;
-                const video = document.createElement('video');
-                video.src = `assets/thumbnails/${videoFiles[videoIndex]}`;
-                video.autoplay = true;
-                video.loop = true;
-                video.muted = true;
-                video.playsInline = true;
-                video.style.width = '100%';
-                video.style.height = '100%';
-                video.style.objectFit = 'cover';
+    videoFiles.forEach(file => {
+        const tile = document.createElement('div');
+        tile.classList.add('background-tile');
 
-                const tile = document.createElement('div');
-                tile.className = 'background-tile';
-                tile.style.flex = '1';
-                tile.style.margin = '0'; // Remove margin for seamless grid layout
-                tile.appendChild(video);
+        const video = document.createElement('video');
+        video.src = `assets/thumbnails/${file}`;
+        video.autoplay = true;
+        video.loop = true;
+        video.muted = true;
+        video.playsInline = true;
+        video.style.width = '100%';
+        video.style.height = '100%';
+        video.style.objectFit = 'cover'; // Ensures full fit
 
-                // thumbnailsContainer.appendChild(tile);
-            }
-        }
-
-        // Mark videos as initialized
-        thumbnailsContainer.classList.add('videos-initialized');
-    } else {
-        console.log("Videos already initialized");
-    }
+        tile.appendChild(video);
+        thumbnailsContainer.appendChild(tile);
+    });
 });
+
+
 
 // Add animation keyframes
 function addAnimationKeyframes() {
