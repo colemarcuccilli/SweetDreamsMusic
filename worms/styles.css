@@ -111,25 +111,62 @@ body::after {
 }
 
 /* Tabs Styling */
+/* Ensure the tabs container doesn't cause overflow */
 .tabs {
     display: flex;
     justify-content: center;
     gap: 10px;
+    flex-wrap: wrap; /* Allow tabs to wrap to next line on small screens */
+    max-width: 100%; /* Ensure it doesn't exceed viewport width */
+    padding: 0 5px; /* Add minimal padding */
 }
 
+/* Make tabs more responsive */
 .tab {
-    font-size: clamp(0.9rem, 1vw, 1rem);
+    font-size: clamp(0.8rem, 1vw, 1rem);
     font-weight: bold;
     text-transform: uppercase;
     color: var(--text-color);
     background: transparent;
-    padding: 6px 12px;
+    padding: 6px 10px; /* Slightly reduce padding */
     border-radius: 20px;
     text-decoration: none;
     border: 2px solid transparent;
     transition: background 0.3s, color 0.3s, border 0.3s;
+    white-space: nowrap; /* Prevent text wrapping within tabs */
+    margin: 3px; /* Add small margin all around */
 }
 
+/* Enhance mobile support */
+@media (max-width: 768px) {
+    .sticky-navbar {
+        width: 95%; /* Make navbar nearly full width on mobile */
+        padding: 8px 5px; /* Reduce padding */
+    }
+    
+    .tabs {
+        flex-wrap: wrap; /* Ensure tabs wrap on mobile */
+        gap: 5px; /* Reduce gap between tabs */
+    }
+    
+    .tab {
+        font-size: 0.75rem; /* Smaller font on mobile */
+        padding: 5px 8px; /* Smaller padding */
+        margin: 2px; /* Smaller margins */
+    }
+}
+
+/* For very small screens */
+@media (max-width: 480px) {
+    .tabs {
+        justify-content: center; /* Center tabs */
+    }
+    
+    .tab {
+        font-size: 0.7rem; /* Even smaller font */
+        padding: 4px 6px; /* Minimal padding */
+    }
+}
 .tab:hover {
     background: var(--primary-color);
     color: var(--dark-bg);
