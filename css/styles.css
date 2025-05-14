@@ -37,13 +37,26 @@ body {
     padding: 0 20px;
 }
 /* Hero Section Adjustments */
+/* Hero Section Styling (Updated for single video) */
 .hero {
     position: relative;
-    height: 100vh;
+    height: 100vh; /* Make the hero section take the full viewport height */
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
+    overflow: hidden; /* Hide any overflow from the video */
+    background: #000; /* Fallback background color */
+}
+
+/* Styling for the single background video */
+.hero-background-video {
+    position: absolute; /* Position the video absolutely within the hero section */
+    top: 0;
+    left: 0;
+    width: 100%;    /* Make the video fill the width of the hero section */
+    height: 100%;   /* Make the video fill the height of the hero section */
+    object-fit: cover; /* **Crucial:** Ensures the video covers the entire area without distorting aspect ratio */
+    z-index: 1;     /* Place the video behind the logo and content */
 }
 
 /* 4x4 Video Grid for Hero Section */
@@ -1519,5 +1532,82 @@ header {
     
     .current-price {
         font-size: 2rem;
+    }
+}
+   /* Giveaway Section Styles */
+.giveaway-section {
+    background-color: var(--card-bg);
+    color: var(--text-color);
+    padding: 80px 0;
+    text-align: center;
+}
+
+.giveaway-section .section-title {
+    color: var(--primary-color);
+    margin-bottom: 40px;
+}
+
+.giveaway-content {
+    display: flex;
+    gap: 40px;
+    align-items: center;
+    max-width: 1000px;
+    margin: 0 auto;
+    justify-content: center;
+}
+
+.giveaway-text {
+    flex: 1;
+    max-width: 600px;
+    text-align: left;
+    font-size: 1.1rem;
+    line-height: 1.7;
+}
+
+.giveaway-text p {
+    margin-bottom: 15px;
+}
+
+.giveaway-text ul {
+    margin-bottom: 15px;
+    padding-left: 20px;
+}
+
+.giveaway-text li {
+    margin-bottom: 8px;
+}
+
+.giveaway-text strong {
+    color: var(--primary-color);
+}
+
+.giveaway-video {
+    flex: 0 0 auto;
+    width: 300px;
+    height: 534px; /* 16:9 aspect ratio for vertical video */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.giveaway-video video {
+    width: 100%;
+    height: 100%;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    object-fit: cover;
+}
+
+/* Responsive adjustments for Giveaway Section */
+@media (max-width: 768px) {
+    .giveaway-content {
+        flex-direction: column;
+        align-items: center;
+        gap: 30px;
+    }
+
+    .giveaway-text {
+        text-align: center;
+        max-width: 100%;
     }
 }

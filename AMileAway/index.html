@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jay Val Leo - Die Young</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Sweet Dreams Logo Link -->
+    <a href="https://sweetdreamsmusic.com/" class="logo-link">
+        <img src="../assets/images/sdlogo.png" alt="Sweet Dreams Studio Logo" class="logo">
+    </a>
+
+    <!-- Profile Section -->
+    <section class="linktree">
+        <div class="profile">
+            <img src="../assets/images/dieyoung4.JPG" alt="Jay Val Leo" class="profile-pic">
+            <h1>Jay Val Leo</h1>
+            <p>New Single: <strong>Die Young</strong> - Out Now!</p>
+            
+            
+        </div>
+        <!-- Tabs (Navigation Bar) -->
+        <div class="sticky-navbar">
+            <div class="tabs">
+                <a href="https://sweetdreamsmusic.com/dieyoung/" class="tab tab-active">Die Young</a>
+                <a href="https://sweetdreamsmusic.com/newattire/" class="tab">New Attire</a>
+                <a href="https://sweetdreamsmusic.com/worms/" class="tab">Worms</a>
+                <span class="tab tab-disabled">A Mile Away 2/14</span>
+                <a href="https://sweetdreamsmusic.com" class="tab">Sweet Dreams Music</a>
+            </div>
+        </div>
+        
+        <!-- Streaming Links Section -->
+        <div class="links">
+            <a href="https://youtu.be/HiUxLjWxuOc" target="_blank" class="link">
+                <img src="../assets/images/Youtube-icon.png" alt="YouTube"> YouTube
+            </a>
+            <a href="https://open.spotify.com/track/0IkUMl0zX5hiReBHdEcPom?si=f8e416994ec34474" target="_blank" class="link">
+                <img src="../assets/images/spotify-icon.png" alt="Spotify"> Spotify
+            </a>
+            <a href="https://music.apple.com/us/album/die-young/1786656845?i=1786656848" target="_blank" class="link">
+                <img src="../assets/images/apply-icon.png" alt="Apple Music"> Apple Music
+            </a>
+            <a href="https://deezer.page.link/Pekj36w6MeLdeQRa9" target="_blank" class="link">
+                <img src="../assets/images/deezer-icon.png" alt="Deezer"> Deezer
+            </a>
+            <a href="https://tidal.com/browse/track/406760802" target="_blank" class="link">
+                <img src="../assets/images/tidal-icon.png" alt="Tidal"> Tidal
+            </a>
+            <a href="https://www.instagram.com/jayvalleo/" target="_blank" class="link">
+                <img src="../assets/images/instagram-icon.png" alt="Instagram"> Instagram
+            </a>
+            <a href="https://x.com/ItsJAYVALLEO" target="_blank" class="link">
+                <img src="../assets/images/X-icon.png" alt="X"> X 
+            </a>
+            <a href="https://www.tiktok.com/@jayvalleo" target="_blank" class="link">
+                <img src="../assets/images/tiktok-icon.png" alt="Tiktok"> TikTok
+            </a>
+        </div>
+    </section>
+
+    <!-- Video Section -->
+    <section class="video-section">
+        <h2>Watch the Official Video</h2>
+        <div class="video-container">
+            <iframe width="560" height="315" src="https://www.youtube.com/embed/HiUxLjWxuOc?si=Eycsg2VmiNIax2Kt" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+        </div>
+    </section>
+    <!-- JavaScript goes here -->
+    <script>
+        document.addEventListener("scroll", () => {
+            const navbar = document.querySelector(".sticky-navbar");
+            if (navbar.getBoundingClientRect().top <= 0) {
+                navbar.classList.add("shrink");
+            } else {
+                navbar.classList.remove("shrink");
+            }
+        });
+    </script>
+</body>
+</html>
