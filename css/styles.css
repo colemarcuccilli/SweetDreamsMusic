@@ -40,7 +40,7 @@ body {
 /* Hero Section Styling (Updated for single video) */
 .hero {
     position: relative;
-    height: 100vh; /* Make the hero section take the full viewport height */
+    height: 90vh; /* Make the hero section take the full viewport height */
     display: flex;
     align-items: center;
     justify-content: center;
@@ -56,7 +56,7 @@ body {
     width: 100%;    /* Make the video fill the width of the hero section */
     height: 100%;   /* Make the video fill the height of the hero section */
     object-fit: cover; /* **Crucial:** Ensures the video covers the entire area without distorting aspect ratio */
-    z-index: 1;     /* Place the video behind the logo and content */
+    z-index: 1;    /* Place the video behind the logo and content */
 }
 
 /* 4x4 Video Grid for Hero Section */
@@ -91,12 +91,20 @@ body {
     transform: scale(1.02);
 }
 .hero-content {
-    position: relative;
-    z-index: 2;
+    position: relative; /* Keep relative positioning */
+    z-index: 2;         /* Keep the z-index for the container below the logo */
     text-align: center;
     color: white;
-    margin-top: 50px; /* Reduce from 150px */
-    padding: 20px;
+    /* Use padding-top to push the content down from the top */
+    padding-top: 25vh; /* Adjust this value (e.g., 20vh, 30vh) to move content lower/higher */
+    padding-left: 20px;
+    padding-right: 20px;
+    padding-bottom: 20px;
+    width: 100%;
+    max-width: 800px;
+    box-sizing: border-box;
+    /* Remove any conflicting margin-top */
+    margin-top: 0;
 }
 
 /* Animation keyframes */
@@ -142,7 +150,7 @@ body {
     margin-bottom: 10px;
 }
 
-/* Button Styling */
+/* Keep your existing .cta-button styles, they are fine */
 .cta-button {
     display: inline-block;
     padding: 15px 40px;
@@ -152,9 +160,12 @@ body {
     border-radius: 30px;
     font-size: 1.2rem;
     font-weight: 600;
-    position: relative; /* For glare effect positioning */
-    overflow: hidden; /* To ensure the glare effect stays within the button */
+    position: relative; /* Keep relative for the glare effect */
+    overflow: hidden;
     transition: transform 0.3s ease;
+    /* --- ADD THIS LINE --- */
+    z-index: 9999; /* Use a very high z-index to try and force it to the top layer */
+    /* --------------------- */
 }
 
 .cta-button:hover {
@@ -374,7 +385,7 @@ header {
     top: 37%;
     left: 50%;
     transform: translate(-50%, -50%);
-    z-index: 3; /* Ensure it sits above the grid */
+    z-index: 3;
 }
 
 .logo {
