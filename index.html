@@ -1,40 +1,31 @@
-<script
-  src="https://maps.googleapis.com/maps/api/js?key=_Maps_API_KEY_PLACEHOLDER_&callback=initMap&v=weekly&solution_channel=GMP_CCS_geolocation_v2&libraries=places,routes"
-  defer
-></script><!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sweet Dreams Studio | Fort Wayne Recording Studio</title>
 
-    <!-- Preload Critical Resources -->
     <link rel="preload" href="assets/images/sdmlogo.webp" as="image">
     <link rel="preload" href="css/styles.css" as="style">
     <link rel="preconnect" href="https://cdnjs.cloudflare.com">
 
-    <!-- Apple Icon -->
     <link rel="apple-touch-icon" sizes="180x180" href="assets/images/galaxylogo.webp">
     <link rel="apple-touch-icon" sizes="152x152" href="assets/images/galaxylogo.webp">
     <link rel="apple-touch-icon" sizes="120x120" href="assets/images/galaxylogo.webp">    
     
-    <!-- Primary Meta Tags -->
     <meta name="description" content="Fort Wayne's premier recording studio offering professional music production, mixing & mastering. State-of-the-art studio for musicians & creators. Book now!">
     <meta name="keywords" content="Sweet Dreams Studio, Fort Wayne recording studio, Indiana music production, professional mixing, audio mastering, beat making, music videos, podcast production, voice over recording, audio engineering, Northeast Indiana studio, Fort Wayne music, studio rental, professional sound recording, audio post-production, commercial jingles, Indiana videography, recording services Fort Wayne">
     <meta name="author" content="Sweet Dreams Music LLC">
 
-    <!-- Geo Targeting -->
     <meta name="geo.region" content="US-IN">
     <meta name="geo.placename" content="Fort Wayne">
     <meta name="geo.position" content="41.0793;-85.1394">
     <meta name="ICBM" content="41.0793, -85.1394">
 
-    <!-- Robots & Indexing -->
     <meta name="robots" content="index, follow">
     <meta name="googlebot" content="index, follow">
     <meta name="revisit-after" content="7 days">
 
-    <!-- Open Graph Meta Tags -->
     <meta property="og:type" content="website">
     <meta property="og:title" content="Sweet Dreams Studio | Fort Wayne Recording & Production">
     <meta property="og:description" content="Professional music recording, mixing, mastering, and video production services in Fort Wayne, Indiana. State-of-the-art studio equipment and experienced engineers.">
@@ -44,157 +35,189 @@
     <meta property="og:image" content="https://sweetdreamsmusic.com/assets/images/sdmlogo.webp">
     <meta property="og:image:alt" content="Sweet Dreams Music Studio Logo">
 
-    <!-- Mobile & App Meta Tags -->
     <meta name="theme-color" content="#000000">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
-    <!-- Place this block right after your meta tags in the head section -->
-<style>
-    :root {
-        --primary-color: #e1791e;
-        --accent-color: #046e5e;
-        --dark-bg: #0a0a0a;
-        --card-bg: #1a1a1a;
-        --text-color: #ffffff;
-    }
-    
-    * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-    }
-    
-    body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-        background: var(--dark-bg);
-        color: var(--text-color);
-        line-height: 1.6;
-    }
-    
-    .container {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 0 20px;
-    }
-    
-    .hero {
-        position: relative;
-        height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        overflow: hidden;
-    }
-    
-    .thumbnails-container {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        grid-template-rows: repeat(4, 1fr);
-        width: 100%;
-        height: 100%;
-        gap: 5px;
-        position: absolute;
-        top: 0;
-        left: 0;
-        z-index: 1;
-    }
-    
-    .thumbnails-container video {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-    
-    .hero-content {
-        position: relative;
-        z-index: 2;
-        text-align: center;
-        color: white;
-        margin-top: 150px;
-        padding: 20px;
-    }
-    
-    .logo-container {
-        position: absolute;
-        top: 37%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        z-index: 3;
-    }
-    
-    .logo {
-        max-width: 400px;
-        width: 100%;
-        height: auto;
-    }
-    
-    .promo-banner {
-        font-size: 1.5rem;
-        color: var(--primary-color);
-        margin-bottom: 10px;
-    }
-    
-    .cta-button {
-        display: inline-block;
-        padding: 15px 40px;
-        background: var(--primary-color);
-        color: white;
-        text-decoration: none;
-        border-radius: 30px;
-        font-size: 1.2rem;
-        font-weight: 600;
-        position: relative;
-        overflow: hidden;
-        transition: transform 0.3s ease;
-    }
-    
-    .sticky-navbar {
-        position: sticky;
-        top: 0;
-        z-index: 10;
-        width: 100%;
-        background: var(--dark-bg);
-        transition: all 0.3s ease;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        padding: 20px 0;
-        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
-    }
-    
-    .navbar-links {
-        list-style: none;
-        display: flex;
-        gap: 30px;
-        margin: 0;
-        padding: 0;
-    }
-    
-    .navbar-links li a {
-        text-decoration: none;
-        color: var(--text-color);
-        font-size: 1.2rem;
-        font-weight: 600;
-        transition: color 0.3s;
-    }
-    
-    @media (max-width: 768px) {
+    <style>
+        :root {
+            --primary-color: #e1791e;
+            --accent-color: #046e5e;
+            --dark-bg: #0a0a0a;
+            --card-bg: #1a1a1a;
+            --text-color: #ffffff;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: var(--dark-bg);
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        .hero {
+            position: relative;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        
+        .thumbnails-container {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: repeat(4, 1fr);
+            width: 100%;
+            height: 100%;
+            gap: 5px;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+        
+        .thumbnails-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .hero-content {
+            position: relative;
+            z-index: 2;
+            text-align: center;
+            color: white;
+            margin-top: 150px;
+            padding: 20px;
+        }
+        
+        .logo-container {
+            position: absolute;
+            top: 37%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 3;
+        }
+        
+        .logo {
+            max-width: 400px;
+            width: 100%;
+            height: auto;
+        }
+        
+        .promo-banner {
+            font-size: 1.5rem;
+            color: var(--primary-color);
+            margin-bottom: 10px;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            padding: 15px 40px;
+            background: var(--primary-color);
+            color: white;
+            text-decoration: none;
+            border-radius: 30px;
+            font-size: 1.2rem;
+            font-weight: 600;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.3s ease;
+        }
+        
+        .sticky-navbar {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            width: 100%;
+            background: var(--dark-bg);
+            transition: all 0.3s ease;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px 0;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+        }
+        
         .navbar-links {
-            gap: 15px;
+            list-style: none;
+            display: flex;
+            gap: 30px;
+            margin: 0;
+            padding: 0;
         }
-    
+        
         .navbar-links li a {
-            font-size: 1rem;
+            text-decoration: none;
+            color: var(--text-color);
+            font-size: 1.2rem;
+            font-weight: 600;
+            transition: color 0.3s;
         }
-    }
-    </style>
-    <!-- Canonical URL -->
+        
+        @media (max-width: 768px) {
+            .navbar-links {
+                gap: 15px;
+            }
+        
+            .navbar-links li a {
+                font-size: 1rem;
+            }
+        }
+        /**
+        * @license
+        * Copyright 2019 Google LLC. All Rights Reserved.
+        * SPDX-License-Identifier: Apache-2.0
+        */
+        /** * Always set the map height explicitly to define the size of the div element
+        * that contains the map. 
+        */
+        #map {
+            height: 100%;
+            min-height: 450px; /* Added a min-height for visibility */
+            width: 100%;
+        }
+
+        /* Optional: Makes the sample page fill the window. */
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+
+        .custom-map-control-button {
+            background-color: #fff;
+            border: 0;
+            border-radius: 2px;
+            box-shadow: 0 1px 4px -1px rgba(0, 0, 0, 0.3);
+            margin: 10px;
+            padding: 0 0.5em;
+            font: 400 18px Roboto, Arial, sans-serif;
+            overflow: hidden;
+            height: 40px;
+            cursor: pointer;
+        }
+        .custom-map-control-button:hover {
+            background: rgb(235, 235, 235);
+        }
+        </style>
     <link rel="canonical" href="https://sweetdreamsmusic.com/">
 
-    <!-- Favicon -->
     <link rel="icon" type="image/webp" href="assets/images/galaxylogo.webp">
 
-    <!-- Async CSS Loading -->
     <link rel="stylesheet" href="css/normalize.css" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="css/styles.css" media="print" onload="this.media='all'">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" media="print" onload="this.media='all'">
@@ -204,7 +227,6 @@
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     </noscript>
 
-    <!-- Meta Pixel Code -->
     <script>
     !function(f,b,e,v,n,t,s)
     {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
@@ -220,8 +242,6 @@
     <noscript><img height="1" width="1" style="display:none"
     src="https://www.facebook.com/tr?id=3631251467167744&ev=PageView&noscript=1"
     /></noscript>
-    <!-- End Meta Pixel Code -->
-    <!-- Google Analytics -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-WQX2FLHCM6"></script>
     <script>
         window.dataLayer = window.dataLayer || [];
@@ -230,7 +250,6 @@
         gtag('config', 'G-WQX2FLHCM6');
     </script>
 
-    <!-- Schema Markup -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
@@ -267,7 +286,6 @@
         "https://www.instagram.com/sweetdreamsstudiosss/",
         "https://www.tiktok.com/@sweetdreamsstudios"
       ],
-<!--       "hasMap": "https://www.google.com/maps/place/41.0793,-85.1394", -->
       "@graph": [
         {
           "@type": "WebSite",
@@ -318,26 +336,20 @@
     </script>
 </head>
 <body>
-   <!-- Hero Section -->
-   <section class="hero">
-    <!-- Centered Logo -->
+    <section class="hero">
     <div class="logo-container">
         <img src="assets/images/sdheaderlogo.webp" alt="Sweet Dreams Professional Recording Studio Fort Wayne" title="Sweet Dreams Professional Recording Studio" class="logo">
     </div>
 
-    <!-- Video Thumbnails Container -->
     <video class="hero-background-video" src="assets/thumbnails/websiteheader.webm" autoplay loop muted playsinline loading="lazy" title="Studio atmosphere video"></video>
 
     
 
-    <!-- Promo Banner and Button -->
     <div class="hero-content">
         
-<!--         <p class="promo-banner">April Only! Leave us a google review and receive half off an hour</p> -->
-        <a href="#booking" class="cta-button">Book a Session Now</a>
+<a href="#booking" class="cta-button">Book a Session Now</a>
     </div>
 </section>
-<!-- Navbar -->
 <nav class="sticky-navbar">
     <ul class="navbar-links">
         <li><a href="#giveaway">Giveaway</a></li>
@@ -365,7 +377,6 @@
 </script>
 
 
-<!-- giveaway Section -->
 <section id="giveaway" class="section giveaway-section">
     <div class="container">
         <h2 class="section-title">Summer Giveaway</h2>
@@ -382,7 +393,6 @@
                 <p>Thank you and Good Luck!</p>
             </div>
             <div class="giveaway-video">
-                <!-- Fixed video element with proper attributes -->
                 <video controls autoplay playsinline preload="auto">
                     <source src="assets/thumbnails/giveawayad3.webm" type="video/webm">
                     Your browser does not support the video tag.
@@ -391,12 +401,10 @@
         </div>
     </div>
 </section>
-<!-- services Section -->
 <section id="services" class="section">
     <h1 class="visually-hidden">Sweet Dreams Recording Studio - Professional Music Production in Fort Wayne</h1>
 
     <div class="container services-content">
-        <!-- Left Side: 2x2 Grid for Services -->
         <div class="services-grid">
             <div class="service-card">
                 <i class="fas fa-compact-disc" alt="Icon representing music beat production services"></i>
@@ -420,7 +428,6 @@
             </div>
         </div>
         
-        <!-- Right Side: Title, Subtext, CTA, and Social Icons -->
         <div class="services-text">
             <h2 class="services-title">Welcome to Sweet Dreams</h2>
             <h3 class="services-title">Develop Your Brand, Your Way</h3>
@@ -429,24 +436,20 @@
             <div class="social-links">
                 <a href="https://www.instagram.com/sweetdreamsstudiosss/" target="_blank" title="Follow Sweet Dreams Studio on Instagram"><i class="fab fa-instagram" title="Follow Sweet Dreams Studio on Instagram" alt="Instagram icon for Sweet Dreams Studio"></i></a>
                 <a href="https://www.tiktok.com/@sweetdreamsstudios?is_from_webapp=1&sender_device=pc" target="_blank" title="Follow Sweet Dreams Studio on TikTok"><i class="fab fa-tiktok" title="Follow Sweet Dreams Studio on TikTok" alt="TikTok icon for Sweet Dreams Studio"></i></a>
-                <!-- <a href="https://youtube.com" target="_blank"><i class="fab fa-youtube"></i></a> -->
-            </div>
+                </div>
         </div>
     </div>
 </section>
 
 
 
-<!-- Calendly Section -->
 <section id="booking" class="calendly-section">
     <div class="container">
         <h2 class="section-title">Book Your Session</h2>
         <p class="section-subtitle">Schedule your time with Sweet Dreams Studio and get ready to record!</p>
-        <!-- Calendly inline widget begin -->
         <div class="calendly-inline-widget" data-url="https://calendly.com/sweetdreamsstudio" style="min-width:320px; height:1250px; width: 100%; max-width: 1000px; margin: 0 auto; border-radius: 8px; box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);"></div>
         <script type="text/javascript" src="https://assets.calendly.com/assets/external/widget.js" async></script>
-        <!-- Calendly inline widget end -->
-    </div>
+        </div>
 </section>
 
 <script>
@@ -477,11 +480,9 @@ document.addEventListener("DOMContentLoaded", function() {
     observer.observe(document.body, { childList: true, subtree: true });
 });
 </script>
-        <!-- Other Services Section -->
-<section id="other-services" class="section">
+        <section id="other-services" class="section">
     <h2 class="section-title">Other Services</h2>
     <div class="service-cards-container">
-        <!-- Example of a Service Card -->
         <div class="service-card">
             <div class="service-icon">
                 <i class="fas fa-music"></i>
@@ -492,68 +493,62 @@ document.addEventListener("DOMContentLoaded", function() {
             </div>
         </div>
         
-                <!-- Service 2 -->
-                <div class="service-card">
-                    <div class="service-icon">
-                        <i class="fas fa-video"></i>
-                    </div>
-                    <div class="service-details">
-                        <h3>Video Production</h3>
-                        <p>Professional video services, from lyric videos to full productions.</p>
-                    </div>
-                </div>
-        
-                <!-- Service 3 -->
-                <div class="service-card">
-                    <div class="service-icon">
-                        <i class="fas fa-podcast"></i>
-                    </div>
-                    <div class="service-details">
-                        <h3>Podcast Editing</h3>
-                        <p>High-quality production for podcasts and audio shows.</p>
-                    </div>
-                </div>
-        
-                <!-- Service 4 -->
-                <div class="service-card">
-                    <div class="service-icon">
-                        <i class="fas fa-headphones-alt"></i>
-                    </div>
-                    <div class="service-details">
-                        <h3>Custom Beats</h3>
-                        <p>Exclusive and non-exclusive beats for any project.</p>
-                    </div>
-                </div>
-        
-                <!-- Service 5 -->
-                <div class="service-card">
-                    <div class="service-icon">
-                        <i class="fas fa-id-badge"></i>
-                    </div>
-                    <div class="service-details">
-                        <h3>Membership Options</h3>
-                        <p>Exclusive monthly packages tailored to your needs.</p>
-                    </div>
-                </div>
-                <div class="service-card">
-                    <div class="service-icon">
-                        <i class="fas fa-tiktok"></i>
-                    </div>
-                    <div class="service-details">
-                        <h3>Brand/ Web Development</h3>
-                        <p>Detailed planning and audience growth management.</p>
-                    </div>
-                </div>
+        <div class="service-card">
+            <div class="service-icon">
+                <i class="fas fa-video"></i>
             </div>
-        </section>
-        <!-- Service Packages Section -->
+            <div class="service-details">
+                <h3>Video Production</h3>
+                <p>Professional video services, from lyric videos to full productions.</p>
+            </div>
+        </div>
+        
+        <div class="service-card">
+            <div class="service-icon">
+                <i class="fas fa-podcast"></i>
+            </div>
+            <div class="service-details">
+                <h3>Podcast Editing</h3>
+                <p>High-quality production for podcasts and audio shows.</p>
+            </div>
+        </div>
+        
+        <div class="service-card">
+            <div class="service-icon">
+                <i class="fas fa-headphones-alt"></i>
+            </div>
+            <div class="service-details">
+                <h3>Custom Beats</h3>
+                <p>Exclusive and non-exclusive beats for any project.</p>
+            </div>
+        </div>
+        
+        <div class="service-card">
+            <div class="service-icon">
+                <i class="fas fa-id-badge"></i>
+            </div>
+            <div class="service-details">
+                <h3>Membership Options</h3>
+                <p>Exclusive monthly packages tailored to your needs.</p>
+            </div>
+        </div>
+        <div class="service-card">
+            <div class="service-icon">
+                <i class="fas fa-tiktok"></i>
+            </div>
+            <div class="service-details">
+                <h3>Brand/ Web Development</h3>
+                <p>Detailed planning and audience growth management.</p>
+            </div>
+        </div>
+    </div>
+</section>
         <section id="packages" class="section">
             <div class="container">
                 <h2 class="section-title">Service Packages<div class="squiggly"></div></h2>
                 <p class="section-subtitle">Choose the perfect package to fit your music production needs</p>
                 
                 <div class="packages-grid">
-                    <!-- Basic Package -->
                     <div class="package-card">
                         <div class="package-header">
                             <h3>Basic Package</h3>
@@ -581,7 +576,6 @@ document.addEventListener("DOMContentLoaded", function() {
                         </div>
                     </div>
 
-                    <!-- Standard Package -->
                     <div class="package-card featured">
                         <div class="package-tag">Most Popular</div>
                         <div class="package-header">
@@ -613,7 +607,6 @@ document.addEventListener("DOMContentLoaded", function() {
                         </div>
                     </div>
 
-                    <!-- Premium Package -->
                     <div class="package-card">
                         <div class="package-header">
                             <h3>Premium Package</h3>
@@ -649,7 +642,6 @@ document.addEventListener("DOMContentLoaded", function() {
                 <p class="packages-note">*Additional charges may apply. All packages subject to availability.</p>
             </div>
         </section>
-        <!-- Pricing Section -->
         <section id="pricing" class="section">
             <div class="container">
                 <h2 class="section-title">Our Pricing</h2>
@@ -659,41 +651,33 @@ document.addEventListener("DOMContentLoaded", function() {
                     <tr><td>$40/hr</td><td>$50/hr</td></tr>
                 </table>
                 <p class="pricing-info">*Prices are subject to change, Online Booking prices shown. Exclusive Hours are after hours and weekend*</p>
-            
             </div>
         </section>
-    <!-- Portfolio and Client Testimonials -->
     <section id="portfolio" class="section">
         <h2 class="hidden-text">Portfolio</h2>
 
         <div class="container">
-    
-            <!-- Testimonials Section -->
+            
             <div class="testimonials">
                 <div class="testimonial">
-                    <!-- <img src="assets/images/client-placeholder.jpg" alt="Client Photo" class="testimonial-photo"> -->
                     <blockquote class="testimonial-quote">“Jay is the complete producer. His musical knowledge is vast, and his versatility with beats and instruments makes him the right choice for any project. You’ll get a producer who truly cares about the music.”</blockquote>
                     <p class="client-name">— anonymous, Artist</p>
                 </div>
                 <div class="testimonial">
-                    <!-- <img src="assets/images/client-placeholder.jpg" alt="Client Photo" class="testimonial-photo"> -->
                     <blockquote class="testimonial-quote">“I call Jay the ‘Delay King’—his mix and mastering skills are next level. He’ll have you sounding right and get your file to you fast, always open to your input and adjustments to match your style.”</blockquote>
                     <p class="client-name">— Chicago, Producer</p>
                 </div>
                 <div class="testimonial">
-                    <!-- <img src="assets/images/client-placeholder.jpg" alt="Client Photo" class="testimonial-photo"> -->
                     <blockquote class="testimonial-quote">“Working with Jay and Sweet Dreams is an incredible experience. He’s part of a talented community and brings positive energy to every session, making sure you leave better than you came in.”</blockquote>
                     <p class="client-name">— anonymous, Musician</p>
                 </div>
             </div>
         </div>
     </section>
-    <!-- Hours Section -->
-<section id="hours" class="section">
+    <section id="hours" class="section">
     <div class="container">
         <h2 class="section-title">Studio Hours</h2>
         <div class="hours-grid">
-            <!-- Regular Hours -->
             <div class="hours-card">
                 <h3>Regular Hours</h3>
                 <ul>
@@ -702,7 +686,6 @@ document.addEventListener("DOMContentLoaded", function() {
                     <li><strong>Sunday:</strong> Closed</li>
                 </ul>
             </div>
-            <!-- Exclusive Hours -->
             <div class="hours-card exclusive">
                 <h3>Exclusive Hours</h3>
                 <ul>
@@ -717,27 +700,7 @@ document.addEventListener("DOMContentLoaded", function() {
 </section>
     
 
-
-    <!-- Location Section -->
-<section id="location" class="section">
-  <div class="hero-content">
-    <p class="promo-banner">Book Your First Session 20% Off!</p>
-    <a href="#booking" class="cta-button">Book Session</a>
-    <p class="hours-note">Note: Let your producer know it's your first time when you arrive.</p>
-  </div>
-  <div class="container">
-    <h2 class="section-title">📍 Find Us in Fort Wayne</h2>
-    <p class="location-info">
-      Sweet Dreams Music Studio is located at
-      <strong>3943 Parnell Ave, Fort Wayne, IN 46805</strong>. We’re easily accessible and offer on-site parking.
-      Click on the map below for directions!
-    </p>
-
-    <div id="map" style="height: 450px; width: 100%;"></div>
-  </div>
-</section>
-
-<section id="location" class="section">
+    <section id="location" class="section">
   <div class="hero-content">
     <p class="promo-banner">Book Your First Session 20% Off!</p>
     <a href="#booking" class="cta-button">Book Session</a>
@@ -852,7 +815,6 @@ document.addEventListener("DOMContentLoaded", function() {
   src="https://maps.googleapis.com/maps/api/js?key=_Maps_API_KEY_PLACEHOLDER_&callback=initMap&v=weekly&solution_channel=GMP_CCS_geolocation_v2&libraries=places,routes"
   defer
 ></script>
-    <!-- Disclaimer and Group Session Information -->
     <section id="disclaimer" class="section">
         <div class="container">
             <h2 class="section-title">Important Information<div class="squiggly"></div></h2>
@@ -860,14 +822,13 @@ document.addEventListener("DOMContentLoaded", function() {
             <p>We require that all individuals attending the session be pre-approved, especially if extra people are requested. Please provide information on relationships, as additional people may be subject to approval and may incur extra charges.</p>
         </div>
     </section>
-<!-- Footer Section -->
 <footer class="footer">
     <div class="container footer-content">
         <div class="footer-left">
             <p>Email: <a href="mailto:sweetdreamsmusic260@gmail.com">jayvalleo@sweetdreamsmusic.com</a></p>
             <p>Phone: <a href="tel:+12604507739">+1 (260) 450-7739</a></p>
             <p><a href="https://sweetdreamsmusic.com/seeyouinmydreams/">Jay Val Leo</a></p>
-            <p>&copy; 2025 Sweet Dreams Music LLC. All rights reserved.</p>
+            <p>© 2025 Sweet Dreams Music LLC. All rights reserved.</p>
         </div>
         <div class="footer-right">
             <img src="assets/images/sdlogo.webp" alt="Sweet Dreams Music Studio Logo in Fort Wayne, Indiana" class="footer-logo">
@@ -875,7 +836,6 @@ document.addEventListener("DOMContentLoaded", function() {
         </div>
     </div>
 </footer>
-    <!-- JavaScript for Tab Switching -->
     <script src="js/main.js"></script>
 </body>
 </html>
