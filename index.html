@@ -734,14 +734,33 @@ document.addEventListener("DOMContentLoaded", function() {
   </div>
 </section>
 
+<section id="location" class="section">
+  <div class="hero-content">
+    <p class="promo-banner">Book Your First Session 20% Off!</p>
+    <a href="#booking" class="cta-button">Book Session</a>
+    <p class="hours-note">Note: Let your producer know it's your first time when you arrive.</p>
+  </div>
+  <div class="container">
+    <h2 class="section-title">📍 Find Us in Fort Wayne</h2>
+    <p class="location-info">
+      Sweet Dreams Music Studio is located at
+      <strong>3943 Parnell Ave, Fort Wayne, IN 46805</strong>. We’re easily accessible and offer on-site parking.
+      Click on the map below for directions!
+    </p>
+
+    <div id="map" style="height: 450px; width: 100%;"></div>
+  </div>
+</section>
+
 <script>
   let map, infoWindow;
-  const studioLocation = { lat: 41.093842, lng: -85.139236 }; // Coordinates for 3943 Parnell Ave, Fort Wayne, IN 46805
+  // Coordinates for 3943 Parnell Ave, Fort Wayne, IN 46805
+  const studioLocation = { lat: 41.093842, lng: -85.139236 }; 
 
   function initMap() {
     map = new google.maps.Map(document.getElementById("map"), {
       center: studioLocation,
-      zoom: 14, // A good zoom level to show the immediate area
+      zoom: 14, // A good zoom level to show the immediate area around your studio
     });
 
     // Add a marker for your studio's location
@@ -754,7 +773,7 @@ document.addEventListener("DOMContentLoaded", function() {
     infoWindow = new google.maps.InfoWindow();
 
     const locationButton = document.createElement("button");
-    locationButton.textContent = "Pan to Current Location";
+    locationButton.textContent = "Show Directions to Studio"; // Changed button text for clarity
     locationButton.classList.add("custom-map-control-button");
     map.controls[google.maps.ControlPosition.TOP_CENTER].push(locationButton);
 
@@ -763,41 +782,42 @@ document.addEventListener("DOMContentLoaded", function() {
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
           (position) => {
-            const pos = {
+            const userPos = {
               lat: position.coords.latitude,
               lng: position.coords.longitude,
             };
 
-            infoWindow.setPosition(pos);
-            infoWindow.setContent("Location found.");
+            infoWindow.setPosition(userPos);
+            infoWindow.setContent("Your Location. Getting directions...");
             infoWindow.open(map);
-            map.setCenter(pos);
+            map.setCenter(userPos);
             map.setZoom(15); // Zoom in closer when user's location is found
 
-            // Optional: Add a marker for the user's current location
+            // Add a marker for the user's current location
             new google.maps.Marker({
-              position: pos,
+              position: userPos,
               map: map,
               title: "Your current location",
               icon: "http://maps.google.com/mapfiles/ms/icons/blue-dot.png", // A different icon for user's location
             });
 
-            // Calculate directions from user's location to the studio
+            // Calculate and display directions from user's location to the studio
             const directionsService = new google.maps.DirectionsService();
             const directionsRenderer = new google.maps.DirectionsRenderer();
             directionsRenderer.setMap(map);
 
             directionsService.route(
               {
-                origin: pos,
+                origin: userPos,
                 destination: studioLocation,
-                travelMode: google.maps.TravelMode.DRIVING,
+                travelMode: google.maps.TravelMode.DRIVING, // or WALKING, BICYCLING, TRANSIT
               },
               (response, status) => {
                 if (status === "OK") {
                   directionsRenderer.setDirections(response);
+                  infoWindow.setContent("Directions to Sweet Dreams Studio.");
                 } else {
-                  window.alert("Directions request failed due to " + status);
+                  infoWindow.setContent("Directions request failed due to " + status + ". Please try again.");
                 }
               }
             );
@@ -817,7 +837,7 @@ document.addEventListener("DOMContentLoaded", function() {
     infoWindow.setPosition(pos);
     infoWindow.setContent(
       browserHasGeolocation
-        ? "Error: The Geolocation service failed. Please enable location services."
+        ? "Error: The Geolocation service failed. Please enable location services in your browser."
         : "Error: Your browser doesn't support geolocation."
     );
     infoWindow.open(map);
@@ -826,7 +846,7 @@ document.addEventListener("DOMContentLoaded", function() {
   window.initMap = initMap;
 </script>
 <script
-  src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDv6S7-IJJqNOwqdpXio6BoV4KI_YHUBA4&callback=initMap&v=weekly&solution_channel=GMP_CCS_geolocation_v2&libraries=places,routes"
+  src="https://maps.googleapis.com/maps/api/js?key=AIzaSyC3HCLs8W_tzCF7RCGNysUz8QhcKix7Tfw&callback=initMap&v=weekly&solution_channel=GMP_CCS_geolocation_v2&libraries=places,routes"
   defer
 ></script>
     <!-- Disclaimer and Group Session Information -->
