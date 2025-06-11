@@ -102,3 +102,66 @@ window.addEventListener('scroll', () => {
         }
     });
 });
+
+// Studio Carousel Logic
+document.addEventListener('DOMContentLoaded', () => {
+    const slides = document.querySelectorAll('.studio-carousel .slides img');
+    if (!slides.length) return;
+
+    let currentIndex = 0;
+    const prevBtn = document.querySelector('.studio-carousel .prev');
+    const nextBtn = document.querySelector('.studio-carousel .next');
+
+    function showSlide(index) {
+        slides.forEach((img, i) => {
+            img.classList.toggle('active', i === index);
+        });
+    }
+
+    prevBtn.addEventListener('click', () => {
+        currentIndex = (currentIndex - 1 + slides.length) % slides.length;
+        showSlide(currentIndex);
+    });
+
+    nextBtn.addEventListener('click', () => {
+        currentIndex = (currentIndex + 1) % slides.length;
+        showSlide(currentIndex);
+    });
+
+    showSlide(currentIndex);
+
+    // Swipe support
+    let startX = null;
+    slides.forEach(img => {
+        img.addEventListener('touchstart', e => startX = e.touches[0].clientX);
+        img.addEventListener('touchend', e => {
+            if (startX === null) return;
+            const endX = e.changedTouches[0].clientX;
+            if (startX - endX > 50) nextBtn.click();
+            else if (endX - startX > 50) prevBtn.click();
+            startX = null;
+        });
+    });
+
+    // Fullscreen modal
+    const modal = document.querySelector('.studio-modal');
+    const modalImg = modal.querySelector('img');
+    const modalClose = modal.querySelector('.close');
+
+    slides.forEach(img => {
+        img.addEventListener('click', () => {
+            modal.classList.add('open');
+            modalImg.src = img.src;
+        });
+    });
+
+    modalClose.addEventListener('click', () => {
+        modal.classList.remove('open');
+    });
+
+    modal.addEventListener('click', e => {
+        if (e.target === modal) {
+            modal.classList.remove('open');
+        }
+    });
+});
