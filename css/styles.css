@@ -1790,81 +1790,29 @@ header {
 /* New Studio Scrapbook Section */
 
 .studio-section {
-    padding: 60px 0;
+    padding: 40px 0;
     background-color: #111;
     overflow-x: hidden;
-    /* Prevent horizontal scroll on mobile */
 }
 
 .studio-gallery {
-    display: flex;
-    flex-direction: column;
-    gap: -80px;
-    /* Negative gap to pull rows together for overlap */
-    padding: 0 20px;
-}
-
-.gallery-row {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-.gallery-row:nth-child(2) {
-    margin-left: 10%;
-    /* Offset the second row */
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
 }
 
 .gallery-item {
     position: relative;
-    flex-shrink: 0;
-    width: 45vw;
-    /* Wide items */
-    max-width: 400px;
-    height: auto;
+    width: 100%;
+    aspect-ratio: 4/3;
     border-radius: 8px;
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
-    transition: transform 0.3s ease, z-index 0s 0.15s;
-    margin: 0 -20px;
-    /* Overlap items within a row */
-}
-
-.gallery-item:hover {
-    transform: scale(1.1) rotate(0deg) !important;
-    /* Override rotation for a clean zoom */
-    z-index: 10;
-    transition: transform 0.3s ease, z-index 0s;
-}
-
-
-/* Add slight, varied rotations for scrapbook feel */
-
-.gallery-row:first-child .gallery-item:nth-child(1) {
-    transform: rotate(-5deg);
-}
-
-.gallery-row:first-child .gallery-item:nth-child(2) {
-    transform: rotate(2deg);
-}
-
-.gallery-row:first-child .gallery-item:nth-child(3) {
-    transform: rotate(-3deg);
-}
-
-.gallery-row:first-child .gallery-item:nth-child(4) {
-    transform: rotate(4deg);
-}
-
-.gallery-row:last-child .gallery-item:nth-child(1) {
-    transform: rotate(3deg);
-}
-
-.gallery-row:last-child .gallery-item:nth-child(2) {
-    transform: rotate(-2deg);
-}
-
-.gallery-row:last-child .gallery-item:nth-child(3) {
-    transform: rotate(5deg);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    transition: transform 0.3s ease;
+    overflow: hidden;
+    background: #1a1a1a;
 }
 
 .gallery-item img {
@@ -1873,34 +1821,28 @@ header {
     object-fit: cover;
     border-radius: 8px;
     cursor: pointer;
+    transform: scale(1);
+    transition: transform 0.3s ease;
+    display: block;
 }
 
-@media (max-width: 768px) {
-    .gallery-item {
-        width: 60vw;
-        max-width: 250px;
-        margin: 0 -25px;
-    }
-    .gallery-row:nth-child(2) {
-        margin-left: 10%;
-    }
+.gallery-item:hover img {
+    transform: scale(1.05);
+}
+
+@media (min-width: 768px) {
     .studio-gallery {
-        gap: -60px;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 20px;
+        padding: 30px;
     }
 }
 
-@media (max-width: 480px) {
-    .gallery-item {
-        width: 65vw;
-        max-width: 200px;
-        margin: 0 -30px;
-    }
-    .gallery-row:nth-child(2) {
-        margin-left: 5%;
-    }
+@media (min-width: 1024px) {
     .studio-gallery {
-        gap: -50px;
-        padding: 0 10px;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 25px;
+        padding: 40px;
     }
 }
 
@@ -1928,20 +1870,21 @@ header {
     display: block;
     max-width: 90vw;
     max-height: 80vh;
-    animation: zoomIn 0.3s ease;
+    object-fit: contain;
     border-radius: 4px;
 }
 
 .close-modal {
     position: absolute;
     top: 15px;
-    right: 35px;
+    right: 15px;
     color: #f1f1f1;
-    font-size: 40px;
+    font-size: 30px;
     font-weight: bold;
     transition: 0.3s;
     cursor: pointer;
     z-index: 1102;
+    padding: 5px;
 }
 
 
@@ -1953,25 +1896,26 @@ header {
     position: absolute;
     top: 50%;
     transform: translateY(-50%);
-    width: auto;
-    padding: 16px;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     color: white;
     font-weight: bold;
-    font-size: 24px;
-    transition: 0.3s ease;
-    border-radius: 0 3px 3px 0;
+    font-size: 20px;
+    background-color: rgba(0, 0, 0, 0.5);
+    border-radius: 50%;
     user-select: none;
     z-index: 1101;
 }
 
 .next-btn {
     right: 10px;
-    border-radius: 3px 0 0 3px;
 }
 
 .prev-btn {
     left: 10px;
-    border-radius: 3px 0 0 3px;
 }
 
 .prev-btn:hover,
@@ -1981,15 +1925,26 @@ header {
 
 @keyframes zoomIn {
     from {
-        transform: scale(0.8);
         opacity: 0;
     }
     to {
-        transform: scale(1);
         opacity: 1;
     }
 }
 
 body.modal-open {
     overflow: hidden;
+}
+
+@media (max-width: 768px) {
+    .calendly-section {
+        padding: 40px 20px;
+    }
+    .calendly-container {
+        height: 1600px;
+        max-width: 100%;
+    }
+    .calendly-inline-widget {
+        height: 1600px !important;
+    }
 }

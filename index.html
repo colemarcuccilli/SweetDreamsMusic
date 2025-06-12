@@ -394,30 +394,41 @@
         <div class="container">
             <h2 class="section-title">Our New Studio</h2>
             <div class="studio-gallery">
-                <div class="gallery-row">
-                    <div class="gallery-item">
-                        <img src="assets/images/studio/DSC00520.webp" alt="Sweet Dreams Studio interior with mixing desk and speakers" loading="lazy" />
-                    </div>
-                    <div class="gallery-item">
-                        <img src="assets/images/studio/DSC00482.webp" alt="Vocal booth at Sweet Dreams Studio" loading="lazy" />
-                    </div>
-                    <div class="gallery-item">
-                        <img src="assets/images/studio/DSC00496.webp" alt="Studio lounge area at Sweet Dreams Studio" loading="lazy" />
-                    </div>
-                    <div class="gallery-item">
-                        <img src="assets/images/studio/DSC00517.webp" alt="Studio equipment rack" loading="lazy" />
-                    </div>
+                <div class="gallery-item">
+                    <img src="assets/images/studio/DSC00520.webp" alt="Studio Control Room" loading="lazy">
                 </div>
-                <div class="gallery-row">
-                    <div class="gallery-item">
-                        <img src="assets/images/studio/DSC00545.webp" alt="Another view of the mixing desk" loading="lazy" />
-                    </div>
-                    <div class="gallery-item">
-                        <img src="assets/images/studio/DSC00501.webp" alt="Close-up of audio equipment" loading="lazy" />
-                    </div>
-                    <div class="gallery-item">
-                        <img src="assets/images/studio/DSC00539.webp" alt="Microphone setup in the vocal booth" loading="lazy" />
-                    </div>
+                <div class="gallery-item">
+                    <img src="assets/images/studio/DSC00482.webp" alt="Studio Live Room" loading="lazy">
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/images/studio/DSC00488.webp" alt="Studio Equipment" loading="lazy">
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/images/studio/DSC00496.webp" alt="Studio Lounge" loading="lazy">
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/images/studio/DSC00498.webp" alt="Studio Control Room" loading="lazy">
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/images/studio/DSC00501.webp" alt="Studio Setup" loading="lazy">
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/images/studio/DSC00517.webp" alt="Studio Console" loading="lazy">
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/images/studio/DSC00522.webp" alt="Studio Mixing Console" loading="lazy">
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/images/studio/DSC00530.webp" alt="Studio Acoustic Treatment" loading="lazy">
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/images/studio/DSC00539.webp" alt="Studio Microphones" loading="lazy">
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/images/studio/DSC00541.webp" alt="Studio Monitoring" loading="lazy">
+                </div>
+                <div class="gallery-item">
+                    <img src="assets/images/studio/DSC00545.webp" alt="Studio View" loading="lazy">
                 </div>
             </div>
         </div>
@@ -499,40 +510,37 @@
         <div class="container">
             <h2 class="section-title">Book Your Session</h2>
             <p class="section-subtitle">Schedule your time with Sweet Dreams Studio and get ready to record!</p>
-            <div class="calendly-inline-widget" data-url="https://calendly.com/sweetdreamsstudio" style="min-width:320px; height:1250px; width: 100%; max-width: 1000px; margin: 0 auto; border-radius: 8px; box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);"></div>
-            <script type="text/javascript" src="https://assets.calendly.com/assets/external/widget.js" async></script>
+            <div class="calendly-inline-widget" data-url="https://calendly.com/sweetdreamsstudio" style="min-width:320px; height:1400px; width: 100%; max-width: 800px; margin: 0 auto; border-radius: 8px; box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.2);"></div>
+            <script type="text/javascript" src="https://assets.calendly.com/assets/external/widget.js" async defer></script>
         </div>
     </section>
 
     <script>
         document.addEventListener("DOMContentLoaded", function() {
-            // Use MutationObserver to apply custom CSS when Calendly iframe is loaded
-            const observer = new MutationObserver(() => {
-                const iframe = document.querySelector(".calendly-inline-widget iframe");
-                if (iframe) {
-                    // Inject custom styles to Calendly iframe
-                    const iframeDocument = iframe.contentDocument || iframe.contentWindow.document;
-                    const style = document.createElement("style");
-                    style.textContent = `
-                /* Custom styles to display events in three columns */
-                .calendly-event-type-container {
-                    display: grid;
-                    grid-template-columns: 1fr 1fr 1fr; /* Three columns */
-                    gap: 20px;
-                }
-                .calendly-event-type {
-                    width: 100% !important;
-                }
-            `;
-                    iframeDocument.head.appendChild(style);
-                    observer.disconnect(); // Stop observing once the style is applied
-                }
+            // Lazy load Calendly widget
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const widget = entry.target;
+                        if (!widget.querySelector('iframe')) {
+                            // Load Calendly widget only when it's visible
+                            const script = document.createElement('script');
+                            script.src = 'https://assets.calendly.com/assets/external/widget.js';
+                            script.async = true;
+                            document.body.appendChild(script);
+                        }
+                        observer.unobserve(widget);
+                    }
+                });
+            }, {
+                rootMargin: '50px 0px',
+                threshold: 0.1
             });
 
-            observer.observe(document.body, {
-                childList: true,
-                subtree: true
-            });
+            const calendlyWidget = document.querySelector('.calendly-inline-widget');
+            if (calendlyWidget) {
+                observer.observe(calendlyWidget);
+            }
         });
     </script>
     <section id="other-services" class="section">
