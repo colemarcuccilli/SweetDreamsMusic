@@ -40,8 +40,6 @@ document.addEventListener("DOMContentLoaded", function() {
     });
 });
 
-
-
 // Add animation keyframes
 function addAnimationKeyframes() {
     const style = document.createElement('style');

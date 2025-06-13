@@ -1941,10 +1941,10 @@ body.modal-open {
         padding: 40px 20px;
     }
     .calendly-container {
-        height: 1600px;
+        height: 2000px;
         max-width: 100%;
     }
     .calendly-inline-widget {
-        height: 1600px !important;
+        height: 2000px !important;
     }
 }
