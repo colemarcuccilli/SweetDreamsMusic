@@ -1,0 +1,110 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { Menu, X, User } from 'lucide-react';
+import { NAV_LINKS } from '@/lib/constants';
+import { cn } from '@/lib/utils';
+import { createClient } from '@/lib/supabase/client';
+
+export default function Header() {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [user, setUser] = useState<{ email: string } | null>(null);
+  const pathname = usePathname();
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user?.email) setUser({ email: user.email });
+    });
+  }, []);
+
+  return (
+    <header className="fixed top-0 left-0 right-0 z-50 bg-black/95 backdrop-blur-sm border-b border-white/10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16 sm:h-20">
+          <Link href="/" className="flex items-center gap-2 no-underline">
+            <span className="font-heading text-white text-xl sm:text-2xl tracking-wider">SWEET DREAMS</span>
+            <span className="text-accent font-mono text-xs sm:text-sm font-semibold tracking-widest">MUSIC</span>
+          </Link>
+
+          {/* Desktop Nav */}
+          <nav className="hidden lg:flex items-center gap-1">
+            {NAV_LINKS.map((link) => (
+              <Link key={link.href} href={link.href}
+                className={cn(
+                  'font-mono text-sm font-medium tracking-wider uppercase px-4 py-2 transition-colors no-underline',
+                  pathname === link.href ? 'text-accent' : 'text-white/70 hover:text-white'
+                )}>
+                {link.label}
+              </Link>
+            ))}
+
+            {user ? (
+              <Link href="/dashboard"
+                className="ml-4 border border-accent text-accent font-mono text-sm font-bold tracking-wider uppercase px-4 py-2 hover:bg-accent hover:text-black transition-colors no-underline inline-flex items-center gap-2">
+                <User className="w-4 h-4" /> Dashboard
+              </Link>
+            ) : (
+              <>
+                <Link href="/login"
+                  className="ml-2 text-white/70 hover:text-white font-mono text-sm font-medium tracking-wider uppercase px-4 py-2 transition-colors no-underline">
+                  Sign In
+                </Link>
+                <Link href="/book"
+                  className="ml-2 bg-accent text-black font-mono text-sm font-bold tracking-wider uppercase px-6 py-3 hover:bg-accent/90 transition-colors no-underline">
+                  BOOK NOW
+                </Link>
+              </>
+            )}
+          </nav>
+
+          {/* Mobile Menu Button */}
+          <button
+            onClick={() => setMobileOpen(!mobileOpen)}
+            className="lg:hidden text-white p-2"
+            aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+          >
+            {mobileOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile Nav */}
+      {mobileOpen && (
+        <nav className="lg:hidden bg-black border-t border-white/10">
+          <div className="px-4 py-4 flex flex-col gap-1">
+            {NAV_LINKS.map((link) => (
+              <Link key={link.href} href={link.href} onClick={() => setMobileOpen(false)}
+                className={cn(
+                  'font-mono text-base font-medium tracking-wider uppercase px-4 py-3 transition-colors no-underline',
+                  pathname === link.href ? 'text-accent' : 'text-white/70 hover:text-white'
+                )}>
+                {link.label}
+              </Link>
+            ))}
+
+            {user ? (
+              <Link href="/dashboard" onClick={() => setMobileOpen(false)}
+                className="mt-2 border border-accent text-accent font-mono text-base font-bold tracking-wider uppercase px-4 py-4 text-center hover:bg-accent hover:text-black transition-colors no-underline inline-flex items-center justify-center gap-2">
+                <User className="w-4 h-4" /> Dashboard
+              </Link>
+            ) : (
+              <>
+                <Link href="/login" onClick={() => setMobileOpen(false)}
+                  className="mt-2 text-white/70 font-mono text-base font-medium tracking-wider uppercase px-4 py-3 text-center no-underline">
+                  Sign In
+                </Link>
+                <Link href="/book" onClick={() => setMobileOpen(false)}
+                  className="bg-accent text-black font-mono text-base font-bold tracking-wider uppercase px-4 py-4 text-center hover:bg-accent/90 transition-colors no-underline">
+                  BOOK NOW
+                </Link>
+              </>
+            )}
+          </div>
+        </nav>
+      )}
+    </header>
+  );
+}
