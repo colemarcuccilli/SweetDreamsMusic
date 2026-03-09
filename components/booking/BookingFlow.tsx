@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { Calendar, Clock, Home, User, ChevronLeft, ChevronRight } from 'lucide-react';
-import { PRICING, ROOMS, ROOM_LABELS, ROOM_RATES, ENGINEERS, STUDIO_HOURS, type Room } from '@/lib/constants';
+import { PRICING, ROOMS, ROOM_LABELS, ROOM_RATES, ROOM_RATES_SINGLE, ENGINEERS, STUDIO_HOURS, type Room } from '@/lib/constants';
 import { formatCents, cn, isAfterHours, isSameDay, calculateSessionTotal, formatTime } from '@/lib/utils';
 
 type Step = 'date' | 'time' | 'details' | 'review';
@@ -299,7 +299,7 @@ export default function BookingFlow() {
               {ROOMS.map((r) => (
                 <button
                   key={r}
-                  onClick={() => setRoom(r)}
+                  onClick={() => { setRoom(r); setEngineer('any'); }}
                   className={cn(
                     'p-6 border-2 font-mono text-left transition-colors',
                     room === r ? 'border-black bg-black text-white' : 'border-black/20 hover:border-black'
@@ -309,6 +309,7 @@ export default function BookingFlow() {
                   <p className="font-bold text-sm uppercase tracking-wider">{ROOM_LABELS[r]}</p>
                   <p className={cn('text-xs mt-1', room === r ? 'text-white/60' : 'text-black/40')}>
                     {formatCents(ROOM_RATES[r])}/hour
+                    <span className="block text-[10px] mt-0.5">1hr: {formatCents(ROOM_RATES_SINGLE[r])}</span>
                   </p>
                 </button>
               ))}
@@ -332,7 +333,7 @@ export default function BookingFlow() {
                   We&apos;ll match you
                 </p>
               </button>
-              {ENGINEERS.map((eng) => (
+              {ENGINEERS.filter((eng) => eng.studios.includes(room)).map((eng) => (
                 <button
                   key={eng.name}
                   onClick={() => setEngineer(eng.name)}
@@ -387,7 +388,7 @@ export default function BookingFlow() {
 
               <div className="flex justify-between">
                 <span className="text-black/60">
-                  {ROOM_LABELS[room]} ({duration}hr x {formatCents(ROOM_RATES[room])})
+                  {ROOM_LABELS[room]} ({duration}hr x {formatCents(duration === 1 ? ROOM_RATES_SINGLE[room] : ROOM_RATES[room])})
                 </span>
                 <span>{formatCents(pricing.subtotal)}</span>
               </div>

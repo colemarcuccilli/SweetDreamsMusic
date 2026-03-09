@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { verifyEngineerAccess } from '@/lib/admin-auth';
 import { sendEngineerAssigned } from '@/lib/email';
+import { ENGINEERS } from '@/lib/constants';
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -22,6 +23,29 @@ export async function POST(request: NextRequest) {
     .single();
 
   const engineerName = profile?.display_name || user.email || 'Engineer';
+
+  // Check the booking's studio to enforce studio restrictions
+  const { data: booking } = await supabase
+    .from('bookings')
+    .select('room')
+    .eq('id', bookingId)
+    .single();
+
+  if (!booking) {
+    return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
+  }
+
+  // Verify this engineer can work in this studio
+  const engineerConfig = ENGINEERS.find(
+    (e) => e.name === engineerName || e.displayName === engineerName
+  );
+  if (engineerConfig && booking.room && !engineerConfig.studios.includes(booking.room)) {
+    const studioLabel = booking.room === 'studio_a' ? 'Studio A' : 'Studio B';
+    return NextResponse.json(
+      { error: `You are not assigned to ${studioLabel}` },
+      { status: 403 }
+    );
+  }
 
   // Claim the session — only succeeds if engineer_name is still null
   const { data: updated, error } = await supabase

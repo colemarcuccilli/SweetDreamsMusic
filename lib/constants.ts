@@ -75,10 +75,10 @@ export const ROOM_RATES_SINGLE: Record<Room, number> = {
 };
 
 export const ENGINEERS = [
-  { name: 'PRVRB', displayName: 'PRVRB', specialties: ['Recording', 'Mixing'] },
-  { name: 'Iszac Griner', displayName: 'Iszac', specialties: ['Recording'] },
-  { name: 'Zion Tinsley', displayName: 'Zion', specialties: ['Recording'] },
-  { name: 'Jay', displayName: 'Jay', specialties: ['Recording', 'Production'] },
+  { name: 'PRVRB', displayName: 'PRVRB', specialties: ['Recording', 'Mixing'], studios: ['studio_a'] as Room[] },
+  { name: 'Iszac Griner', displayName: 'Iszac', specialties: ['Recording'], studios: ['studio_a', 'studio_b'] as Room[] },
+  { name: 'Zion Tinsley', displayName: 'Zion', specialties: ['Recording'], studios: ['studio_b'] as Room[] },
+  { name: 'Jay', displayName: 'Jay', specialties: ['Recording', 'Production'], studios: ['studio_b'] as Room[] },
 ] as const;
 
 // Super admins — full access to everything
