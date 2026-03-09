@@ -26,7 +26,6 @@ export default function Header() {
         <div className="flex items-center justify-between h-16 sm:h-20">
           <Link href="/" className="flex items-center gap-2 no-underline">
             <span className="font-heading text-white text-xl sm:text-2xl tracking-wider">SWEET DREAMS</span>
-            <span className="text-accent font-mono text-xs sm:text-sm font-semibold tracking-widest">MUSIC</span>
           </Link>
 
           {/* Desktop Nav */}
