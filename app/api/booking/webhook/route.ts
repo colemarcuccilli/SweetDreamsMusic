@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
 import { createServiceClient } from '@/lib/supabase/server';
+import { sendBookingConfirmation, sendAdminBookingAlert, sendEngineerNewBookingAlert } from '@/lib/email';
+import { ENGINEERS } from '@/lib/constants';
 import type Stripe from 'stripe';
 
 export async function POST(request: NextRequest) {
@@ -31,7 +33,7 @@ export async function POST(request: NextRequest) {
         const startDateTime = `${meta.session_date}T${meta.start_time}:00`;
         const endDateTime = `${meta.session_date}T${meta.end_time}:00`;
 
-        await supabase.from('bookings').insert({
+        const { data: newBooking } = await supabase.from('bookings').insert({
           customer_name: meta.customer_name,
           customer_email: meta.customer_email,
           customer_phone: meta.customer_phone || null,
@@ -53,7 +55,54 @@ export async function POST(request: NextRequest) {
           stripe_payment_intent_id: session.payment_intent as string,
           status: 'confirmed',
           admin_notes: meta.notes || null,
+        }).select().single();
+
+        // Send emails
+        const startDate = new Date(startDateTime);
+        const dateStr = startDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+        const timeStr = startDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+        const duration = parseInt(meta.duration_hours);
+
+        // Customer confirmation
+        await sendBookingConfirmation(meta.customer_email, {
+          customerName: meta.customer_name,
+          date: dateStr,
+          startTime: timeStr,
+          duration,
+          room: meta.room,
+          total: parseInt(meta.total_amount),
+          deposit: session.amount_total || parseInt(meta.deposit_amount),
         });
+
+        // Admin alert
+        await sendAdminBookingAlert({
+          id: newBooking?.id || '',
+          customerName: meta.customer_name,
+          customerEmail: meta.customer_email,
+          date: dateStr,
+          startTime: timeStr,
+          duration,
+          room: meta.room,
+          total: parseInt(meta.total_amount),
+        });
+
+        // Notify all engineers to claim the session
+        const { data: engineers } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('role', 'engineer');
+
+        const engineerEmails = (engineers || []).map((e: { email: string }) => e.email).filter(Boolean);
+        if (engineerEmails.length > 0) {
+          await sendEngineerNewBookingAlert(engineerEmails, {
+            id: newBooking?.id || '',
+            customerName: meta.customer_name,
+            date: dateStr,
+            startTime: timeStr,
+            duration,
+            room: meta.room,
+          });
+        }
       } else if (meta.type === 'beat_purchase') {
         // Beat store purchase
         await supabase.from('beat_purchases').insert({

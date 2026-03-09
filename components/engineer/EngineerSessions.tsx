@@ -1,55 +1,130 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { formatCents } from '@/lib/utils';
 
 interface Booking {
   id: string;
   customer_name: string;
-  customer_email: string;
+  customer_email?: string;
   start_time: string;
   end_time: string;
   duration: number;
+  room?: string;
   total_amount: number;
   deposit_amount: number;
-  remainder_amount: number;
+  remainder_amount?: number;
   actual_deposit_paid: number | null;
   status: string;
   created_at: string;
   admin_notes: string | null;
+  engineer_name?: string | null;
 }
 
 export default function EngineerSessions({ userEmail }: { userEmail: string }) {
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [mySessions, setMySessions] = useState<Booking[]>([]);
+  const [unclaimed, setUnclaimed] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
+  const [claiming, setClaiming] = useState<string | null>(null);
 
-  useEffect(() => {
-    // TODO: Filter by engineer assignment when that field exists
-    // For now engineers see all bookings — admins filter in admin panel
-    fetch('/api/admin/bookings?limit=30')
-      .then((r) => r.json())
-      .then((d) => setBookings(d.bookings || []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [userEmail]);
+  const loadData = useCallback(async () => {
+    try {
+      const [myRes, unclaimedRes] = await Promise.all([
+        fetch('/api/admin/bookings?limit=50'),
+        fetch('/api/booking/unclaimed'),
+      ]);
+      const myData = await myRes.json();
+      const unclaimedData = await unclaimedRes.json();
+      setMySessions(myData.bookings || []);
+      setUnclaimed(unclaimedData.bookings || []);
+    } catch {
+      // silent
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  async function claimSession(bookingId: string) {
+    setClaiming(bookingId);
+    try {
+      const res = await fetch('/api/booking/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Failed to claim session');
+        return;
+      }
+      await loadData();
+    } catch {
+      alert('Network error');
+    } finally {
+      setClaiming(null);
+    }
+  }
 
   if (loading) return <p className="font-mono text-sm text-black/40">Loading sessions...</p>;
 
-  const active = bookings.filter((b) => ['confirmed', 'pending', 'pending_approval'].includes(b.status));
-  const completed = bookings.filter((b) => b.status === 'completed');
+  const myActive = mySessions.filter((b) =>
+    ['confirmed', 'pending'].includes(b.status) && b.engineer_name
+  );
+  const myCompleted = mySessions.filter((b) => b.status === 'completed');
 
   return (
-    <div className="space-y-8">
-      {/* Active Sessions */}
+    <div className="space-y-10">
+      {/* Available Sessions (Unclaimed) */}
       <div>
         <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">
-          Active Sessions ({active.length})
+          Available Sessions ({unclaimed.length})
         </h3>
-        {active.length === 0 ? (
+        {unclaimed.length === 0 ? (
+          <p className="font-mono text-xs text-black/30 border border-black/10 p-6 text-center">
+            No available sessions right now
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {unclaimed.map((b) => (
+              <div key={b.id} className="border-2 border-[#F4C430]/40 bg-[#F4C430]/5 p-4 sm:p-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <p className="font-mono text-sm font-bold">{b.customer_name}</p>
+                    <p className="font-mono text-xs text-black/40 mt-1">
+                      {new Date(b.start_time).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                      {' · '}
+                      {new Date(b.start_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                      {' · '}
+                      {b.duration}hr
+                      {b.room && ` · ${b.room === 'studio_a' ? 'Studio A' : 'Studio B'}`}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => claimSession(b.id)}
+                    disabled={claiming === b.id}
+                    className="font-mono text-xs font-bold uppercase tracking-wider bg-[#F4C430] text-black px-5 py-2.5 hover:bg-[#F4C430]/80 disabled:opacity-50 transition-colors"
+                  >
+                    {claiming === b.id ? 'Claiming...' : 'Claim Session'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* My Active Sessions */}
+      <div>
+        <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">
+          My Sessions ({myActive.length})
+        </h3>
+        {myActive.length === 0 ? (
           <p className="font-mono text-xs text-black/30 border border-black/10 p-6 text-center">No active sessions</p>
         ) : (
           <div className="space-y-3">
-            {active.map((b) => (
+            {myActive.map((b) => (
               <BookingCard key={b.id} booking={b} />
             ))}
           </div>
@@ -59,13 +134,13 @@ export default function EngineerSessions({ userEmail }: { userEmail: string }) {
       {/* Completed */}
       <div>
         <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">
-          Completed ({completed.length})
+          Completed ({myCompleted.length})
         </h3>
-        {completed.length === 0 ? (
+        {myCompleted.length === 0 ? (
           <p className="font-mono text-xs text-black/30 border border-black/10 p-6 text-center">No completed sessions</p>
         ) : (
           <div className="space-y-3">
-            {completed.map((b) => (
+            {myCompleted.map((b) => (
               <BookingCard key={b.id} booking={b} />
             ))}
           </div>
@@ -83,7 +158,9 @@ function BookingCard({ booking }: { booking: Booking }) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <p className="font-mono text-sm font-bold">{booking.customer_name}</p>
-          <p className="font-mono text-xs text-black/50">{booking.customer_email}</p>
+          {booking.customer_email && (
+            <p className="font-mono text-xs text-black/50">{booking.customer_email}</p>
+          )}
           <p className="font-mono text-xs text-black/40 mt-1">
             {date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
             {' · '}
