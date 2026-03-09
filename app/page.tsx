@@ -1,9 +1,10 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { Mic, Music, Headphones, Clock, DollarSign, Users } from 'lucide-react';
-import { PRICING, ROOM_RATES, ENGINEERS } from '@/lib/constants';
+import { ROOM_RATES, ENGINEERS } from '@/lib/constants';
 import { formatCents } from '@/lib/utils';
 import { STUDIO_IMAGES } from '@/lib/images';
+import HeroTitle from '@/components/home/HeroTitle';
 
 const services = [
   {
@@ -32,7 +33,7 @@ export default function HomePage() {
       {/* Hero */}
       <section className="relative bg-black text-white min-h-[90vh] flex items-center justify-center overflow-hidden">
         <Image
-          src={STUDIO_IMAGES.jayIszacPrvrbStudioAWide}
+          src={STUDIO_IMAGES.studioBSideLowAngleWide}
           alt="Sweet Dreams Music Studio"
           fill
           className="object-cover opacity-40"
@@ -44,12 +45,10 @@ export default function HomePage() {
           <p className="font-mono text-accent text-sm sm:text-base font-semibold tracking-[0.3em] uppercase mb-6">
             Fort Wayne Recording Studio
           </p>
-          <h1 className="text-display-lg mb-6">
-            YOUR SOUND.<br />OUR STUDIO.
-          </h1>
+          <HeroTitle />
           <p className="font-mono text-white/70 text-body-md max-w-2xl mx-auto mb-10">
             Professional recording sessions starting at {formatCents(ROOM_RATES.studio_b)}/hour.
-            Two studios. Six engineers. Your music, perfected.
+            Two studios. Four engineers. Your music, perfected.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link href="/book"
@@ -139,7 +138,7 @@ export default function HomePage() {
             </div>
             <div className="border border-white/10 overflow-hidden">
               <div className="relative aspect-[16/9]">
-                <Image src={STUDIO_IMAGES.jayStudioBWritingWide} alt="Studio B" fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" />
+                <Image src={STUDIO_IMAGES.studioBSideLowAngleWide} alt="Studio B" fill className="object-cover" sizes="(max-width: 768px) 100vw, 50vw" />
               </div>
               <div className="p-8 sm:p-10">
                 <h3 className="text-heading-sm mb-2">STUDIO B</h3>
@@ -152,6 +151,8 @@ export default function HomePage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-4 font-mono text-sm text-white/50 mb-8">
+            <span>1-hour sessions: +$10/hr</span>
+            <span className="text-white/20">|</span>
             <span>After hours: +$10/hr</span>
             <span className="text-white/20">|</span>
             <span>Same-day: +$10/hr</span>
@@ -171,7 +172,7 @@ export default function HomePage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
             {[
               { icon: Users, value: String(ENGINEERS.length), label: 'Engineers' },
-              { icon: DollarSign, value: '$60', label: 'Starting Rate' },
+              { icon: DollarSign, value: '$50', label: 'Starting Rate' },
               { icon: Clock, value: '7', label: 'Days a Week' },
               { icon: Mic, value: '2', label: 'Studios' },
             ].map((stat) => (

@@ -2,7 +2,7 @@ export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://sweetdreams
 
 export const BRAND = {
   name: 'Sweet Dreams Music',
-  legalName: 'Sweet Dreams Music LLC',
+  legalName: 'Sweet Dreams LLC',
   tagline: 'Fort Wayne Recording Studio',
   phone: '',
   email: 'info@sweetdreamsmusic.com',
@@ -38,8 +38,10 @@ export const GEO = {
 };
 
 export const PRICING = {
-  studioA: 7000, // $70/hr in cents
-  studioB: 6000, // $60/hr in cents
+  studioA: 6000, // $60/hr in cents (2+ hours), $70 single hour
+  studioB: 5000, // $50/hr in cents (2+ hours), $60 single hour
+  studioASingleHour: 7000, // $70 for 1-hour session
+  studioBSingleHour: 6000, // $60 for 1-hour session
   afterHoursSurcharge: 1000, // +$10/hr
   sameDaySurcharge: 1000, // +$10/hr
   threeHourDiscount: 1000, // $10 off for 3+ hour sessions
@@ -67,13 +69,16 @@ export const ROOM_RATES: Record<Room, number> = {
   studio_b: PRICING.studioB,
 };
 
+export const ROOM_RATES_SINGLE: Record<Room, number> = {
+  studio_a: PRICING.studioASingleHour,
+  studio_b: PRICING.studioBSingleHour,
+};
+
 export const ENGINEERS = [
-  { name: 'Proverb', displayName: 'Proverb', specialties: ['Recording', 'Mixing'] },
-  { name: 'Isaac', displayName: 'Isaac', specialties: ['Recording', 'Production'] },
-  { name: 'DaeRonne Halcrombe', displayName: 'DaeRonne', specialties: ['Recording', 'Mixing'] },
-  { name: 'Zion Tinsley', displayName: 'Zion', specialties: ['Recording'] },
-  { name: 'Colin Jay Mick', displayName: 'Colin', specialties: ['Recording', 'Production'] },
+  { name: 'PRVRB', displayName: 'PRVRB', specialties: ['Recording', 'Mixing'] },
   { name: 'Iszac Griner', displayName: 'Iszac', specialties: ['Recording'] },
+  { name: 'Zion Tinsley', displayName: 'Zion', specialties: ['Recording'] },
+  { name: 'Jay', displayName: 'Jay', specialties: ['Recording', 'Production'] },
 ] as const;
 
 // Super admins — full access to everything
@@ -114,6 +119,7 @@ export const NAV_LINKS = [
   { href: '/beats', label: 'Beats' },
   { href: '/pricing', label: 'Pricing' },
   { href: '/engineers', label: 'Engineers' },
+  { href: '/media', label: 'Media' },
   { href: '/about', label: 'About' },
   { href: '/contact', label: 'Contact' },
 ] as const;

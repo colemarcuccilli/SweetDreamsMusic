@@ -1,4 +1,4 @@
-import { PRICING, ROOM_RATES, SUPER_ADMINS, type Room, type UserRole } from './constants';
+import { PRICING, ROOM_RATES, ROOM_RATES_SINGLE, SUPER_ADMINS, type Room, type UserRole } from './constants';
 
 export function formatCents(cents: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -30,7 +30,7 @@ export function calculateSessionTotal(
   startHour: number,
   isSameDayBooking: boolean
 ): { subtotal: number; afterHoursFee: number; sameDayFee: number; discount: number; total: number; deposit: number } {
-  const baseRate = ROOM_RATES[room];
+  const baseRate = hours === 1 ? ROOM_RATES_SINGLE[room] : ROOM_RATES[room];
   const subtotal = baseRate * hours;
 
   const afterHoursFee = isAfterHours(startHour) ? PRICING.afterHoursSurcharge * hours : 0;

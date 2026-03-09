@@ -6,7 +6,7 @@ import BookingFlow from '@/components/booking/BookingFlow';
 
 export const metadata: Metadata = {
   title: 'Book a Session',
-  description: 'Book your recording session at Sweet Dreams Music. Choose your date, time, studio, and engineer. Starting at $60/hour.',
+  description: 'Book your recording session at Sweet Dreams Music. Choose your date, time, studio, and engineer. Starting at $50/hour.',
   alternates: { canonical: `${SITE_URL}/book` },
 };
 

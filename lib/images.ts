@@ -11,6 +11,16 @@ export const STUDIO_IMAGES = {
   jayBoothWide: `${BASE}/Jayboothwide.jpg`,
   jayIszacPrvrbStudioAWide: `${BASE}/jayiszacprvrbstudioawide.jpg`,
   jayStudioBWritingWide: `${BASE}/JayStudioBwritingwide.jpg`,
+  prvrbBoothWide: `${BASE}/prvrbboothwide.jpg`,
+  prvrbTopStudioAWide: `${BASE}/prvrbtopstudioawide.jpg`,
+  studioBSideLowAngleWide: `${BASE}/studiobrightsidelowanglewide.jpg`,
+  studioBRightSideSpeakers: `${BASE}/studiobrightsidespeakers.jpg`,
+  studioBStraightOnWide: `${BASE}/StudiobstraightonWide.jpg`,
+  studioBStraightOnWide2: `${BASE}/studiobstraightonWide2.jpg`,
+  studioBWide: `${BASE}/studiobwide.jpg`,
+  topBoothCloseupWide: `${BASE}/Topcloseupboothwide.jpg`,
+  topStudioAFocusedWide: `${BASE}/TopstudioAfocusedwide.jpg`,
+  mojaveWide: `${BASE}/MojaveWide.jpg`,
 
   // Square — cards, thumbnails
   doloBoothSquare: `${BASE}/dolocloseupboothsquare.jpg`,
@@ -20,6 +30,14 @@ export const STUDIO_IMAGES = {
   iszacVert: `${BASE}/IszacVert.jpg`,
   jayTopStudioBVert: `${BASE}/JayTopstudiobboothVert.jpg`,
   jebJayStudioAVert: `${BASE}/JebJaystudioavert.jpg`,
+  prvrbBoothGlowVert: `${BASE}/prvrbboothglowvert.jpg`,
+  prvrbStudioAVert: `${BASE}/prvrbstudioavert.jpg`,
+  prvrbJebVert: `${BASE}/prvrbjebvert.jpg`,
+  zLaughingStudioBVert: `${BASE}/Zlaughingstudiobvert.jpg`,
+  zStudioBVert: `${BASE}/ZstudioBVert.jpg`,
+  topBoothCloseupVert: `${BASE}/Topboothcloseupvert.jpg`,
+  topBoothVert: `${BASE}/TopBoothVert.jpg`,
+  topBoothVert2: `${BASE}/Topboothvert2.jpg`,
 
   // Graphics / Closeups — equipment showcase
   akgCloseup: `${BASE}/akgcloseup.jpg`,

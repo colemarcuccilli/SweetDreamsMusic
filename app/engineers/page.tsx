@@ -10,9 +10,11 @@ export const metadata: Metadata = {
   alternates: { canonical: `${SITE_URL}/engineers` },
 };
 
-// Map engineers to available photos where we have them
 const ENGINEER_PHOTOS: Record<string, string> = {
+  'PRVRB': STUDIO_IMAGES.prvrbBoothGlowVert,
   'Iszac Griner': STUDIO_IMAGES.iszacVert,
+  'Zion Tinsley': STUDIO_IMAGES.zStudioBVert,
+  'Jay': STUDIO_IMAGES.jayTopStudioBVert,
 };
 
 export default function EngineersPage() {
@@ -43,7 +45,7 @@ export default function EngineersPage() {
       {/* Engineers Grid - White */}
       <section className="bg-white text-black py-20 sm:py-28">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {ENGINEERS.map((engineer) => {
               const photo = ENGINEER_PHOTOS[engineer.name];
               return (
@@ -58,7 +60,7 @@ export default function EngineersPage() {
                         alt={engineer.displayName}
                         fill
                         className="object-cover group-hover:scale-105 transition-transform duration-500"
-                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
                       />
                     ) : (
                       <span className="font-heading text-[120px] text-black/10 group-hover:text-accent/20 transition-colors">
@@ -68,9 +70,7 @@ export default function EngineersPage() {
                   </div>
 
                   <div className="p-6 sm:p-8">
-                    <h2 className="text-heading-lg mb-1">{engineer.displayName}</h2>
-                    <p className="font-mono text-xs text-black/40 mb-4">{engineer.name}</p>
-
+                    <h2 className="text-heading-lg mb-3">{engineer.displayName}</h2>
                     <div className="flex flex-wrap gap-2">
                       {engineer.specialties.map((specialty) => (
                         <span

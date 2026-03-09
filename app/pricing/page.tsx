@@ -2,13 +2,13 @@ import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Clock, AlertCircle, Check, Percent } from 'lucide-react';
-import { SITE_URL, PRICING, ROOM_RATES } from '@/lib/constants';
+import { SITE_URL, PRICING, ROOM_RATES, ROOM_RATES_SINGLE } from '@/lib/constants';
 import { formatCents, calculateSessionTotal } from '@/lib/utils';
 import { STUDIO_IMAGES } from '@/lib/images';
 
 export const metadata: Metadata = {
   title: 'Pricing',
-  description: 'Recording studio pricing. Studio A from $70/hr, Studio B from $60/hr. 50% deposit at booking, remainder after session.',
+  description: 'Recording studio pricing. Studio A from $60/hr, Studio B from $50/hr. 50% deposit at booking, remainder after session.',
   alternates: { canonical: `${SITE_URL}/pricing` },
 };
 
@@ -53,10 +53,11 @@ export default function PricingPage() {
             <div className="border-4 border-black p-8 sm:p-12">
               <h2 className="text-heading-lg mb-2">STUDIO A</h2>
               <p className="font-mono text-sm text-black/50 mb-6">Premium room — top-tier acoustics and equipment</p>
-              <div className="flex items-baseline gap-1 mb-6">
+              <div className="flex items-baseline gap-1 mb-2">
                 <span className="font-heading text-display-md">{formatCents(ROOM_RATES.studio_a)}</span>
                 <span className="font-mono text-lg text-black/50">/hour</span>
               </div>
+              <p className="font-mono text-xs text-black/40 mb-6">Single hour: {formatCents(PRICING.studioASingleHour)}</p>
               <hr className="my-6 border-black/10" />
               <h3 className="text-heading-sm mb-4">INCLUDED</h3>
               <div className="space-y-3">
@@ -73,10 +74,11 @@ export default function PricingPage() {
             <div className="border-2 border-black p-8 sm:p-12">
               <h2 className="text-heading-lg mb-2">STUDIO B</h2>
               <p className="font-mono text-sm text-black/50 mb-6">Versatile room — great for all session types</p>
-              <div className="flex items-baseline gap-1 mb-6">
+              <div className="flex items-baseline gap-1 mb-2">
                 <span className="font-heading text-display-md">{formatCents(ROOM_RATES.studio_b)}</span>
                 <span className="font-mono text-lg text-black/50">/hour</span>
               </div>
+              <p className="font-mono text-xs text-black/40 mb-6">Single hour: {formatCents(PRICING.studioBSingleHour)}</p>
               <hr className="my-6 border-black/10" />
               <h3 className="text-heading-sm mb-4">INCLUDED</h3>
               <div className="space-y-3">

@@ -53,7 +53,7 @@ export default function AboutPage() {
                   recording engineer who will ensure your project sounds its absolute best.
                 </p>
                 <p>
-                  Sweet Dreams Music is a division of {BRAND.legalName}, Fort Wayne&apos;s creative media agency.
+                  Sweet Dreams Music is a division of <a href="https://sweetdreams.us" className="text-accent hover:underline">Sweet Dreams</a>, Fort Wayne&apos;s creative media company.
                   We bring the same attention to quality and detail to every recording session.
                 </p>
               </div>
@@ -72,7 +72,7 @@ export default function AboutPage() {
 
               <div className="border-2 border-black overflow-hidden">
                 <div className="relative aspect-[16/9]">
-                  <Image src={STUDIO_IMAGES.jayStudioBWritingWide} alt="Studio B" fill className="object-cover" sizes="(max-width: 1024px) 100vw, 50vw" />
+                  <Image src={STUDIO_IMAGES.studioBSideLowAngleWide} alt="Studio B" fill className="object-cover" sizes="(max-width: 1024px) 100vw, 50vw" />
                 </div>
                 <div className="p-6 sm:p-8">
                   <h3 className="text-heading-sm mb-2">STUDIO B</h3>
