@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Copy, Check, Link as LinkIcon } from 'lucide-react';
-import { ROOMS, ROOM_LABELS, ROOM_RATES, PRICING, STUDIO_HOURS, type Room } from '@/lib/constants';
+import { ROOMS, ROOM_LABELS, ROOM_RATES, PRICING, type Room } from '@/lib/constants';
 import { formatCents, formatTime, calculateSessionTotal } from '@/lib/utils';
 
 export default function CreateInvite() {
@@ -107,9 +107,7 @@ export default function CreateInvite() {
         <label className="block font-mono text-xs font-semibold uppercase tracking-wider mb-1">Start Time *</label>
         <select value={startTime} onChange={(e) => setStartTime(e.target.value)}
           className="w-full border-2 border-black px-4 py-3 font-mono text-sm focus:border-accent focus:outline-none">
-          {Array.from({ length: STUDIO_HOURS.regular.end - STUDIO_HOURS.regular.start }, (_, i) => STUDIO_HOURS.regular.start + i)
-            .concat(Array.from({ length: 24 - STUDIO_HOURS.afterHours.start + STUDIO_HOURS.afterHours.end }, (_, i) => (STUDIO_HOURS.afterHours.start + i) % 24))
-            .map((h) => (
+          {Array.from({ length: 24 }, (_, i) => i).map((h) => (
               <option key={h} value={h}>{formatTime(`${h}:00`)}</option>
             ))}
         </select>

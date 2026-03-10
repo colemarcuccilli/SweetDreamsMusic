@@ -20,16 +20,14 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 
   if (!user || !user.email) return null;
 
-  // Fetch profile
+  // Fetch profile including role
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, display_name, public_profile_slug, profile_picture_url')
+    .select('id, display_name, public_profile_slug, profile_picture_url, role')
     .eq('user_id', user.id)
     .single();
 
-  // Check if user is an engineer (check admin_users table or a role field)
-  // For now, we determine role from email + a future role column
-  const role = getUserRole(user.email);
+  const role = getUserRole(user.email, profile?.role);
 
   return {
     id: user.id,

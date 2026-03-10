@@ -1,32 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { Calendar, Clock, Home, User, ChevronLeft, ChevronRight } from 'lucide-react';
-import { PRICING, ROOMS, ROOM_LABELS, ROOM_RATES, ROOM_RATES_SINGLE, SWEET_SPOTS, ENGINEERS, STUDIO_HOURS, type Room } from '@/lib/constants';
-import { formatCents, cn, isAfterHours, isSameDay, calculateSessionTotal, formatTime } from '@/lib/utils';
-
-type Step = 'date' | 'time' | 'details' | 'review';
-
-const STEPS: { key: Step; label: string; icon: typeof Calendar }[] = [
-  { key: 'date', label: 'Date', icon: Calendar },
-  { key: 'time', label: 'Time & Duration', icon: Clock },
-  { key: 'details', label: 'Studio & Engineer', icon: Home },
-  { key: 'review', label: 'Review & Pay', icon: User },
-];
-
-function generateTimeSlots() {
-  const slots: string[] = [];
-  for (let h = STUDIO_HOURS.regular.start; h < STUDIO_HOURS.regular.end; h++) {
-    slots.push(`${h}:00`);
-  }
-  for (let h = STUDIO_HOURS.afterHours.start; h <= 23; h++) {
-    slots.push(`${h}:00`);
-  }
-  for (let h = 0; h < STUDIO_HOURS.afterHours.end; h++) {
-    slots.push(`${h}:00`);
-  }
-  return slots;
-}
+import { useState, useMemo, useRef, useEffect } from 'react';
+import { Calendar, Clock, Home, User, ChevronLeft, ChevronRight, AlertTriangle, Star } from 'lucide-react';
+import { PRICING, ROOMS, ROOM_LABELS, ROOM_RATES, ROOM_RATES_SINGLE, SWEET_SPOTS, ENGINEERS, type Room } from '@/lib/constants';
+import { formatCents, cn, isSameDay, calculateSessionTotal, formatTime, getHourSurcharge } from '@/lib/utils';
 
 function getDaysInMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate();
@@ -43,15 +20,35 @@ const MONTH_NAMES = [
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-export default function BookingFlow() {
-  const [step, setStep] = useState<Step>('date');
+// Generate 24-hour time slots
+function generateTimeSlots() {
+  const slots: string[] = [];
+  for (let h = 0; h < 24; h++) {
+    slots.push(`${h}:00`);
+  }
+  return slots;
+}
+
+function tierLabel(tier: 'regular' | 'lateNight' | 'deepNight'): string {
+  if (tier === 'lateNight') return 'Late Night';
+  if (tier === 'deepNight') return 'After Hours';
+  return '';
+}
+
+function tierColor(tier: 'regular' | 'lateNight' | 'deepNight'): string {
+  if (tier === 'lateNight') return 'text-amber-600';
+  if (tier === 'deepNight') return 'text-red-500';
+  return 'text-black/40';
+}
+
+export default function BookingFlow({ userName, userEmail }: { userName: string; userEmail: string }) {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [duration, setDuration] = useState(2);
   const [room, setRoom] = useState<Room>('studio_a');
   const [engineer, setEngineer] = useState<string>('any');
-  const [customerName, setCustomerName] = useState('');
-  const [customerEmail, setCustomerEmail] = useState('');
+  const [customerName, setCustomerName] = useState(userName);
+  const [customerEmail] = useState(userEmail);
   const [customerPhone, setCustomerPhone] = useState('');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -69,30 +66,49 @@ export default function BookingFlow() {
     return calculateSessionTotal(room, duration, startHour, isSameDayBooking);
   }, [room, duration, startHour, isSameDayBooking]);
 
-  const currentStepIndex = STEPS.findIndex((s) => s.key === step);
+  // Refs for auto-scrolling
+  const timeRef = useRef<HTMLDivElement>(null);
+  const studioRef = useRef<HTMLDivElement>(null);
+  const reviewRef = useRef<HTMLDivElement>(null);
 
-  function canProceed(): boolean {
-    switch (step) {
-      case 'date': return selectedDate !== null;
-      case 'time': return selectedTime !== null;
-      case 'details': return true;
-      case 'review': return customerName.trim() !== '' && customerEmail.trim() !== '';
-      default: return false;
+  // Section visibility states for animation
+  const [showTime, setShowTime] = useState(false);
+  const [showStudio, setShowStudio] = useState(false);
+  const [showReview, setShowReview] = useState(false);
+
+  // Auto-reveal and scroll to next section
+  useEffect(() => {
+    if (selectedDate && !showTime) {
+      setShowTime(true);
+      setTimeout(() => timeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
     }
-  }
+  }, [selectedDate, showTime]);
 
-  function nextStep() {
-    const idx = currentStepIndex;
-    if (idx < STEPS.length - 1) setStep(STEPS[idx + 1].key);
-  }
+  useEffect(() => {
+    if (selectedTime && !showStudio) {
+      setShowStudio(true);
+      setTimeout(() => studioRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+    }
+  }, [selectedTime, showStudio]);
 
-  function prevStep() {
-    const idx = currentStepIndex;
-    if (idx > 0) setStep(STEPS[idx - 1].key);
-  }
+  useEffect(() => {
+    if (showStudio && !showReview) {
+      // Show review once studio section is visible (it has defaults)
+      setShowReview(true);
+      setTimeout(() => reviewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
+    }
+  }, [showStudio, showReview]);
+
+  // Re-scroll to review when pricing changes
+  useEffect(() => {
+    if (showReview) {
+      setTimeout(() => reviewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room, duration]);
 
   async function handleCheckout() {
-    if (!selectedDate || !selectedTime) return;
+    if (!selectedDate || !selectedTime || !customerName.trim()) return;
     setIsSubmitting(true);
 
     try {
@@ -140,36 +156,15 @@ export default function BookingFlow() {
   }
 
   return (
-    <div>
-      {/* Step Indicator */}
-      <div className="flex items-center gap-2 mb-8 overflow-x-auto pb-2">
-        {STEPS.map((s, i) => (
-          <div key={s.key} className="flex items-center gap-2 flex-shrink-0">
-            <button
-              onClick={() => i <= currentStepIndex && setStep(s.key)}
-              className={cn(
-                'flex items-center gap-2 px-3 py-2 font-mono text-xs sm:text-sm font-semibold uppercase tracking-wider transition-colors',
-                i === currentStepIndex ? 'text-black' :
-                i < currentStepIndex ? 'text-accent cursor-pointer' :
-                'text-black/30 cursor-default'
-              )}
-            >
-              <s.icon className="w-4 h-4" />
-              <span className="hidden sm:inline">{s.label}</span>
-              <span className="sm:hidden">{i + 1}</span>
-            </button>
-            {i < STEPS.length - 1 && (
-              <div className={cn('w-8 h-px', i < currentStepIndex ? 'bg-accent' : 'bg-black/10')} />
-            )}
-          </div>
-        ))}
-      </div>
+    <div className="space-y-16">
+      {/* ============ SECTION 1: DATE ============ */}
+      <section>
+        <div className="flex items-center gap-3 mb-6">
+          <span className="w-8 h-8 bg-black text-white font-mono text-sm font-bold flex items-center justify-center flex-shrink-0">1</span>
+          <h2 className="text-heading-lg">SELECT A DATE</h2>
+        </div>
 
-      {/* Step: Date */}
-      {step === 'date' && (
-        <div>
-          <h2 className="text-heading-lg mb-6">SELECT A DATE</h2>
-
+        <div className="max-w-md">
           <div className="flex items-center justify-between mb-6">
             <button
               onClick={() => {
@@ -194,7 +189,7 @@ export default function BookingFlow() {
             </button>
           </div>
 
-          <div className="grid grid-cols-7 gap-1 mb-8">
+          <div className="grid grid-cols-7 gap-1 mb-6">
             {DAY_NAMES.map((d) => (
               <div key={d} className="text-center font-mono text-xs text-black/40 uppercase py-2">{d}</div>
             ))}
@@ -224,260 +219,358 @@ export default function BookingFlow() {
           </div>
 
           {selectedDate && (
-            <p className="font-mono text-sm text-black/60 mb-4">
+            <div className="font-mono text-sm text-black/60">
               Selected: <strong className="text-black">
                 {selectedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
               </strong>
               {isSameDay(selectedDate) && (
-                <span className="text-accent ml-2">(Same-day: +$10/hr)</span>
+                <span className="block text-amber-600 text-xs mt-1">
+                  <AlertTriangle className="w-3 h-3 inline mr-1" />
+                  Same-day booking: +$10/hr surcharge applies
+                </span>
               )}
-            </p>
+            </div>
           )}
         </div>
-      )}
+      </section>
 
-      {/* Step: Time & Duration */}
-      {step === 'time' && (
-        <div>
-          <h2 className="text-heading-lg mb-6">CHOOSE YOUR TIME</h2>
+      {/* ============ SECTION 2: TIME & DURATION ============ */}
+      <section
+        ref={timeRef}
+        className={cn(
+          'transition-all duration-700 ease-out scroll-mt-8',
+          showTime ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8 pointer-events-none h-0 overflow-hidden'
+        )}
+      >
+        <div className="flex items-center gap-3 mb-6">
+          <span className="w-8 h-8 bg-black text-white font-mono text-sm font-bold flex items-center justify-center flex-shrink-0">2</span>
+          <h2 className="text-heading-lg">CHOOSE YOUR TIME</h2>
+        </div>
 
-          <div className="mb-8">
-            <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">Start Time</h3>
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-              {timeSlots.map((slot) => {
-                const hour = parseInt(slot.split(':')[0]);
-                const afterHours = isAfterHours(hour);
-                return (
-                  <button
-                    key={slot}
-                    onClick={() => setSelectedTime(slot)}
-                    className={cn(
-                      'px-3 py-3 font-mono text-sm border transition-colors text-center',
-                      selectedTime === slot ? 'bg-black text-white border-black' : 'border-black/20 hover:border-black',
-                      afterHours && selectedTime !== slot && 'border-accent/30 text-black/70'
-                    )}
-                  >
-                    {formatTime(slot)}
-                    {afterHours && <span className="block text-[10px] text-accent">+$10/hr</span>}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="mb-8">
-            <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">
-              Duration: {duration} hour{duration > 1 ? 's' : ''}
-              {duration === SWEET_SPOTS[room].hours && <span className="text-accent ml-2">(Sweet Spot!)</span>}
-            </h3>
-            <div className="flex gap-2">
-              {Array.from({ length: PRICING.maxHours }, (_, i) => i + 1).map((h) => (
+        {/* Time slots */}
+        <div className="mb-8">
+          <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-2">Start Time</h3>
+          <p className="font-mono text-xs text-black/40 mb-4">
+            Open 24 hours. Surcharges apply for late night and after-hours bookings.
+          </p>
+          <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
+            {timeSlots.map((slot) => {
+              const hour = parseInt(slot.split(':')[0]);
+              const surcharge = getHourSurcharge(hour);
+              return (
                 <button
-                  key={h}
-                  onClick={() => setDuration(h)}
+                  key={slot}
+                  onClick={() => setSelectedTime(slot)}
                   className={cn(
-                    'w-14 h-14 font-mono text-lg font-bold border transition-colors',
-                    duration === h ? 'bg-black text-white border-black' : 'border-black/20 hover:border-black'
+                    'px-2 py-3 font-mono text-xs border transition-colors text-center',
+                    selectedTime === slot
+                      ? 'bg-black text-white border-black'
+                      : 'border-black/20 hover:border-black',
+                    surcharge.tier === 'lateNight' && selectedTime !== slot && 'border-amber-400/50 bg-amber-50',
+                    surcharge.tier === 'deepNight' && selectedTime !== slot && 'border-red-400/50 bg-red-50'
                   )}
                 >
-                  {h}
+                  {formatTime(slot)}
+                  {surcharge.tier === 'lateNight' && (
+                    <span className="block text-[9px] text-amber-600 font-semibold mt-0.5">+$10/hr</span>
+                  )}
+                  {surcharge.tier === 'deepNight' && (
+                    <span className="block text-[9px] text-red-500 font-semibold mt-0.5">+$30/hr</span>
+                  )}
                 </button>
-              ))}
-            </div>
+              );
+            })}
+          </div>
+
+          {/* Legend */}
+          <div className="flex flex-wrap gap-4 mt-4 font-mono text-[10px] uppercase tracking-wider">
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 border border-black/20 inline-block" /> Regular</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-amber-50 border border-amber-400/50 inline-block" /> Late Night +$10/hr</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 bg-red-50 border border-red-400/50 inline-block" /> After Hours +$30/hr</span>
           </div>
         </div>
-      )}
 
-      {/* Step: Studio & Engineer */}
-      {step === 'details' && (
-        <div>
-          <h2 className="text-heading-lg mb-6">STUDIO & ENGINEER</h2>
-
-          <div className="mb-8">
-            <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">Select Studio</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {ROOMS.map((r) => (
-                <button
-                  key={r}
-                  onClick={() => { setRoom(r); setEngineer('any'); }}
-                  className={cn(
-                    'p-6 border-2 font-mono text-left transition-colors',
-                    room === r ? 'border-black bg-black text-white' : 'border-black/20 hover:border-black'
-                  )}
-                >
-                  <Home className={cn('w-6 h-6 mb-3', room === r ? 'text-accent' : 'text-black/40')} />
-                  <p className="font-bold text-sm uppercase tracking-wider">{ROOM_LABELS[r]}</p>
-                  <p className={cn('text-xs mt-1', room === r ? 'text-white/60' : 'text-black/40')}>
-                    {formatCents(ROOM_RATES[r])}/hour
-                    <span className="block text-[10px] mt-0.5">1hr: {formatCents(ROOM_RATES_SINGLE[r])}</span>
-                  </p>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="mb-8">
-            <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">
-              Request an Engineer <span className="font-normal text-black/40">(not guaranteed)</span>
-            </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {/* Duration */}
+        <div className="mb-4">
+          <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">
+            Duration: {duration} hour{duration > 1 ? 's' : ''}
+            {duration === SWEET_SPOTS[room].hours && (
+              <span className="text-accent ml-2 inline-flex items-center gap-1"><Star className="w-3 h-3" /> Sweet Spot!</span>
+            )}
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {Array.from({ length: PRICING.maxHours }, (_, i) => i + 1).map((h) => (
               <button
-                onClick={() => setEngineer('any')}
+                key={h}
+                onClick={() => setDuration(h)}
                 className={cn(
-                  'p-4 border-2 font-mono text-sm text-left transition-colors',
-                  engineer === 'any' ? 'border-black bg-black text-white' : 'border-black/20 hover:border-black'
+                  'w-14 h-14 font-mono text-lg font-bold border transition-colors relative',
+                  duration === h ? 'bg-black text-white border-black' : 'border-black/20 hover:border-black'
                 )}
               >
-                <p className="font-bold uppercase tracking-wider">Any Available</p>
-                <p className={cn('text-xs mt-1', engineer === 'any' ? 'text-white/60' : 'text-black/40')}>
-                  We&apos;ll match you
-                </p>
+                {h}
+                {h === SWEET_SPOTS[room].hours && duration !== h && (
+                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-accent rounded-full" />
+                )}
               </button>
-              {ENGINEERS.filter((eng) => eng.studios.includes(room)).map((eng) => (
-                <button
-                  key={eng.name}
-                  onClick={() => setEngineer(eng.name)}
-                  className={cn(
-                    'p-4 border-2 font-mono text-sm text-left transition-colors',
-                    engineer === eng.name ? 'border-black bg-black text-white' : 'border-black/20 hover:border-black'
-                  )}
-                >
-                  <p className="font-bold uppercase tracking-wider">{eng.displayName}</p>
-                  <p className={cn('text-xs mt-1', engineer === eng.name ? 'text-white/60' : 'text-black/40')}>
-                    {eng.specialties.join(', ')}
-                  </p>
-                </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Live hour-by-hour preview when time is selected */}
+        {selectedTime && (
+          <div className="mt-6 border border-black/10 p-4">
+            <h4 className="font-mono text-xs font-semibold uppercase tracking-wider text-black/50 mb-3">Hour-by-Hour Preview</h4>
+            <div className="space-y-1">
+              {pricing.hourBreakdown.map((hb, i) => (
+                <div key={i} className="flex items-center justify-between font-mono text-xs py-1.5 border-b border-black/5 last:border-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-black/60 w-20">{formatTime(`${hb.hour}:00`)}</span>
+                    {hb.tier !== 'regular' && (
+                      <span className={cn('text-[10px] font-bold uppercase px-1.5 py-0.5', tierColor(hb.tier),
+                        hb.tier === 'lateNight' ? 'bg-amber-50' : 'bg-red-50'
+                      )}>
+                        {tierLabel(hb.tier)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {hb.nightFee > 0 && (
+                      <span className={cn('text-[10px]', tierColor(hb.tier))}>+{formatCents(hb.nightFee)}</span>
+                    )}
+                    {hb.sameDayFee > 0 && (
+                      <span className="text-[10px] text-amber-600">+{formatCents(hb.sameDayFee)} same-day</span>
+                    )}
+                    <span className="font-semibold w-16 text-right">{formatCents(hb.hourTotal)}</span>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Step: Review & Pay Deposit */}
-      {step === 'review' && (
-        <div>
-          <h2 className="text-heading-lg mb-6">REVIEW & PAY DEPOSIT</h2>
-
-          <div className="border-2 border-black p-6 sm:p-8 mb-8">
-            <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">Session Summary</h3>
-            <div className="space-y-3 font-mono text-sm">
-              <div className="flex justify-between">
-                <span className="text-black/60">Date</span>
-                <span className="font-semibold">
-                  {selectedDate?.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-black/60">Time</span>
-                <span className="font-semibold">{selectedTime && formatTime(selectedTime)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-black/60">Duration</span>
-                <span className="font-semibold">{duration} hour{duration > 1 ? 's' : ''}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-black/60">Studio</span>
-                <span className="font-semibold">{ROOM_LABELS[room]}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-black/60">Engineer Request</span>
-                <span className="font-semibold">{engineer === 'any' ? 'Any Available' : engineer}</span>
-              </div>
-
-              <hr className="border-black/10 my-4" />
-
-              <div className="flex justify-between">
-                <span className="text-black/60">
-                  {pricing.sweetSpot
-                    ? `${ROOM_LABELS[room]} Sweet Spot (${duration}hr)`
-                    : `${ROOM_LABELS[room]} (${duration}hr x ${formatCents(duration === 1 ? ROOM_RATES_SINGLE[room] : ROOM_RATES[room])})`
-                  }
-                </span>
-                <span>{formatCents(pricing.subtotal)}</span>
-              </div>
-              {pricing.sweetSpot && (
-                <div className="flex justify-between text-green-700">
-                  <span>Sweet Spot savings</span>
-                  <span>-{formatCents(ROOM_RATES[room] * duration - pricing.subtotal)}</span>
-                </div>
-              )}
-              {pricing.afterHoursFee > 0 && (
-                <div className="flex justify-between text-black/70">
-                  <span>After-hours surcharge ({duration}hr x {formatCents(PRICING.afterHoursSurcharge)})</span>
-                  <span>+{formatCents(pricing.afterHoursFee)}</span>
-                </div>
-              )}
-              {pricing.sameDayFee > 0 && (
-                <div className="flex justify-between text-black/70">
-                  <span>Same-day booking ({duration}hr x {formatCents(PRICING.sameDaySurcharge)})</span>
-                  <span>+{formatCents(pricing.sameDayFee)}</span>
-                </div>
-              )}
-
-              <hr className="border-black/10 my-4" />
-
-              <div className="flex justify-between">
-                <span className="text-black/60">Session Total</span>
-                <span>{formatCents(pricing.total)}</span>
-              </div>
-              <div className="flex justify-between text-lg font-bold">
-                <span>Deposit Due Now (50%)</span>
-                <span className="text-accent">{formatCents(pricing.deposit)}</span>
-              </div>
-              <p className="text-xs text-black/40 mt-2">
-                Remainder ({formatCents(pricing.total - pricing.deposit)}) charged after your session. Your payment method will be saved on file.
-              </p>
-            </div>
-          </div>
-
-          {/* Contact Info */}
-          <div className="space-y-4 mb-8">
-            <h3 className="font-mono text-sm font-semibold uppercase tracking-wider">Your Info</h3>
-            <div>
-              <label htmlFor="customerName" className="block font-mono text-xs text-black/60 uppercase tracking-wider mb-1">Name *</label>
-              <input type="text" id="customerName" value={customerName} onChange={(e) => setCustomerName(e.target.value)} required
-                className="w-full border-2 border-black px-4 py-3 font-mono text-sm bg-transparent focus:border-accent focus:outline-none" placeholder="Your name" />
-            </div>
-            <div>
-              <label htmlFor="customerEmail" className="block font-mono text-xs text-black/60 uppercase tracking-wider mb-1">Email *</label>
-              <input type="email" id="customerEmail" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} required
-                className="w-full border-2 border-black px-4 py-3 font-mono text-sm bg-transparent focus:border-accent focus:outline-none" placeholder="your@email.com" />
-            </div>
-            <div>
-              <label htmlFor="customerPhone" className="block font-mono text-xs text-black/60 uppercase tracking-wider mb-1">Phone</label>
-              <input type="tel" id="customerPhone" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)}
-                className="w-full border-2 border-black px-4 py-3 font-mono text-sm bg-transparent focus:border-accent focus:outline-none" placeholder="(555) 123-4567" />
-            </div>
-            <div>
-              <label htmlFor="notes" className="block font-mono text-xs text-black/60 uppercase tracking-wider mb-1">Notes</label>
-              <textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
-                className="w-full border-2 border-black px-4 py-3 font-mono text-sm bg-transparent focus:border-accent focus:outline-none resize-vertical" placeholder="Anything we should know..." />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Navigation */}
-      <div className="flex justify-between items-center mt-8 pt-8 border-t border-black/10">
-        {currentStepIndex > 0 ? (
-          <button onClick={prevStep}
-            className="font-mono text-sm font-bold uppercase tracking-wider px-6 py-3 border-2 border-black hover:bg-black hover:text-white transition-colors inline-flex items-center gap-2">
-            <ChevronLeft className="w-4 h-4" /> Back
-          </button>
-        ) : <div />}
-
-        {step === 'review' ? (
-          <button onClick={handleCheckout} disabled={!canProceed() || isSubmitting}
-            className="bg-accent text-black font-mono text-base font-bold uppercase tracking-wider px-8 py-4 hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2">
-            {isSubmitting ? 'PROCESSING...' : `PAY DEPOSIT ${formatCents(pricing.deposit)}`}
-          </button>
-        ) : (
-          <button onClick={nextStep} disabled={!canProceed()}
-            className="bg-black text-white font-mono text-sm font-bold uppercase tracking-wider px-6 py-3 hover:bg-black/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2">
-            Next <ChevronRight className="w-4 h-4" />
-          </button>
         )}
-      </div>
+      </section>
+
+      {/* ============ SECTION 3: STUDIO & ENGINEER ============ */}
+      <section
+        ref={studioRef}
+        className={cn(
+          'transition-all duration-700 ease-out scroll-mt-8',
+          showStudio ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8 pointer-events-none h-0 overflow-hidden'
+        )}
+      >
+        <div className="flex items-center gap-3 mb-6">
+          <span className="w-8 h-8 bg-black text-white font-mono text-sm font-bold flex items-center justify-center flex-shrink-0">3</span>
+          <h2 className="text-heading-lg">STUDIO & ENGINEER</h2>
+        </div>
+
+        <div className="mb-8">
+          <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">Select Studio</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {ROOMS.map((r) => (
+              <button
+                key={r}
+                onClick={() => { setRoom(r); setEngineer('any'); }}
+                className={cn(
+                  'p-6 border-2 font-mono text-left transition-colors',
+                  room === r ? 'border-black bg-black text-white' : 'border-black/20 hover:border-black'
+                )}
+              >
+                <Home className={cn('w-6 h-6 mb-3', room === r ? 'text-accent' : 'text-black/40')} />
+                <p className="font-bold text-sm uppercase tracking-wider">{ROOM_LABELS[r]}</p>
+                <p className={cn('text-xs mt-1', room === r ? 'text-white/60' : 'text-black/40')}>
+                  {formatCents(ROOM_RATES[r])}/hour
+                  <span className="block text-[10px] mt-0.5">1hr: {formatCents(ROOM_RATES_SINGLE[r])}</span>
+                </p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mb-4">
+          <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">
+            Request an Engineer <span className="font-normal text-black/40">(not guaranteed)</span>
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <button
+              onClick={() => setEngineer('any')}
+              className={cn(
+                'p-4 border-2 font-mono text-sm text-left transition-colors',
+                engineer === 'any' ? 'border-black bg-black text-white' : 'border-black/20 hover:border-black'
+              )}
+            >
+              <p className="font-bold uppercase tracking-wider">Any Available</p>
+              <p className={cn('text-xs mt-1', engineer === 'any' ? 'text-white/60' : 'text-black/40')}>
+                We&apos;ll match you
+              </p>
+            </button>
+            {ENGINEERS.filter((eng) => eng.studios.includes(room)).map((eng) => (
+              <button
+                key={eng.name}
+                onClick={() => setEngineer(eng.name)}
+                className={cn(
+                  'p-4 border-2 font-mono text-sm text-left transition-colors',
+                  engineer === eng.name ? 'border-black bg-black text-white' : 'border-black/20 hover:border-black'
+                )}
+              >
+                <p className="font-bold uppercase tracking-wider">{eng.displayName}</p>
+                <p className={cn('text-xs mt-1', engineer === eng.name ? 'text-white/60' : 'text-black/40')}>
+                  {eng.specialties.join(', ')}
+                </p>
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ============ SECTION 4: REVIEW & PAY ============ */}
+      <section
+        ref={reviewRef}
+        className={cn(
+          'transition-all duration-700 ease-out scroll-mt-8',
+          showReview ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8 pointer-events-none h-0 overflow-hidden'
+        )}
+      >
+        <div className="flex items-center gap-3 mb-6">
+          <span className="w-8 h-8 bg-black text-white font-mono text-sm font-bold flex items-center justify-center flex-shrink-0">4</span>
+          <h2 className="text-heading-lg">REVIEW & PAY DEPOSIT</h2>
+        </div>
+
+        {/* Cost Breakdown */}
+        <div className="border-2 border-black p-6 sm:p-8 mb-8">
+          <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">Session Summary</h3>
+          <div className="space-y-3 font-mono text-sm">
+            <div className="flex justify-between">
+              <span className="text-black/60">Date</span>
+              <span className="font-semibold">
+                {selectedDate?.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-black/60">Time</span>
+              <span className="font-semibold">
+                {selectedTime && formatTime(selectedTime)}
+                {selectedTime && ` – ${formatTime(`${(startHour + duration) % 24}:00`)}`}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-black/60">Duration</span>
+              <span className="font-semibold">{duration} hour{duration > 1 ? 's' : ''}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-black/60">Studio</span>
+              <span className="font-semibold">{ROOM_LABELS[room]}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-black/60">Engineer</span>
+              <span className="font-semibold">{engineer === 'any' ? 'Any Available' : engineer}</span>
+            </div>
+          </div>
+
+          <hr className="border-black/10 my-6" />
+
+          {/* Detailed price breakdown */}
+          <h4 className="font-mono text-xs font-semibold uppercase tracking-wider text-black/50 mb-3">Price Breakdown</h4>
+          <div className="space-y-2 font-mono text-sm">
+            {/* Base rate */}
+            <div className="flex justify-between">
+              <span className="text-black/60">
+                {pricing.sweetSpot
+                  ? `${ROOM_LABELS[room]} Sweet Spot (${duration}hr flat rate)`
+                  : `${ROOM_LABELS[room]} (${duration}hr × ${formatCents(duration === 1 ? ROOM_RATES_SINGLE[room] : ROOM_RATES[room])})`
+                }
+              </span>
+              <span>{formatCents(pricing.subtotal)}</span>
+            </div>
+            {pricing.sweetSpot && (
+              <div className="flex justify-between text-green-700">
+                <span className="flex items-center gap-1"><Star className="w-3 h-3" /> Sweet Spot savings</span>
+                <span>-{formatCents(ROOM_RATES[room] * duration - pricing.subtotal)}</span>
+              </div>
+            )}
+
+            {/* Night surcharges — show per-hour detail */}
+            {pricing.nightFees > 0 && (
+              <div className="border-l-2 border-amber-400 pl-3 ml-1 space-y-1 py-1">
+                {pricing.hourBreakdown
+                  .filter((hb) => hb.nightFee > 0)
+                  .map((hb, i) => (
+                    <div key={i} className={cn('flex justify-between text-xs', tierColor(hb.tier))}>
+                      <span>{formatTime(`${hb.hour}:00`)} — {tierLabel(hb.tier)}</span>
+                      <span>+{formatCents(hb.nightFee)}</span>
+                    </div>
+                  ))
+                }
+                <div className="flex justify-between text-sm font-semibold pt-1 border-t border-black/5">
+                  <span>Night surcharges total</span>
+                  <span>+{formatCents(pricing.nightFees)}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Same-day */}
+            {pricing.sameDayFee > 0 && (
+              <div className="flex justify-between text-amber-700">
+                <span className="flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  Same-day surcharge ({duration}hr × {formatCents(PRICING.sameDaySurcharge)})
+                </span>
+                <span>+{formatCents(pricing.sameDayFee)}</span>
+              </div>
+            )}
+          </div>
+
+          <hr className="border-black/10 my-6" />
+
+          {/* Totals */}
+          <div className="space-y-3 font-mono text-sm">
+            <div className="flex justify-between text-lg">
+              <span className="font-semibold">Session Total</span>
+              <span className="font-bold">{formatCents(pricing.total)}</span>
+            </div>
+            <div className="flex justify-between text-xl font-bold">
+              <span>Deposit Due Now (50%)</span>
+              <span className="text-accent">{formatCents(pricing.deposit)}</span>
+            </div>
+            <p className="text-xs text-black/40 mt-2">
+              Remainder ({formatCents(pricing.total - pricing.deposit)}) charged to your card on file after your session.
+            </p>
+          </div>
+        </div>
+
+        {/* Contact Info */}
+        <div className="space-y-4 mb-8">
+          <h3 className="font-mono text-sm font-semibold uppercase tracking-wider">Your Info</h3>
+          <div>
+            <label htmlFor="customerName" className="block font-mono text-xs text-black/60 uppercase tracking-wider mb-1">Name *</label>
+            <input type="text" id="customerName" value={customerName} onChange={(e) => setCustomerName(e.target.value)} required
+              className="w-full border-2 border-black px-4 py-3 font-mono text-sm bg-transparent focus:border-accent focus:outline-none" placeholder="Your name" />
+          </div>
+          <div>
+            <label htmlFor="customerEmail" className="block font-mono text-xs text-black/60 uppercase tracking-wider mb-1">Email</label>
+            <input type="email" id="customerEmail" value={customerEmail} readOnly
+              className="w-full border-2 border-black/20 px-4 py-3 font-mono text-sm bg-black/5 text-black/60 cursor-not-allowed" />
+          </div>
+          <div>
+            <label htmlFor="customerPhone" className="block font-mono text-xs text-black/60 uppercase tracking-wider mb-1">Phone</label>
+            <input type="tel" id="customerPhone" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)}
+              className="w-full border-2 border-black px-4 py-3 font-mono text-sm bg-transparent focus:border-accent focus:outline-none" placeholder="(555) 123-4567" />
+          </div>
+          <div>
+            <label htmlFor="notes" className="block font-mono text-xs text-black/60 uppercase tracking-wider mb-1">Notes</label>
+            <textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
+              className="w-full border-2 border-black px-4 py-3 font-mono text-sm bg-transparent focus:border-accent focus:outline-none resize-vertical" placeholder="Anything we should know..." />
+          </div>
+        </div>
+
+        {/* Pay button */}
+        <button
+          onClick={handleCheckout}
+          disabled={!selectedDate || !selectedTime || !customerName.trim() || isSubmitting}
+          className="w-full bg-accent text-black font-mono text-lg font-bold uppercase tracking-wider px-8 py-5 hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isSubmitting ? 'PROCESSING...' : `PAY DEPOSIT — ${formatCents(pricing.deposit)}`}
+        </button>
+      </section>
     </div>
   );
 }

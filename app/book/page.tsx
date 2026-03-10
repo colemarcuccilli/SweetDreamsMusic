@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
+import Link from 'next/link';
 import { SITE_URL } from '@/lib/constants';
 import { STUDIO_IMAGES } from '@/lib/images';
+import { getSessionUser } from '@/lib/auth';
 import BookingFlow from '@/components/booking/BookingFlow';
 
 export const metadata: Metadata = {
@@ -10,7 +12,9 @@ export const metadata: Metadata = {
   alternates: { canonical: `${SITE_URL}/book` },
 };
 
-export default function BookPage() {
+export default async function BookPage() {
+  const user = await getSessionUser();
+
   return (
     <>
       {/* Hero */}
@@ -37,7 +41,27 @@ export default function BookPage() {
       {/* Booking Flow - White */}
       <section className="bg-white text-black py-12 sm:py-20">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <BookingFlow />
+          {user ? (
+            <BookingFlow
+              userName={user.profile?.display_name || ''}
+              userEmail={user.email}
+            />
+          ) : (
+            <div className="text-center py-16">
+              <h2 className="text-heading-lg mb-4">CREATE AN ACCOUNT TO BOOK</h2>
+              <p className="font-mono text-sm text-black/60 max-w-md mx-auto mb-8">
+                You need an account to book a session. Sign up to see the schedule, book sessions, and manage your recordings.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <Link
+                  href="/login?redirect=/book"
+                  className="bg-accent text-black font-mono text-base font-bold tracking-wider uppercase px-8 py-4 hover:bg-accent/90 transition-colors no-underline inline-flex items-center justify-center"
+                >
+                  SIGN UP / LOG IN
+                </Link>
+              </div>
+            </div>
+          )}
         </div>
       </section>
     </>

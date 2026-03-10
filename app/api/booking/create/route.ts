@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
 import { PRICING, SITE_URL, ROOM_LABELS, type Room } from '@/lib/constants';
-import { calculateSessionTotal, isAfterHours } from '@/lib/utils';
+import { calculateSessionTotal } from '@/lib/utils';
 
 export async function POST(request: NextRequest) {
   try {
@@ -82,9 +82,8 @@ export async function POST(request: NextRequest) {
         total_amount: String(pricing.total),
         deposit_amount: String(pricing.deposit),
         remainder_amount: String(pricing.total - pricing.deposit),
-        after_hours: String(isAfterHours(startHour)),
+        night_fees: String(pricing.nightFees),
         same_day: String(sameDayBooking),
-        after_hours_fee: String(pricing.afterHoursFee),
         same_day_fee: String(pricing.sameDayFee),
       },
     });

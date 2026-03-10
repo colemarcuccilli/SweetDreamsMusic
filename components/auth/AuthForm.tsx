@@ -40,7 +40,8 @@ export default function AuthForm() {
           password,
         });
         if (error) throw error;
-        window.location.href = '/dashboard';
+        const params = new URLSearchParams(window.location.search);
+        window.location.href = params.get('redirect') || '/dashboard';
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Something went wrong');

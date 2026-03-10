@@ -23,8 +23,7 @@ interface Booking {
   stripe_customer_id: string | null;
   stripe_payment_intent_id: string | null;
   same_day_fee: boolean;
-  after_hours_fee: boolean;
-  after_hours_fee_amount: number;
+  night_fees_amount: number;
   same_day_fee_amount: number;
   admin_notes: string | null;
   created_at: string;
@@ -211,8 +210,8 @@ export default function BookingManager() {
                       </div>
                     </div>
 
-                    {b.after_hours_fee && (
-                      <p className="font-mono text-xs text-accent">After-hours fee: {formatCents(b.after_hours_fee_amount)}</p>
+                    {b.night_fees_amount > 0 && (
+                      <p className="font-mono text-xs text-accent">Night surcharges: {formatCents(b.night_fees_amount)}</p>
                     )}
                     {b.same_day_fee && (
                       <p className="font-mono text-xs text-accent">Same-day fee: {formatCents(b.same_day_fee_amount)}</p>

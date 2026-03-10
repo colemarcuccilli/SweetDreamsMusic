@@ -153,9 +153,9 @@ export default function HomePage() {
           <div className="flex flex-wrap gap-4 font-mono text-sm text-white/50 mb-8">
             <span className="text-accent font-semibold">4hr Sweet Spots available</span>
             <span className="text-white/20">|</span>
-            <span>After hours: +$10/hr</span>
+            <span>Open 24 hours</span>
             <span className="text-white/20">|</span>
-            <span>Same-day: +$10/hr</span>
+            <span>Late night +$10/hr · After hours +$30/hr</span>
             <span className="text-white/20">|</span>
             <span>Band recording available</span>
           </div>

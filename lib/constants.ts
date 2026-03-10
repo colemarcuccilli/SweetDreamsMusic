@@ -42,7 +42,8 @@ export const PRICING = {
   studioB: 5000, // $50/hr in cents (2+ hours)
   studioASingleHour: 8000, // $80 for 1-hour session
   studioBSingleHour: 6000, // $60 for 1-hour session
-  afterHoursSurcharge: 1000, // +$10/hr
+  lateNightSurcharge: 1000, // +$10/hr (10PM–2AM)
+  deepNightSurcharge: 3000, // +$30/hr (2AM–9AM)
   sameDaySurcharge: 1000, // +$10/hr
   depositPercent: 50, // 50% deposit
   minHours: 1,
@@ -64,8 +65,10 @@ export const BAND_PRICING = [
 ] as const;
 
 export const STUDIO_HOURS = {
-  regular: { start: 9, end: 21 }, // 9 AM - 9 PM
-  afterHours: { start: 21, end: 3 }, // 9 PM - 3 AM
+  // Open 24 hours
+  regular: { start: 9, end: 22 }, // 9 AM - 10 PM (no surcharge)
+  lateNight: { start: 22, end: 2 }, // 10 PM - 2 AM (+$10/hr)
+  deepNight: { start: 2, end: 9 }, // 2 AM - 9 AM (+$30/hr)
 };
 
 export const ROOMS = ['studio_a', 'studio_b'] as const;
@@ -96,7 +99,8 @@ export const ENGINEERS = [
 // Super admins — full access to everything
 export const SUPER_ADMINS = [
   'cole@sweetdreams.us',
-  'jayvalleo@sweetdreams.us',
+  'cole@marcuccilli.com',
+  'jayvalleo@sweetdreamsmusic.com',
 ] as const;
 
 // Beat store license types

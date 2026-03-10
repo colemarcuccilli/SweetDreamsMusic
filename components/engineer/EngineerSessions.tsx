@@ -30,7 +30,7 @@ export default function EngineerSessions({ userEmail }: { userEmail: string }) {
   const loadData = useCallback(async () => {
     try {
       const [myRes, unclaimedRes] = await Promise.all([
-        fetch('/api/admin/bookings?limit=50'),
+        fetch('/api/engineer/accounting'),
         fetch('/api/booking/unclaimed'),
       ]);
       const myData = await myRes.json();

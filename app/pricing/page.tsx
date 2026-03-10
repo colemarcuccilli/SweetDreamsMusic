@@ -1,14 +1,14 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Clock, AlertCircle, Check, Star, Users } from 'lucide-react';
+import { Clock, AlertCircle, Check, Star, Users, Moon } from 'lucide-react';
 import { SITE_URL, PRICING, ROOM_RATES, SWEET_SPOTS, BAND_PRICING } from '@/lib/constants';
 import { formatCents, calculateSessionTotal } from '@/lib/utils';
 import { STUDIO_IMAGES } from '@/lib/images';
 
 export const metadata: Metadata = {
   title: 'Pricing',
-  description: 'Recording studio pricing. Studio A from $70/hr, Studio B from $60/hr. Sweet Spot deals and band recording available. 50% deposit at booking.',
+  description: 'Recording studio pricing. Studio A from $70/hr, Studio B from $50/hr. Sweet Spot deals and band recording available. Open 24 hours.',
   alternates: { canonical: `${SITE_URL}/pricing` },
 };
 
@@ -40,7 +40,7 @@ export default function PricingPage() {
           </p>
           <h1 className="text-display-md mb-6">OUR RATES</h1>
           <p className="font-mono text-white/70 text-body-md max-w-2xl">
-            Simple pricing. 50% deposit to book, remainder after your session. No hidden fees.
+            Simple pricing. Open 24 hours. 50% deposit to book, remainder after your session.
           </p>
         </div>
       </section>
@@ -112,16 +112,28 @@ export default function PricingPage() {
               <p className="font-mono text-sm text-black/60">Best value. Book 4 hours at a discounted flat rate.</p>
             </div>
 
-            <div className="border-2 border-black p-6 sm:p-8">
+            <div className="border-2 border-amber-400 p-6 sm:p-8">
               <div className="flex items-center gap-3 mb-4">
-                <Clock className="w-6 h-6 text-accent" />
+                <Moon className="w-6 h-6 text-amber-500" />
+                <h3 className="text-heading-sm">LATE NIGHT</h3>
+              </div>
+              <div className="flex items-baseline gap-1 mb-3">
+                <span className="font-heading text-display-sm">+{formatCents(PRICING.lateNightSurcharge)}</span>
+                <span className="font-mono text-sm text-black/50">/hour</span>
+              </div>
+              <p className="font-mono text-sm text-black/60">10 PM – 2 AM. Per-hour surcharge applies to each hour in this window.</p>
+            </div>
+
+            <div className="border-2 border-red-400 p-6 sm:p-8">
+              <div className="flex items-center gap-3 mb-4">
+                <Clock className="w-6 h-6 text-red-500" />
                 <h3 className="text-heading-sm">AFTER HOURS</h3>
               </div>
               <div className="flex items-baseline gap-1 mb-3">
-                <span className="font-heading text-display-sm">+{formatCents(PRICING.afterHoursSurcharge)}</span>
+                <span className="font-heading text-display-sm">+{formatCents(PRICING.deepNightSurcharge)}</span>
                 <span className="font-mono text-sm text-black/50">/hour</span>
               </div>
-              <p className="font-mono text-sm text-black/60">Sessions starting after 9 PM, available daily until 3 AM.</p>
+              <p className="font-mono text-sm text-black/60">2 AM – 9 AM. Per-hour surcharge applies to each hour in this window.</p>
             </div>
 
             <div className="border-2 border-black p-6 sm:p-8">
@@ -133,19 +145,24 @@ export default function PricingPage() {
                 <span className="font-heading text-display-sm">+{formatCents(PRICING.sameDaySurcharge)}</span>
                 <span className="font-mono text-sm text-black/50">/hour</span>
               </div>
-              <p className="font-mono text-sm text-black/60">Booking and recording on the same day.</p>
+              <p className="font-mono text-sm text-black/60">Booking and recording on the same day. Applies to every hour.</p>
             </div>
+          </div>
 
-            <div className="border-2 border-black p-6 sm:p-8">
-              <div className="flex items-center gap-3 mb-4">
-                <AlertCircle className="w-6 h-6 text-accent" />
-                <h3 className="text-heading-sm">1-HOUR</h3>
-              </div>
-              <div className="flex items-baseline gap-1 mb-3">
-                <span className="font-heading text-display-sm">+{formatCents(1000)}</span>
-                <span className="font-mono text-sm text-black/50">/hour</span>
-              </div>
-              <p className="font-mono text-sm text-black/60">Single-hour sessions are priced $10 higher per studio.</p>
+          {/* How surcharges stack */}
+          <div className="mt-8 border border-black/10 p-6">
+            <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-3">How Surcharges Work</h3>
+            <p className="font-mono text-sm text-black/60 mb-3">
+              Surcharges are calculated <strong className="text-black">per hour</strong>. If your session spans multiple time zones, each hour gets its own surcharge.
+              Surcharges stack — a same-day session starting at 1 AM would have both the late night/after hours surcharge AND the same-day surcharge.
+            </p>
+            <div className="font-mono text-xs text-black/40 space-y-1">
+              <p>Example: 4hr session starting at midnight, same-day booking</p>
+              <p>12 AM: $70 base + $10 late night + $10 same-day = <strong className="text-black">$90</strong></p>
+              <p>1 AM: $70 base + $10 late night + $10 same-day = <strong className="text-black">$90</strong></p>
+              <p>2 AM: $70 base + $30 after hours + $10 same-day = <strong className="text-black">$110</strong></p>
+              <p>3 AM: $70 base + $30 after hours + $10 same-day = <strong className="text-black">$110</strong></p>
+              <p className="pt-1 text-black font-semibold">Total: $400 — Deposit: $200</p>
             </div>
           </div>
         </div>
@@ -183,9 +200,9 @@ export default function PricingPage() {
           <h2 className="text-heading-xl mb-12">EXAMPLE SESSIONS</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[
-              { title: '2 HOURS — STUDIO B', room: 'studio_b' as const, hours: 2, startHour: 14, sameDay: false },
+              { title: '2 HOURS — STUDIO B (DAYTIME)', room: 'studio_b' as const, hours: 2, startHour: 14, sameDay: false },
               { title: 'SWEET SPOT — STUDIO A', room: 'studio_a' as const, hours: 4, startHour: 12, sameDay: false },
-              { title: 'SWEET SPOT — STUDIO B', room: 'studio_b' as const, hours: 4, startHour: 14, sameDay: false },
+              { title: '3 HOURS — STUDIO A (11 PM START)', room: 'studio_a' as const, hours: 3, startHour: 23, sameDay: false },
             ].map((ex) => {
               const p = calculateSessionTotal(ex.room, ex.hours, ex.startHour, ex.sameDay);
               return (
@@ -194,7 +211,8 @@ export default function PricingPage() {
                   <div className="font-mono text-sm text-black/50 space-y-1 mb-6">
                     <p>Base: {formatCents(p.subtotal)}</p>
                     {p.sweetSpot && <p className="text-accent">Sweet Spot rate applied</p>}
-                    {p.afterHoursFee > 0 && <p>After-hours: +{formatCents(p.afterHoursFee)}</p>}
+                    {p.nightFees > 0 && <p className="text-amber-600">Night surcharges: +{formatCents(p.nightFees)}</p>}
+                    {p.sameDayFee > 0 && <p>Same-day: +{formatCents(p.sameDayFee)}</p>}
                   </div>
                   <p className="font-mono text-xs text-black/40 mb-1">Total: {formatCents(p.total)}</p>
                   <p className="font-heading text-display-sm text-accent">Deposit: {formatCents(p.deposit)}</p>

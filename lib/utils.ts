@@ -11,8 +11,14 @@ export function cn(...classes: (string | boolean | undefined | null)[]): string 
   return classes.filter(Boolean).join(' ');
 }
 
-export function isAfterHours(hour: number): boolean {
-  return hour >= 21 || hour < 3;
+/** Returns the surcharge tier for a given hour (0-23) */
+export function getHourSurcharge(hour: number): { tier: 'regular' | 'lateNight' | 'deepNight'; amount: number } {
+  // 2AM-8AM: deep night (+$30/hr)
+  if (hour >= 2 && hour < 9) return { tier: 'deepNight', amount: PRICING.deepNightSurcharge };
+  // 10PM-1AM: late night (+$10/hr)
+  if (hour >= 22 || hour < 2) return { tier: 'lateNight', amount: PRICING.lateNightSurcharge };
+  // 9AM-10PM: regular (no surcharge)
+  return { tier: 'regular', amount: 0 };
 }
 
 export function isSameDay(date: Date): boolean {
@@ -24,32 +30,74 @@ export function isSameDay(date: Date): boolean {
   );
 }
 
+export type HourBreakdown = {
+  hour: number;
+  baseRate: number;
+  nightFee: number;
+  sameDayFee: number;
+  hourTotal: number;
+  tier: 'regular' | 'lateNight' | 'deepNight';
+};
+
+export type SessionPricing = {
+  subtotal: number;
+  hourBreakdown: HourBreakdown[];
+  nightFees: number;
+  sameDayFee: number;
+  sweetSpot: boolean;
+  total: number;
+  deposit: number;
+};
+
 export function calculateSessionTotal(
   room: Room,
   hours: number,
   startHour: number,
   isSameDayBooking: boolean
-): { subtotal: number; afterHoursFee: number; sameDayFee: number; sweetSpot: boolean; total: number; deposit: number } {
+): SessionPricing {
   // Check for Sweet Spot deal (4 hours flat rate)
   const spot = SWEET_SPOTS[room];
   const isSweetSpot = hours === spot.hours;
 
-  let subtotal: number;
+  // Calculate base rate per hour
+  let basePerHour: number;
   if (isSweetSpot) {
-    subtotal = spot.price;
+    basePerHour = spot.perHour;
   } else if (hours === 1) {
-    subtotal = ROOM_RATES_SINGLE[room];
+    basePerHour = ROOM_RATES_SINGLE[room];
   } else {
-    subtotal = ROOM_RATES[room] * hours;
+    basePerHour = ROOM_RATES[room];
   }
 
-  const afterHoursFee = isAfterHours(startHour) ? PRICING.afterHoursSurcharge * hours : 0;
-  const sameDayFee = isSameDayBooking ? PRICING.sameDaySurcharge * hours : 0;
+  // Build per-hour breakdown
+  const hourBreakdown: HourBreakdown[] = [];
+  let nightFees = 0;
+  let sameDayFee = 0;
 
-  const total = subtotal + afterHoursFee + sameDayFee;
+  for (let i = 0; i < hours; i++) {
+    const h = (startHour + i) % 24;
+    const surcharge = getHourSurcharge(h);
+    const sdFee = isSameDayBooking ? PRICING.sameDaySurcharge : 0;
+
+    const entry: HourBreakdown = {
+      hour: h,
+      baseRate: basePerHour,
+      nightFee: surcharge.amount,
+      sameDayFee: sdFee,
+      hourTotal: basePerHour + surcharge.amount + sdFee,
+      tier: surcharge.tier,
+    };
+
+    hourBreakdown.push(entry);
+    nightFees += surcharge.amount;
+    sameDayFee += sdFee;
+  }
+
+  const subtotal = isSweetSpot ? spot.price : basePerHour * hours;
+  const total = subtotal + nightFees + sameDayFee;
   const deposit = Math.round(total * (PRICING.depositPercent / 100));
 
-  return { subtotal, afterHoursFee, sameDayFee, sweetSpot: isSweetSpot, total, deposit };
+  return { subtotal, hourBreakdown, nightFees, sameDayFee, sweetSpot: isSweetSpot, total, deposit };
 }
 
 export function getUserRole(email: string | undefined, profileRole?: string): UserRole {

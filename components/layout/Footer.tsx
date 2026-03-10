@@ -35,9 +35,11 @@ export default function Footer() {
           <div>
             <h4 className="text-lg mb-4">STUDIO HOURS</h4>
             <div className="font-mono text-sm text-white/60 space-y-2">
-              <p>Mon – Sun: 9:00 AM – 9:00 PM</p>
-              <p>After Hours: 9:00 PM – 3:00 AM</p>
-              <p className="text-accent text-xs mt-3">After-hours +$10/hr surcharge</p>
+              <p>Open 24 Hours — 7 Days a Week</p>
+              <p className="text-white/40 text-xs mt-3">Regular: 9 AM – 10 PM</p>
+              <p className="text-amber-400/70 text-xs">Late Night: 10 PM – 2 AM (+$10/hr)</p>
+              <p className="text-red-400/70 text-xs">After Hours: 2 AM – 9 AM (+$30/hr)</p>
+              <p className="text-accent text-xs">Same-day booking: +$10/hr</p>
             </div>
           </div>
         </div>

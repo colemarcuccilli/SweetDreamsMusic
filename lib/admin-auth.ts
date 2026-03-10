@@ -11,14 +11,19 @@ export function isEngineerOrAdmin(email: string | null | undefined, profileRole?
   return profileRole === 'engineer';
 }
 
-export async function verifyAdminAccess(supabase: { auth: { getUser: () => Promise<{ data: { user: { email?: string } | null }; error: unknown }> } }): Promise<boolean> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function verifyAdminAccess(supabase: any): Promise<boolean> {
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return false;
   return isAdmin(user.email);
 }
 
-export async function verifyEngineerAccess(supabase: { auth: { getUser: () => Promise<{ data: { user: { email?: string } | null }; error: unknown }> } }): Promise<boolean> {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function verifyEngineerAccess(supabase: any): Promise<boolean> {
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return false;
-  return isAdmin(user.email) || true; // TODO: check engineer role from profiles table
+  if (isAdmin(user.email)) return true;
+  if (!user.id) return false;
+  const { data: profile } = await supabase.from('profiles').select('role').eq('user_id', user.id).single();
+  return profile?.role === 'engineer';
 }
