@@ -11,7 +11,7 @@ export default function Footer() {
             <h3 className="text-2xl mb-4">SWEET DREAMS MUSIC</h3>
             <p className="font-mono text-white/60 text-sm leading-relaxed">
               Professional recording studio in {BRAND.address.city}, {BRAND.address.state}.
-              Sessions starting at $50/hour.
+              Sessions starting at $60/hour.
             </p>
           </div>
 
@@ -44,7 +44,7 @@ export default function Footer() {
 
         <div className="mt-12 pt-8 border-t border-white/10 flex flex-col sm:flex-row justify-between items-center gap-4">
           <p className="font-mono text-xs text-white/40">
-            &copy; {new Date().getFullYear()} {BRAND.legalName}. All rights reserved.
+            &copy; {new Date().getFullYear()} Sweet Dreams Music LLC. All rights reserved.
           </p>
           <Link
             href="https://sweetdreams.us"
@@ -52,7 +52,7 @@ export default function Footer() {
             rel="noopener noreferrer"
             className="font-mono text-xs text-white/40 hover:text-accent transition-colors no-underline"
           >
-            A Sweet Dreams Studios Company
+            A Sweet Dreams Company
           </Link>
         </div>
       </div>
