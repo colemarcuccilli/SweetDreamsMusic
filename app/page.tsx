@@ -48,7 +48,7 @@ export default function HomePage() {
           <HeroTitle />
           <p className="font-mono text-white/70 text-body-md max-w-2xl mx-auto mb-10">
             Professional recording sessions starting at {formatCents(ROOM_RATES.studio_b)}/hour.
-            Two studios. Four engineers. Your music, perfected.
+            Two studios. Four engineers. 30+ years of mixing experience combined.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link href="/book"
@@ -151,13 +151,13 @@ export default function HomePage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-4 font-mono text-sm text-white/50 mb-8">
-            <span>1-hour sessions: +$10/hr</span>
+            <span className="text-accent font-semibold">4hr Sweet Spots available</span>
             <span className="text-white/20">|</span>
             <span>After hours: +$10/hr</span>
             <span className="text-white/20">|</span>
             <span>Same-day: +$10/hr</span>
             <span className="text-white/20">|</span>
-            <span className="text-accent font-semibold">3+ hours: $10 off</span>
+            <span>Band recording available</span>
           </div>
           <Link href="/pricing"
             className="border-2 border-white text-white font-mono text-base font-bold tracking-wider uppercase px-8 py-4 hover:bg-white hover:text-black transition-colors no-underline inline-flex items-center justify-center">
@@ -172,7 +172,7 @@ export default function HomePage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
             {[
               { icon: Users, value: String(ENGINEERS.length), label: 'Engineers' },
-              { icon: DollarSign, value: '$50', label: 'Starting Rate' },
+              { icon: DollarSign, value: '$60', label: 'Starting Rate' },
               { icon: Clock, value: '7', label: 'Days a Week' },
               { icon: Mic, value: '2', label: 'Studios' },
             ].map((stat) => (
@@ -193,13 +193,13 @@ export default function HomePage() {
           <h2 className="text-heading-xl mb-12 sm:mb-16">THE SPACE</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
             {[
-              { src: STUDIO_IMAGES.jayBoothWide, alt: 'Recording booth', className: 'md:col-span-2 aspect-[2/1]' },
-              { src: STUDIO_IMAGES.iszacVert, alt: 'Iszac engineering', className: 'aspect-[3/4]' },
+              { src: STUDIO_IMAGES.jayBoothWide, alt: 'Recording booth', className: 'col-span-2 aspect-[2/1]' },
+              { src: STUDIO_IMAGES.iszacVert, alt: 'Iszac engineering', className: 'aspect-square' },
               { src: STUDIO_IMAGES.doloBoothSquare, alt: 'Recording session', className: 'aspect-square' },
               { src: STUDIO_IMAGES.bockMicWide, alt: 'Bock Audio microphone', className: 'aspect-square' },
               { src: STUDIO_IMAGES.akgMicWide, alt: 'AKG microphone setup', className: 'aspect-square' },
-              { src: STUDIO_IMAGES.adamCloseupWide, alt: 'Adam Audio monitors', className: 'md:col-span-2 aspect-[2/1]' },
-              { src: STUDIO_IMAGES.jebJayStudioAVert, alt: 'Studio A session', className: 'aspect-[3/4]' },
+              { src: STUDIO_IMAGES.adamCloseupWide, alt: 'Adam Audio monitors', className: 'col-span-2 aspect-[2/1]' },
+              { src: STUDIO_IMAGES.jebJayStudioAVert, alt: 'Studio A session', className: 'aspect-square' },
             ].map((item) => (
               <div key={item.alt} className={`relative overflow-hidden ${item.className}`}>
                 <Image

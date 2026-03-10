@@ -16,22 +16,11 @@ export default function AuthForm() {
 
   const supabase = createClient();
 
-  // Debug: check if env vars are reaching the client
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const hasAnonKey = !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError('');
     setMessage('');
     setLoading(true);
-
-    // Debug check
-    if (!supabaseUrl || !hasAnonKey) {
-      setError(`Config missing — URL: ${supabaseUrl || 'MISSING'}, Key: ${hasAnonKey ? 'set' : 'MISSING'}`);
-      setLoading(false);
-      return;
-    }
 
     try {
       if (mode === 'signup') {
@@ -54,16 +43,7 @@ export default function AuthForm() {
         window.location.href = '/dashboard';
       }
     } catch (err: unknown) {
-      const errObj = err as Record<string, unknown>;
-      const detail = JSON.stringify({
-        message: errObj?.message,
-        status: errObj?.status,
-        name: errObj?.name,
-        code: errObj?.code,
-        stack: typeof errObj?.stack === 'string' ? errObj.stack.split('\n').slice(0, 3).join(' | ') : undefined,
-      });
-      console.error('Auth error detail:', detail, err);
-      setError(errObj?.message as string || `Auth error: ${detail}`);
+      setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {
       setLoading(false);
     }

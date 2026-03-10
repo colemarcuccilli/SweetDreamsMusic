@@ -1,14 +1,14 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Clock, AlertCircle, Check, Percent } from 'lucide-react';
-import { SITE_URL, PRICING, ROOM_RATES, ROOM_RATES_SINGLE } from '@/lib/constants';
+import { Clock, AlertCircle, Check, Star, Users } from 'lucide-react';
+import { SITE_URL, PRICING, ROOM_RATES, SWEET_SPOTS, BAND_PRICING } from '@/lib/constants';
 import { formatCents, calculateSessionTotal } from '@/lib/utils';
 import { STUDIO_IMAGES } from '@/lib/images';
 
 export const metadata: Metadata = {
   title: 'Pricing',
-  description: 'Recording studio pricing. Studio A from $60/hr, Studio B from $50/hr. 50% deposit at booking, remainder after session.',
+  description: 'Recording studio pricing. Studio A from $70/hr, Studio B from $60/hr. Sweet Spot deals and band recording available. 50% deposit at booking.',
   alternates: { canonical: `${SITE_URL}/pricing` },
 };
 
@@ -92,8 +92,26 @@ export default function PricingPage() {
             </div>
           </div>
 
-          {/* Surcharges & Discounts */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Sweet Spots + Surcharges */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="border-2 border-accent p-6 sm:p-8">
+              <div className="flex items-center gap-3 mb-4">
+                <Star className="w-6 h-6 text-accent" />
+                <h3 className="text-heading-sm">SWEET SPOT</h3>
+              </div>
+              <div className="space-y-3 mb-3">
+                <div>
+                  <p className="font-heading text-display-sm text-accent">{formatCents(SWEET_SPOTS.studio_a.price)}</p>
+                  <p className="font-mono text-xs text-black/50">Studio A — 4 hours ({formatCents(SWEET_SPOTS.studio_a.perHour)}/hr)</p>
+                </div>
+                <div>
+                  <p className="font-heading text-display-sm text-accent">{formatCents(SWEET_SPOTS.studio_b.price)}</p>
+                  <p className="font-mono text-xs text-black/50">Studio B — 4 hours ({formatCents(SWEET_SPOTS.studio_b.perHour)}/hr)</p>
+                </div>
+              </div>
+              <p className="font-mono text-sm text-black/60">Best value. Book 4 hours at a discounted flat rate.</p>
+            </div>
+
             <div className="border-2 border-black p-6 sm:p-8">
               <div className="flex items-center gap-3 mb-4">
                 <Clock className="w-6 h-6 text-accent" />
@@ -118,41 +136,67 @@ export default function PricingPage() {
               <p className="font-mono text-sm text-black/60">Booking and recording on the same day.</p>
             </div>
 
-            <div className="border-2 border-accent p-6 sm:p-8">
+            <div className="border-2 border-black p-6 sm:p-8">
               <div className="flex items-center gap-3 mb-4">
-                <Percent className="w-6 h-6 text-accent" />
-                <h3 className="text-heading-sm">3+ HOURS</h3>
+                <AlertCircle className="w-6 h-6 text-accent" />
+                <h3 className="text-heading-sm">1-HOUR</h3>
               </div>
               <div className="flex items-baseline gap-1 mb-3">
-                <span className="font-heading text-display-sm text-accent">-{formatCents(PRICING.threeHourDiscount)}</span>
-                <span className="font-mono text-sm text-black/50">off</span>
+                <span className="font-heading text-display-sm">+{formatCents(1000)}</span>
+                <span className="font-mono text-sm text-black/50">/hour</span>
               </div>
-              <p className="font-mono text-sm text-black/60">Book 3 or more hours and save $10 on your session.</p>
+              <p className="font-mono text-sm text-black/60">Single-hour sessions are priced $10 higher per studio.</p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Example Sessions - Black */}
+      {/* Band Recording - Black */}
       <section className="bg-black text-white py-20 sm:py-28">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-3 mb-3">
+            <Users className="w-6 h-6 text-accent" />
+            <p className="font-mono text-accent text-xs sm:text-sm font-semibold tracking-[0.3em] uppercase">Studio A Only</p>
+          </div>
+          <h2 className="text-heading-xl mb-12 sm:mb-16">BAND RECORDING</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {BAND_PRICING.map((pkg) => (
+              <div key={pkg.hours} className="border border-white/10 p-8">
+                <h3 className="text-heading-sm mb-2">{pkg.label}</h3>
+                <p className="font-mono text-xs text-white/40 mb-4">{pkg.note}</p>
+                <div className="flex items-baseline gap-1 mb-4">
+                  <span className="font-heading text-display-sm text-accent">{formatCents(pkg.price)}</span>
+                </div>
+                <p className="font-mono text-sm text-white/50">{formatCents(pkg.perHour)}/hour</p>
+              </div>
+            ))}
+          </div>
+          <p className="font-mono text-xs text-white/30 mt-8">
+            Band recording includes full use of Studio A. 4-hour minimum booking required.
+          </p>
+        </div>
+      </section>
+
+      {/* Example Sessions - White */}
+      <section className="bg-white text-black py-20 sm:py-28">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-heading-xl mb-12">EXAMPLE SESSIONS</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[
               { title: '2 HOURS — STUDIO B', room: 'studio_b' as const, hours: 2, startHour: 14, sameDay: false },
-              { title: '3 HOURS — STUDIO A', room: 'studio_a' as const, hours: 3, startHour: 18, sameDay: false },
-              { title: '2 HOURS — AFTER HOURS', room: 'studio_a' as const, hours: 2, startHour: 21, sameDay: false },
+              { title: 'SWEET SPOT — STUDIO A', room: 'studio_a' as const, hours: 4, startHour: 12, sameDay: false },
+              { title: 'SWEET SPOT — STUDIO B', room: 'studio_b' as const, hours: 4, startHour: 14, sameDay: false },
             ].map((ex) => {
               const p = calculateSessionTotal(ex.room, ex.hours, ex.startHour, ex.sameDay);
               return (
-                <div key={ex.title} className="border border-white/10 p-8">
+                <div key={ex.title} className="border-2 border-black p-8">
                   <h3 className="text-heading-sm mb-4">{ex.title}</h3>
-                  <div className="font-mono text-sm text-white/50 space-y-1 mb-6">
+                  <div className="font-mono text-sm text-black/50 space-y-1 mb-6">
                     <p>Base: {formatCents(p.subtotal)}</p>
+                    {p.sweetSpot && <p className="text-accent">Sweet Spot rate applied</p>}
                     {p.afterHoursFee > 0 && <p>After-hours: +{formatCents(p.afterHoursFee)}</p>}
-                    {p.discount > 0 && <p className="text-accent">Discount: -{formatCents(p.discount)}</p>}
                   </div>
-                  <p className="font-mono text-xs text-white/40 mb-1">Total: {formatCents(p.total)}</p>
+                  <p className="font-mono text-xs text-black/40 mb-1">Total: {formatCents(p.total)}</p>
                   <p className="font-heading text-display-sm text-accent">Deposit: {formatCents(p.deposit)}</p>
                 </div>
               );
@@ -161,8 +205,8 @@ export default function PricingPage() {
         </div>
       </section>
 
-      {/* How Payment Works - White */}
-      <section className="bg-white text-black py-20 sm:py-28">
+      {/* How Payment Works - Black */}
+      <section className="bg-black text-white py-20 sm:py-28">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-heading-xl mb-12">HOW PAYMENT WORKS</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -175,7 +219,7 @@ export default function PricingPage() {
                 <span className="font-heading text-display-sm text-accent flex-shrink-0">{item.step}</span>
                 <div>
                   <h3 className="text-heading-sm mb-2">{item.title}</h3>
-                  <p className="font-mono text-sm text-black/60">{item.desc}</p>
+                  <p className="font-mono text-sm text-white/60">{item.desc}</p>
                 </div>
               </div>
             ))}
@@ -184,7 +228,7 @@ export default function PricingPage() {
       </section>
 
       {/* CTA */}
-      <section className="bg-black text-white py-20 sm:py-28">
+      <section className="bg-white text-black py-20 sm:py-28">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <h2 className="text-display-md mb-6">LET&apos;S MAKE MUSIC</h2>
           <Link href="/book"

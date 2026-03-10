@@ -36,8 +36,8 @@ export default function EngineersPage() {
           </p>
           <h1 className="text-display-md mb-6">OUR ENGINEERS</h1>
           <p className="font-mono text-white/70 text-body-md max-w-2xl">
-            Each engineer brings their own style and expertise. Choose the right fit for your project,
-            or let us match you with the perfect engineer for your sound.
+            Each engineer brings their own style and expertise. 30+ years of mixing experience combined.
+            Choose the right fit for your project, or let us match you with the perfect engineer for your sound.
           </p>
         </div>
       </section>

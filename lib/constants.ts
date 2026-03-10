@@ -18,7 +18,7 @@ export const BRAND = {
 export const SEO = {
   defaultTitle: 'Sweet Dreams Music — Fort Wayne Recording Studio',
   titleTemplate: '%s | Sweet Dreams Music — Fort Wayne Recording Studio',
-  defaultDescription: 'Professional recording studio in Fort Wayne, IN. Book sessions starting at $60/hour.',
+  defaultDescription: 'Professional recording studio in Fort Wayne, IN. Book sessions starting at $60/hour. Band recording available.',
   keywords: [
     'Fort Wayne recording studio',
     'recording studio near me',
@@ -38,18 +38,30 @@ export const GEO = {
 };
 
 export const PRICING = {
-  studioA: 6000, // $60/hr in cents (2+ hours), $70 single hour
-  studioB: 5000, // $50/hr in cents (2+ hours), $60 single hour
-  studioASingleHour: 7000, // $70 for 1-hour session
-  studioBSingleHour: 6000, // $60 for 1-hour session
+  studioA: 7000, // $70/hr in cents
+  studioB: 6000, // $60/hr in cents
+  studioASingleHour: 8000, // $80 for 1-hour session
+  studioBSingleHour: 7000, // $70 for 1-hour session
   afterHoursSurcharge: 1000, // +$10/hr
   sameDaySurcharge: 1000, // +$10/hr
-  threeHourDiscount: 1000, // $10 off for 3+ hour sessions
   depositPercent: 50, // 50% deposit
   minHours: 1,
-  maxHours: 6,
+  maxHours: 8,
   currency: 'usd' as const,
 };
+
+// Sweet Spot deals — flat rate for 4 hours
+export const SWEET_SPOTS = {
+  studio_a: { hours: 4, price: 26000, label: 'Studio A Sweet Spot', perHour: 6500 }, // $260
+  studio_b: { hours: 4, price: 18000, label: 'Studio B Sweet Spot', perHour: 4500 }, // $180
+} as const;
+
+// Band Recording — Studio A only
+export const BAND_PRICING = [
+  { hours: 4, price: 40000, label: '4 Hours', perHour: 10000, note: 'Minimum booking' },
+  { hours: 8, price: 68000, label: '8 Hours', perHour: 8500, note: '$85/hour' },
+  { hours: 24, price: 180000, label: '3 Days (8hr each)', perHour: 7500, note: '$75/hour' },
+] as const;
 
 export const STUDIO_HOURS = {
   regular: { start: 9, end: 21 }, // 9 AM - 9 PM
@@ -75,10 +87,10 @@ export const ROOM_RATES_SINGLE: Record<Room, number> = {
 };
 
 export const ENGINEERS = [
-  { name: 'PRVRB', displayName: 'PRVRB', specialties: ['Recording', 'Mixing'], studios: ['studio_a'] as Room[] },
-  { name: 'Iszac Griner', displayName: 'Iszac', specialties: ['Recording'], studios: ['studio_a', 'studio_b'] as Room[] },
-  { name: 'Zion Tinsley', displayName: 'Zion', specialties: ['Recording'], studios: ['studio_b'] as Room[] },
-  { name: 'Jay', displayName: 'Jay', specialties: ['Recording', 'Production'], studios: ['studio_b'] as Room[] },
+  { name: 'PRVRB', displayName: 'PRVRB', specialties: ['Recording', 'Mixing & Mastering', 'Production'], studios: ['studio_a'] as Room[] },
+  { name: 'Iszac Griner', displayName: 'Iszac', specialties: ['Recording', 'Mixing & Mastering', 'Production'], studios: ['studio_a', 'studio_b'] as Room[] },
+  { name: 'Zion Tinsley', displayName: 'Zion', specialties: ['Recording', 'Mixing & Mastering', 'Production'], studios: ['studio_b'] as Room[] },
+  { name: 'Jay', displayName: 'Jay', specialties: ['Recording', 'Mixing & Mastering', 'Production'], studios: ['studio_b'] as Room[] },
 ] as const;
 
 // Super admins — full access to everything

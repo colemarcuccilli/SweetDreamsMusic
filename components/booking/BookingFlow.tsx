@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { Calendar, Clock, Home, User, ChevronLeft, ChevronRight } from 'lucide-react';
-import { PRICING, ROOMS, ROOM_LABELS, ROOM_RATES, ROOM_RATES_SINGLE, ENGINEERS, STUDIO_HOURS, type Room } from '@/lib/constants';
+import { PRICING, ROOMS, ROOM_LABELS, ROOM_RATES, ROOM_RATES_SINGLE, SWEET_SPOTS, ENGINEERS, STUDIO_HOURS, type Room } from '@/lib/constants';
 import { formatCents, cn, isAfterHours, isSameDay, calculateSessionTotal, formatTime } from '@/lib/utils';
 
 type Step = 'date' | 'time' | 'details' | 'review';
@@ -268,7 +268,7 @@ export default function BookingFlow() {
           <div className="mb-8">
             <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">
               Duration: {duration} hour{duration > 1 ? 's' : ''}
-              {duration >= 3 && <span className="text-accent ml-2">($10 off!)</span>}
+              {duration === SWEET_SPOTS[room].hours && <span className="text-accent ml-2">(Sweet Spot!)</span>}
             </h3>
             <div className="flex gap-2">
               {Array.from({ length: PRICING.maxHours }, (_, i) => i + 1).map((h) => (
@@ -388,10 +388,19 @@ export default function BookingFlow() {
 
               <div className="flex justify-between">
                 <span className="text-black/60">
-                  {ROOM_LABELS[room]} ({duration}hr x {formatCents(duration === 1 ? ROOM_RATES_SINGLE[room] : ROOM_RATES[room])})
+                  {pricing.sweetSpot
+                    ? `${ROOM_LABELS[room]} Sweet Spot (${duration}hr)`
+                    : `${ROOM_LABELS[room]} (${duration}hr x ${formatCents(duration === 1 ? ROOM_RATES_SINGLE[room] : ROOM_RATES[room])})`
+                  }
                 </span>
                 <span>{formatCents(pricing.subtotal)}</span>
               </div>
+              {pricing.sweetSpot && (
+                <div className="flex justify-between text-green-700">
+                  <span>Sweet Spot savings</span>
+                  <span>-{formatCents(ROOM_RATES[room] * duration - pricing.subtotal)}</span>
+                </div>
+              )}
               {pricing.afterHoursFee > 0 && (
                 <div className="flex justify-between text-black/70">
                   <span>After-hours surcharge ({duration}hr x {formatCents(PRICING.afterHoursSurcharge)})</span>
@@ -402,12 +411,6 @@ export default function BookingFlow() {
                 <div className="flex justify-between text-black/70">
                   <span>Same-day booking ({duration}hr x {formatCents(PRICING.sameDaySurcharge)})</span>
                   <span>+{formatCents(pricing.sameDayFee)}</span>
-                </div>
-              )}
-              {pricing.discount > 0 && (
-                <div className="flex justify-between text-green-700">
-                  <span>3+ hour discount</span>
-                  <span>-{formatCents(pricing.discount)}</span>
                 </div>
               )}
 

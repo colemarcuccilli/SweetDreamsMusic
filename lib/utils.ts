@@ -1,4 +1,4 @@
-import { PRICING, ROOM_RATES, ROOM_RATES_SINGLE, SUPER_ADMINS, type Room, type UserRole } from './constants';
+import { PRICING, ROOM_RATES, ROOM_RATES_SINGLE, SWEET_SPOTS, SUPER_ADMINS, type Room, type UserRole } from './constants';
 
 export function formatCents(cents: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -29,18 +29,27 @@ export function calculateSessionTotal(
   hours: number,
   startHour: number,
   isSameDayBooking: boolean
-): { subtotal: number; afterHoursFee: number; sameDayFee: number; discount: number; total: number; deposit: number } {
-  const baseRate = hours === 1 ? ROOM_RATES_SINGLE[room] : ROOM_RATES[room];
-  const subtotal = baseRate * hours;
+): { subtotal: number; afterHoursFee: number; sameDayFee: number; sweetSpot: boolean; total: number; deposit: number } {
+  // Check for Sweet Spot deal (4 hours flat rate)
+  const spot = SWEET_SPOTS[room];
+  const isSweetSpot = hours === spot.hours;
+
+  let subtotal: number;
+  if (isSweetSpot) {
+    subtotal = spot.price;
+  } else if (hours === 1) {
+    subtotal = ROOM_RATES_SINGLE[room];
+  } else {
+    subtotal = ROOM_RATES[room] * hours;
+  }
 
   const afterHoursFee = isAfterHours(startHour) ? PRICING.afterHoursSurcharge * hours : 0;
   const sameDayFee = isSameDayBooking ? PRICING.sameDaySurcharge * hours : 0;
-  const discount = hours >= 3 ? PRICING.threeHourDiscount : 0;
 
-  const total = subtotal + afterHoursFee + sameDayFee - discount;
+  const total = subtotal + afterHoursFee + sameDayFee;
   const deposit = Math.round(total * (PRICING.depositPercent / 100));
 
-  return { subtotal, afterHoursFee, sameDayFee, discount, total, deposit };
+  return { subtotal, afterHoursFee, sameDayFee, sweetSpot: isSweetSpot, total, deposit };
 }
 
 export function getUserRole(email: string | undefined, profileRole?: string): UserRole {
