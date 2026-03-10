@@ -43,6 +43,7 @@ export const STUDIO_IMAGES = {
   akgCloseup: `${BASE}/akgcloseup.jpg`,
   akgGraphic: `${BASE}/akggraphic.jpg`,
   bockMicCloseup: `${BASE}/bockMiccloseup.jpg`,
+  bockGraphic: `${BASE}/bockgraphic.jpg`,
   manleyGraphic: `${BASE}/manleygraphic.jpg`,
   mojaveGraphic: `${BASE}/mojavegraphic.jpg`,
 } as const;

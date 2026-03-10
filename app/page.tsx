@@ -95,13 +95,13 @@ export default function HomePage() {
       <section className="bg-white text-black py-20 sm:py-28">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="font-mono text-sm font-semibold tracking-[0.3em] uppercase mb-3 text-black/50">Professional Equipment</p>
-          <h2 className="text-heading-xl mb-12 sm:mb-16">THE GEAR</h2>
+          <h2 className="text-heading-xl mb-12 sm:mb-16">THE MICS</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
             {[
               { src: STUDIO_IMAGES.akgGraphic, alt: 'AKG Microphone' },
               { src: STUDIO_IMAGES.manleyGraphic, alt: 'Manley' },
               { src: STUDIO_IMAGES.mojaveGraphic, alt: 'Mojave' },
-              { src: STUDIO_IMAGES.bockMicCloseup, alt: 'Bock Audio Microphone' },
+              { src: STUDIO_IMAGES.bockGraphic, alt: 'Bock Audio Microphone' },
             ].map((item) => (
               <div key={item.alt} className="relative aspect-square overflow-hidden bg-black/5">
                 <Image
