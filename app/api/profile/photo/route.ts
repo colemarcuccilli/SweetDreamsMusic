@@ -8,9 +8,11 @@ export async function POST(request: NextRequest) {
 
   const formData = await request.formData();
   const file = formData.get('file') as File;
+  const type = (formData.get('type') as string) || 'profile';
+  const projectId = formData.get('projectId') as string | null;
+
   if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 });
 
-  // Validate file type and size
   if (!file.type.startsWith('image/')) {
     return NextResponse.json({ error: 'File must be an image' }, { status: 400 });
   }
@@ -19,9 +21,17 @@ export async function POST(request: NextRequest) {
   }
 
   const ext = file.name.split('.').pop() || 'jpg';
-  const filePath = `profile-pictures/${user.id}.${ext}`;
+  const timestamp = Date.now();
+  let filePath: string;
 
-  // Upload to storage (overwrite if exists)
+  if (type === 'cover') {
+    filePath = `cover-photos/${user.id}.${ext}`;
+  } else if (type === 'project' && projectId) {
+    filePath = `project-covers/${user.id}/${projectId}-${timestamp}.${ext}`;
+  } else {
+    filePath = `profile-pictures/${user.id}.${ext}`;
+  }
+
   const { error: uploadError } = await supabase.storage
     .from('media')
     .upload(filePath, file, { upsert: true });
@@ -34,11 +44,24 @@ export async function POST(request: NextRequest) {
     .from('media')
     .getPublicUrl(filePath);
 
-  // Update profile with new photo URL
-  await supabase
-    .from('profiles')
-    .update({ profile_picture_url: publicUrl, updated_at: new Date().toISOString() })
-    .eq('user_id', user.id);
+  // Update the appropriate record
+  if (type === 'cover') {
+    await supabase
+      .from('profiles')
+      .update({ cover_photo_url: publicUrl, updated_at: new Date().toISOString() })
+      .eq('user_id', user.id);
+  } else if (type === 'project' && projectId) {
+    await supabase
+      .from('profile_projects')
+      .update({ cover_image_url: publicUrl })
+      .eq('id', projectId)
+      .eq('user_id', user.id);
+  } else {
+    await supabase
+      .from('profiles')
+      .update({ profile_picture_url: publicUrl, updated_at: new Date().toISOString() })
+      .eq('user_id', user.id);
+  }
 
   return NextResponse.json({ url: publicUrl });
 }

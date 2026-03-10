@@ -8,6 +8,17 @@ type Props = {
   params: Promise<{ slug: string }>;
 };
 
+const SOCIAL_ICONS: Record<string, string> = {
+  spotify: 'Spotify',
+  appleMusic: 'Apple Music',
+  instagram: 'Instagram',
+  facebook: 'Facebook',
+  youtube: 'YouTube',
+  soundcloud: 'SoundCloud',
+  tiktok: 'TikTok',
+  twitter: 'X',
+};
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const supabase = createServiceClient();
@@ -30,7 +41,6 @@ export default async function PublicProfilePage({ params }: Props) {
   const { slug } = await params;
   const supabase = createServiceClient();
 
-  // Fetch profile
   const { data: profile } = await supabase
     .from('profiles')
     .select('*')
@@ -39,7 +49,6 @@ export default async function PublicProfilePage({ params }: Props) {
 
   if (!profile) notFound();
 
-  // Check if this is the profile owner viewing their own page
   const authClient = await createClient();
   const { data: { user: currentUser } } = await authClient.auth.getUser();
   const isOwner = currentUser?.id === profile.user_id;
@@ -56,7 +65,6 @@ export default async function PublicProfilePage({ params }: Props) {
     .eq('is_public', true)
     .order('display_order', { ascending: true });
 
-  // Fetch deliverable details for showcase items
   let deliverables: Record<string, { file_name: string; display_name: string; file_path: string }> = {};
   if (showcaseItems && showcaseItems.length > 0) {
     const deliverableIds = showcaseItems.map((item) => item.deliverable_id);
@@ -80,17 +88,29 @@ export default async function PublicProfilePage({ params }: Props) {
 
   const hasShowcase = showcaseItems && showcaseItems.length > 0;
   const hasProjects = projects && projects.length > 0;
-  const hasSocialLinks = profile.social_links && Object.values(profile.social_links as Record<string, string>).some(Boolean);
+  const socialLinks = (profile.social_links || {}) as Record<string, string>;
+  const hasSocialLinks = Object.values(socialLinks).some(Boolean);
   const isEmpty = !hasShowcase && !hasProjects && !profile.bio;
 
   return (
     <>
+      {/* Cover Photo */}
+      {profile.cover_photo_url && (
+        <div className="w-full aspect-[3/1] bg-black overflow-hidden">
+          <img
+            src={profile.cover_photo_url}
+            alt=""
+            className="w-full h-full object-cover"
+          />
+        </div>
+      )}
+
       {/* Profile Header */}
-      <section className="bg-black text-white py-16 sm:py-24">
+      <section className={`bg-black text-white ${profile.cover_photo_url ? 'py-10 sm:py-14' : 'py-16 sm:py-24'}`}>
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-8">
             {/* Profile Picture */}
-            <div className="w-32 h-32 sm:w-40 sm:h-40 flex-shrink-0 bg-white/5 flex items-center justify-center overflow-hidden">
+            <div className={`w-32 h-32 sm:w-40 sm:h-40 flex-shrink-0 bg-white/5 flex items-center justify-center overflow-hidden ${profile.cover_photo_url ? '-mt-20 sm:-mt-24 border-4 border-black' : ''}`}>
               {profile.profile_picture_url ? (
                 <img
                   src={profile.profile_picture_url}
@@ -107,11 +127,13 @@ export default async function PublicProfilePage({ params }: Props) {
             <div className="text-center sm:text-left flex-1">
               <h1 className="text-display-sm mb-3">{profile.display_name}</h1>
               {profile.bio && (
-                <p className="font-mono text-white/60 text-body-sm max-w-lg">{profile.bio}</p>
+                <p className="font-mono text-white/60 text-body-sm max-w-lg whitespace-pre-line">{profile.bio}</p>
               )}
+
+              {/* Social Links */}
               {hasSocialLinks && (
                 <div className="flex flex-wrap gap-3 mt-4 justify-center sm:justify-start">
-                  {Object.entries(profile.social_links as Record<string, string>).map(([platform, url]) => (
+                  {Object.entries(socialLinks).map(([platform, url]) => (
                     url && (
                       <a
                         key={platform}
@@ -120,12 +142,13 @@ export default async function PublicProfilePage({ params }: Props) {
                         rel="noopener noreferrer"
                         className="font-mono text-xs text-accent hover:text-white transition-colors uppercase tracking-wider inline-flex items-center gap-1"
                       >
-                        {platform} <ExternalLink className="w-3 h-3" />
+                        {SOCIAL_ICONS[platform] || platform} <ExternalLink className="w-3 h-3" />
                       </a>
                     )
                   ))}
                 </div>
               )}
+
               {isOwner && (
                 <Link
                   href="/dashboard/profile"
@@ -145,8 +168,7 @@ export default async function PublicProfilePage({ params }: Props) {
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
             <p className="font-mono text-sm text-black/40 mb-2">Your profile is looking empty.</p>
             <p className="font-mono text-xs text-black/30 max-w-md mx-auto">
-              Add a bio, upload a profile photo, and showcase your music from your sessions.
-              Once your engineers upload session files, you can select tracks to feature here.
+              Add a bio, upload photos, link your socials, and showcase your music and projects.
             </p>
             <Link
               href="/dashboard/profile"
@@ -178,7 +200,6 @@ export default async function PublicProfilePage({ params }: Props) {
                       )}
                     </div>
 
-                    {/* Streaming Links */}
                     <div className="flex flex-wrap gap-2">
                       {item.spotify_link && (
                         <a href={item.spotify_link} target="_blank" rel="noopener noreferrer"
@@ -206,7 +227,6 @@ export default async function PublicProfilePage({ params }: Props) {
                       )}
                     </div>
 
-                    {/* Audio player for unreleased tracks */}
                     {deliverable?.file_path && !item.is_released && (
                       <audio controls preload="none" className="w-full sm:w-auto sm:max-w-[200px]">
                         <source
@@ -229,26 +249,41 @@ export default async function PublicProfilePage({ params }: Props) {
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
             <h2 className="text-heading-xl mb-8">PROJECTS</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {projects.map((project) => (
-                <div key={project.id} className="border border-white/10 p-6 hover:border-accent/50 transition-colors">
-                  {project.cover_image_url && (
-                    <img src={project.cover_image_url} alt={project.project_name} className="w-full aspect-square object-cover mb-4" />
-                  )}
-                  <h3 className="text-heading-sm mb-1">{project.project_name}</h3>
-                  {project.project_type && (
-                    <p className="font-mono text-xs text-accent uppercase tracking-wider mb-2">{project.project_type}</p>
-                  )}
-                  {project.description && (
-                    <p className="font-mono text-xs text-white/50">{project.description}</p>
-                  )}
-                </div>
-              ))}
+              {projects.map((project) => {
+                const Wrapper = project.link ? 'a' : 'div';
+                const linkProps = project.link ? { href: project.link, target: '_blank', rel: 'noopener noreferrer' } : {};
+                return (
+                  <Wrapper
+                    key={project.id}
+                    {...linkProps}
+                    className={`border border-white/10 overflow-hidden hover:border-accent/50 transition-colors block no-underline ${project.link ? 'cursor-pointer' : ''}`}
+                  >
+                    {project.cover_image_url && (
+                      <img src={project.cover_image_url} alt={project.project_name} className="w-full aspect-square object-cover" />
+                    )}
+                    <div className="p-6">
+                      <h3 className="text-heading-sm mb-1 text-white">{project.project_name}</h3>
+                      {project.project_type && (
+                        <p className="font-mono text-xs text-accent uppercase tracking-wider mb-2">{project.project_type}</p>
+                      )}
+                      {project.description && (
+                        <p className="font-mono text-xs text-white/50">{project.description}</p>
+                      )}
+                      {project.link && (
+                        <p className="font-mono text-[10px] text-accent mt-3 inline-flex items-center gap-1">
+                          Listen <ExternalLink className="w-3 h-3" />
+                        </p>
+                      )}
+                    </div>
+                  </Wrapper>
+                );
+              })}
             </div>
           </div>
         </section>
       )}
 
-      {/* Footer CTA — only show for visitors, not the profile owner */}
+      {/* Footer CTA */}
       {!isOwner && (
         <section className="bg-white text-black py-16">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">

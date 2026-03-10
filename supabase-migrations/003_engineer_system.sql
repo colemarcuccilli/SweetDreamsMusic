@@ -43,7 +43,27 @@ DO $$ BEGIN
   END IF;
 END $$;
 
--- 5. Create media_sales table for engineer media commission tracking
+-- 5. Add cover_photo_url to profiles (if not exists)
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'profiles' AND column_name = 'cover_photo_url'
+  ) THEN
+    ALTER TABLE profiles ADD COLUMN cover_photo_url TEXT;
+  END IF;
+END $$;
+
+-- 5b. Add link column to profile_projects (if not exists)
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'profile_projects' AND column_name = 'link'
+  ) THEN
+    ALTER TABLE profile_projects ADD COLUMN link TEXT;
+  END IF;
+END $$;
+
+-- 6. Create media_sales table for engineer media commission tracking
 CREATE TABLE IF NOT EXISTS media_sales (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   engineer_name TEXT NOT NULL,
