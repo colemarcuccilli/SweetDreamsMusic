@@ -48,22 +48,17 @@ export default function MediaPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="font-mono text-sm font-semibold tracking-[0.3em] uppercase mb-3 text-black/50">Our Work</p>
           <h2 className="text-heading-xl mb-12 sm:mb-16">MUSIC VIDEOS</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
-            {videos.map((video, i) => (
-              <div
-                key={video.id}
-                className={`${i === 0 ? 'md:col-span-2' : ''}`}
-              >
-                <div className={`relative w-full ${i === 0 ? 'aspect-video' : 'aspect-video'} bg-black`}>
-                  <iframe
-                    src={`https://www.youtube.com/embed/${video.id}`}
-                    title={video.title}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                    referrerPolicy="strict-origin-when-cross-origin"
-                    allowFullScreen
-                    className="absolute inset-0 w-full h-full"
-                  />
-                </div>
+          <div className="space-y-6 sm:space-y-8">
+            {videos.map((video) => (
+              <div key={video.id} className="w-full" style={{ position: 'relative', paddingBottom: '56.25%', height: 0, overflow: 'hidden', background: '#000' }}>
+                <iframe
+                  src={`https://www.youtube.com/embed/${video.id}`}
+                  title={video.title}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  referrerPolicy="strict-origin-when-cross-origin"
+                  allowFullScreen
+                  style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 0 }}
+                />
               </div>
             ))}
           </div>
