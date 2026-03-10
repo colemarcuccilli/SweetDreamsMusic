@@ -39,9 +39,9 @@ export const GEO = {
 
 export const PRICING = {
   studioA: 7000, // $70/hr in cents
-  studioB: 6000, // $60/hr in cents
+  studioB: 5000, // $50/hr in cents (2+ hours)
   studioASingleHour: 8000, // $80 for 1-hour session
-  studioBSingleHour: 7000, // $70 for 1-hour session
+  studioBSingleHour: 6000, // $60 for 1-hour session
   afterHoursSurcharge: 1000, // +$10/hr
   sameDaySurcharge: 1000, // +$10/hr
   depositPercent: 50, // 50% deposit
