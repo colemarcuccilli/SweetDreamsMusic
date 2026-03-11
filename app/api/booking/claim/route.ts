@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { verifyEngineerAccess } from '@/lib/admin-auth';
-import { sendEngineerAssigned } from '@/lib/email';
+import { sendEngineerAssigned, sendEngineerClaimConfirmation } from '@/lib/email';
 import { ENGINEERS } from '@/lib/constants';
 
 export async function POST(request: NextRequest) {
@@ -63,14 +63,32 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Session already claimed by another engineer' }, { status: 409 });
   }
 
+  const startDate = new Date(updated.start_time);
+  const dateStr = startDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  const timeStr = startDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
   // Notify the customer that an engineer has been assigned
   if (updated.customer_email) {
-    const startDate = new Date(updated.start_time);
     await sendEngineerAssigned(updated.customer_email, {
       customerName: updated.customer_name,
       engineerName,
-      date: startDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
-      startTime: startDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+      date: dateStr,
+      startTime: timeStr,
+    });
+  }
+
+  // Send confirmation to the engineer who claimed it
+  const engineerEmail = engineerConfig?.email || user.email;
+  if (engineerEmail) {
+    await sendEngineerClaimConfirmation(engineerEmail, {
+      engineerName,
+      customerName: updated.customer_name,
+      date: dateStr,
+      startTime: timeStr,
+      duration: updated.duration,
+      room: updated.room || '',
+      total: updated.total_amount,
+      remainder: updated.remainder_amount || 0,
     });
   }
 

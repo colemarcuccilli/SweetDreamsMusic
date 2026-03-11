@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
 import { createServiceClient } from '@/lib/supabase/server';
 import { sendBookingConfirmation, sendAdminBookingAlert, sendEngineerNewBookingAlert } from '@/lib/email';
-import { ENGINEERS } from '@/lib/constants';
+import { ENGINEERS, type Room } from '@/lib/constants';
 import type Stripe from 'stripe';
 
 export async function POST(request: NextRequest) {
@@ -86,13 +86,14 @@ export async function POST(request: NextRequest) {
           total: parseInt(meta.total_amount),
         });
 
-        // Notify all engineers to claim the session
-        const { data: engineers } = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('role', 'engineer');
+        // Notify engineers who can work in this studio
+        const room = meta.room as string;
+        const engineerEmails = ENGINEERS
+          .filter((e) => e.studios.includes(room as Room))
+          .map((e) => e.email);
 
-        const engineerEmails = (engineers || []).map((e: { email: string }) => e.email).filter(Boolean);
+        console.log('[WEBHOOK] Sending engineer alerts to:', engineerEmails, 'for room:', room);
+
         if (engineerEmails.length > 0) {
           await sendEngineerNewBookingAlert(engineerEmails, {
             id: newBooking?.id || '',
@@ -102,6 +103,8 @@ export async function POST(request: NextRequest) {
             duration,
             room: meta.room,
           });
+        } else {
+          console.warn('[WEBHOOK] No engineers found for room:', room);
         }
       } else if (meta.type === 'beat_purchase') {
         // Beat store purchase

@@ -22,7 +22,7 @@ export async function GET() {
   // Fetch all bookings where this engineer is assigned
   const { data: bookings } = await supabase
     .from('bookings')
-    .select('id, customer_name, start_time, duration, total_amount, deposit_amount, remainder_amount, actual_deposit_paid, status, room, requested_engineer, engineer_name, claimed_at, created_at')
+    .select('id, customer_name, customer_email, start_time, end_time, duration, total_amount, deposit_amount, remainder_amount, actual_deposit_paid, status, room, requested_engineer, engineer_name, claimed_at, created_at, admin_notes, stripe_customer_id, stripe_payment_intent_id')
     .eq('engineer_name', engineerName)
     .order('start_time', { ascending: false });
 

@@ -19,6 +19,9 @@ interface Booking {
   created_at: string;
   admin_notes: string | null;
   engineer_name?: string | null;
+  requested_engineer?: string | null;
+  stripe_customer_id?: string | null;
+  stripe_payment_intent_id?: string | null;
 }
 
 export default function EngineerSessions({ userEmail }: { userEmail: string }) {
@@ -92,6 +95,11 @@ export default function EngineerSessions({ userEmail }: { userEmail: string }) {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
                     <p className="font-mono text-sm font-bold">{b.customer_name}</p>
+                    {b.requested_engineer && (
+                      <p className="font-mono text-[10px] text-amber-600 font-semibold mt-0.5">
+                        Requested: {b.requested_engineer}
+                      </p>
+                    )}
                     <p className="font-mono text-xs text-black/40 mt-1">
                       {new Date(b.start_time).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                       {' · '}
@@ -99,6 +107,10 @@ export default function EngineerSessions({ userEmail }: { userEmail: string }) {
                       {' · '}
                       {b.duration}hr
                       {b.room && ` · ${b.room === 'studio_a' ? 'Studio A' : 'Studio B'}`}
+                    </p>
+                    <p className="font-mono text-xs text-black/40 mt-0.5">
+                      Total: {formatCents(b.total_amount)}
+                      {b.remainder_amount ? ` · Remainder: ${formatCents(b.remainder_amount)}` : ''}
                     </p>
                   </div>
                   <button
@@ -109,6 +121,9 @@ export default function EngineerSessions({ userEmail }: { userEmail: string }) {
                     {claiming === b.id ? 'Claiming...' : 'Claim Session'}
                   </button>
                 </div>
+                {b.admin_notes && (
+                  <p className="font-mono text-xs text-black/50 mt-2 border-t border-black/5 pt-2">{b.admin_notes}</p>
+                )}
               </div>
             ))}
           </div>
@@ -141,7 +156,7 @@ export default function EngineerSessions({ userEmail }: { userEmail: string }) {
         ) : (
           <div className="space-y-3">
             {myCompleted.map((b) => (
-              <BookingCard key={b.id} booking={b} onUpdate={loadData} />
+              <BookingCard key={b.id} booking={b} onUpdate={loadData} completed />
             ))}
           </div>
         )}
@@ -150,13 +165,20 @@ export default function EngineerSessions({ userEmail }: { userEmail: string }) {
   );
 }
 
-function BookingCard({ booking, onUpdate }: { booking: Booking; onUpdate?: () => void }) {
+function BookingCard({ booking, onUpdate, completed }: { booking: Booking; onUpdate?: () => void; completed?: boolean }) {
   const [charging, setCharging] = useState(false);
   const [chargeError, setChargeError] = useState('');
-  const [completing, setCompleting] = useState(false);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
+  const [showReschedule, setShowReschedule] = useState(false);
+  const [newDate, setNewDate] = useState('');
+  const [newTime, setNewTime] = useState('');
+
   const date = new Date(booking.start_time);
   const remainder = booking.remainder_amount || 0;
   const canCharge = booking.status === 'confirmed' && remainder > 0 && booking.engineer_name;
+  const canComplete = booking.status === 'confirmed' && booking.engineer_name;
+  const canCancel = ['confirmed', 'pending'].includes(booking.status);
 
   async function chargeRemainder() {
     if (!confirm(`Charge ${formatCents(remainder)} to ${booking.customer_name}'s card on file?`)) return;
@@ -182,29 +204,59 @@ function BookingCard({ booking, onUpdate }: { booking: Booking; onUpdate?: () =>
     }
   }
 
-  async function markComplete() {
-    setCompleting(true);
+  async function updateBooking(updates: Record<string, unknown>, label: string) {
+    setActionLoading(label);
     try {
-      await fetch('/api/admin/bookings/update', {
-        method: 'PUT',
+      const res = await fetch('/api/booking/update', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: booking.id, status: 'completed' }),
+        body: JSON.stringify({ bookingId: booking.id, ...updates }),
       });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || `Failed to ${label}`);
+        return;
+      }
       onUpdate?.();
     } catch {
-      // silent
+      alert('Network error');
     } finally {
-      setCompleting(false);
+      setActionLoading(null);
     }
+  }
+
+  function handleCancel() {
+    if (!confirm(`Cancel ${booking.customer_name}'s session? This cannot be undone.`)) return;
+    updateBooking({ status: 'cancelled' }, 'cancel');
+  }
+
+  function handleComplete() {
+    updateBooking({ status: 'completed' }, 'complete');
+  }
+
+  function handleReschedule() {
+    if (!newDate || !newTime) {
+      alert('Select a date and time');
+      return;
+    }
+    const startTime = `${newDate}T${newTime}:00`;
+    if (!confirm(`Reschedule to ${newDate} at ${newTime}?`)) return;
+    updateBooking({ startTime }, 'reschedule');
+    setShowReschedule(false);
   }
 
   return (
     <div className="border-2 border-black/10 p-4 sm:p-5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div>
           <p className="font-mono text-sm font-bold">{booking.customer_name}</p>
           {booking.customer_email && (
             <p className="font-mono text-xs text-black/50">{booking.customer_email}</p>
+          )}
+          {booking.requested_engineer && (
+            <p className="font-mono text-[10px] text-amber-600 font-semibold mt-0.5">
+              Requested: {booking.requested_engineer}
+            </p>
           )}
           <p className="font-mono text-xs text-black/40 mt-1">
             {date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
@@ -240,25 +292,103 @@ function BookingCard({ booking, onUpdate }: { booking: Booking; onUpdate?: () =>
         <p className="font-mono text-xs text-black/50 mt-2 border-t border-black/5 pt-2">{booking.admin_notes}</p>
       )}
 
-      {/* Engineer actions */}
-      {canCharge && (
+      {/* Action buttons */}
+      {!completed && (
         <div className="mt-3 pt-3 border-t border-black/10 flex flex-wrap gap-2">
+          {canCharge && (
+            <button
+              onClick={chargeRemainder}
+              disabled={charging}
+              className="font-mono text-xs font-bold uppercase tracking-wider bg-black text-white px-4 py-2 hover:bg-black/80 disabled:opacity-50 transition-colors"
+            >
+              {charging ? 'Charging...' : `Charge Remainder — ${formatCents(remainder)}`}
+            </button>
+          )}
+          {canComplete && (
+            <button
+              onClick={handleComplete}
+              disabled={actionLoading === 'complete'}
+              className="font-mono text-xs font-bold uppercase tracking-wider border-2 border-green-600 text-green-700 px-4 py-2 hover:bg-green-50 disabled:opacity-50 transition-colors"
+            >
+              {actionLoading === 'complete' ? 'Updating...' : 'Mark Complete'}
+            </button>
+          )}
+          {canCancel && (
+            <button
+              onClick={handleCancel}
+              disabled={actionLoading === 'cancel'}
+              className="font-mono text-xs font-bold uppercase tracking-wider border-2 border-red-500 text-red-600 px-4 py-2 hover:bg-red-50 disabled:opacity-50 transition-colors"
+            >
+              {actionLoading === 'cancel' ? 'Cancelling...' : 'Cancel Session'}
+            </button>
+          )}
           <button
-            onClick={chargeRemainder}
-            disabled={charging}
-            className="font-mono text-xs font-bold uppercase tracking-wider bg-black text-white px-4 py-2 hover:bg-black/80 disabled:opacity-50 transition-colors"
+            onClick={() => setShowReschedule(!showReschedule)}
+            className="font-mono text-xs font-bold uppercase tracking-wider border-2 border-black/20 text-black/60 px-4 py-2 hover:bg-black/5 transition-colors"
           >
-            {charging ? 'Charging...' : `Charge Remainder — ${formatCents(remainder)}`}
+            Reschedule
           </button>
           <button
-            onClick={markComplete}
-            disabled={completing}
-            className="font-mono text-xs font-bold uppercase tracking-wider border-2 border-green-600 text-green-700 px-4 py-2 hover:bg-green-50 disabled:opacity-50 transition-colors"
+            onClick={() => setShowDebug(!showDebug)}
+            className="font-mono text-xs uppercase tracking-wider text-black/30 px-3 py-2 hover:text-black/60 transition-colors"
           >
-            {completing ? 'Updating...' : 'Mark Complete'}
+            {showDebug ? 'Hide Details' : 'Debug'}
           </button>
         </div>
       )}
+
+      {/* Reschedule form */}
+      {showReschedule && (
+        <div className="mt-3 p-3 bg-black/5 border border-black/10 space-y-2">
+          <p className="font-mono text-xs font-semibold uppercase tracking-wider">Reschedule Session</p>
+          <div className="flex flex-wrap gap-2 items-end">
+            <div>
+              <label className="font-mono text-[10px] text-black/40 block">Date</label>
+              <input
+                type="date"
+                value={newDate}
+                onChange={(e) => setNewDate(e.target.value)}
+                className="font-mono text-xs border border-black/20 px-2 py-1.5"
+              />
+            </div>
+            <div>
+              <label className="font-mono text-[10px] text-black/40 block">Time</label>
+              <input
+                type="time"
+                value={newTime}
+                onChange={(e) => setNewTime(e.target.value)}
+                className="font-mono text-xs border border-black/20 px-2 py-1.5"
+              />
+            </div>
+            <button
+              onClick={handleReschedule}
+              disabled={actionLoading === 'reschedule'}
+              className="font-mono text-xs font-bold uppercase tracking-wider bg-[#F4C430] text-black px-4 py-2 hover:bg-[#F4C430]/80 disabled:opacity-50 transition-colors"
+            >
+              {actionLoading === 'reschedule' ? 'Saving...' : 'Confirm'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Debug info */}
+      {showDebug && (
+        <div className="mt-3 p-3 bg-black/5 border border-black/10 font-mono text-[10px] text-black/50 space-y-1">
+          <p>ID: {booking.id}</p>
+          <p>Status: {booking.status}</p>
+          <p>Created: {new Date(booking.created_at).toLocaleString()}</p>
+          <p>Start: {booking.start_time}</p>
+          <p>End: {booking.end_time}</p>
+          <p>Room: {booking.room || 'none'}</p>
+          <p>Engineer: {booking.engineer_name || 'unassigned'}</p>
+          <p>Requested: {booking.requested_engineer || 'any'}</p>
+          <p>Total: {formatCents(booking.total_amount)} · Deposit: {formatCents(booking.deposit_amount)} · Remainder: {formatCents(remainder)}</p>
+          <p>Deposit Paid: {booking.actual_deposit_paid != null ? formatCents(booking.actual_deposit_paid) : 'N/A'}</p>
+          <p>Stripe Customer: {booking.stripe_customer_id || 'none'}</p>
+          <p>Stripe PI: {booking.stripe_payment_intent_id || 'none'}</p>
+        </div>
+      )}
+
       {chargeError && (
         <p className="font-mono text-xs text-red-600 mt-2">{chargeError}</p>
       )}

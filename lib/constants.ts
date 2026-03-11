@@ -90,17 +90,17 @@ export const ROOM_RATES_SINGLE: Record<Room, number> = {
 };
 
 export const ENGINEERS = [
-  { name: 'PRVRB', displayName: 'PRVRB', specialties: ['Recording', 'Mixing & Mastering', 'Production'], studios: ['studio_a'] as Room[] },
-  { name: 'Iszac Griner', displayName: 'Iszac', specialties: ['Recording', 'Mixing & Mastering', 'Production'], studios: ['studio_a', 'studio_b'] as Room[] },
-  { name: 'Zion Tinsley', displayName: 'Zion', specialties: ['Recording', 'Mixing & Mastering', 'Production'], studios: ['studio_b'] as Room[] },
-  { name: 'Jay', displayName: 'Jay', specialties: ['Recording', 'Mixing & Mastering', 'Production'], studios: ['studio_b'] as Room[] },
+  { name: 'PRVRB', displayName: 'PRVRB', email: 'prvrbsounds@gmail.com', specialties: ['Recording', 'Mixing & Mastering', 'Production'], studios: ['studio_a'] as Room[] },
+  { name: 'Iszac Griner', displayName: 'Iszac', email: 'iisszzaacc@gmail.com', specialties: ['Recording', 'Mixing & Mastering', 'Production'], studios: ['studio_a', 'studio_b'] as Room[] },
+  { name: 'Zion Tinsley', displayName: 'Zion', email: 'zionomari@artsaturated.com', specialties: ['Recording', 'Mixing & Mastering', 'Production'], studios: ['studio_b'] as Room[] },
+  { name: 'Jay', displayName: 'Jay', email: 'jay@sweetdreams.us', specialties: ['Recording', 'Mixing & Mastering', 'Production'], studios: ['studio_b'] as Room[] },
 ] as const;
 
 // Super admins — full access to everything
 export const SUPER_ADMINS = [
   'cole@sweetdreams.us',
   'cole@marcuccilli.com',
-  'jayvalleo@sweetdreamsmusic.com',
+  'jay@sweetdreams.us',
 ] as const;
 
 // Beat store license types

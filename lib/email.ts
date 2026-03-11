@@ -105,6 +105,33 @@ export async function sendEngineerAssigned(to: string, details: {
   } catch (e) { console.error('Email error (engineer assigned):', e); }
 }
 
+export async function sendEngineerClaimConfirmation(to: string, details: {
+  engineerName: string; customerName: string; date: string; startTime: string;
+  duration: number; room: string; total: number; remainder: number;
+}) {
+  try {
+    const roomLabel = ROOM_LABELS[details.room as Room] || details.room;
+    await resend.emails.send({
+      from: FROM, to, subject: 'Session Claimed — Sweet Dreams Music',
+      html: wrap(`
+        ${h1('Session Claimed')}
+        ${p(`Hey ${details.engineerName}, you've claimed this session.`)}
+        ${detailTable(`
+          ${detail('Client', details.customerName)}
+          ${detail('Date', details.date)}
+          ${detail('Time', details.startTime)}
+          ${detail('Duration', `${details.duration} hour${details.duration > 1 ? 's' : ''}`)}
+          ${detail('Studio', roomLabel)}
+          ${detail('Session Total', formatMoney(details.total))}
+          ${detail('Remainder to Collect', formatMoney(details.remainder))}
+        `)}
+        ${p('Remember to charge the remainder after the session wraps up.')}
+        ${btn('View Dashboard', `${SITE_URL}/engineer`)}
+      `),
+    });
+  } catch (e) { console.error('Email error (engineer claim confirmation):', e); }
+}
+
 export async function sendAdminBookingAlert(booking: {
   id: string; customerName: string; customerEmail: string; date: string;
   startTime: string; duration: number; room: string; total: number;
