@@ -125,7 +125,7 @@ export default function EngineerSessions({ userEmail }: { userEmail: string }) {
         ) : (
           <div className="space-y-3">
             {myActive.map((b) => (
-              <BookingCard key={b.id} booking={b} />
+              <BookingCard key={b.id} booking={b} onUpdate={loadData} />
             ))}
           </div>
         )}
@@ -141,7 +141,7 @@ export default function EngineerSessions({ userEmail }: { userEmail: string }) {
         ) : (
           <div className="space-y-3">
             {myCompleted.map((b) => (
-              <BookingCard key={b.id} booking={b} />
+              <BookingCard key={b.id} booking={b} onUpdate={loadData} />
             ))}
           </div>
         )}
@@ -150,8 +150,53 @@ export default function EngineerSessions({ userEmail }: { userEmail: string }) {
   );
 }
 
-function BookingCard({ booking }: { booking: Booking }) {
+function BookingCard({ booking, onUpdate }: { booking: Booking; onUpdate?: () => void }) {
+  const [charging, setCharging] = useState(false);
+  const [chargeError, setChargeError] = useState('');
+  const [completing, setCompleting] = useState(false);
   const date = new Date(booking.start_time);
+  const remainder = booking.remainder_amount || 0;
+  const canCharge = booking.status === 'confirmed' && remainder > 0 && booking.engineer_name;
+
+  async function chargeRemainder() {
+    if (!confirm(`Charge ${formatCents(remainder)} to ${booking.customer_name}'s card on file?`)) return;
+    setCharging(true);
+    setChargeError('');
+    try {
+      const res = await fetch('/api/booking/charge-remainder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId: booking.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setChargeError(data.error || 'Failed to charge');
+        return;
+      }
+      alert(`Charged ${formatCents(data.amountCharged)} successfully`);
+      onUpdate?.();
+    } catch {
+      setChargeError('Network error');
+    } finally {
+      setCharging(false);
+    }
+  }
+
+  async function markComplete() {
+    setCompleting(true);
+    try {
+      await fetch('/api/admin/bookings/update', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: booking.id, status: 'completed' }),
+      });
+      onUpdate?.();
+    } catch {
+      // silent
+    } finally {
+      setCompleting(false);
+    }
+  }
 
   return (
     <div className="border-2 border-black/10 p-4 sm:p-5">
@@ -167,6 +212,7 @@ function BookingCard({ booking }: { booking: Booking }) {
             {date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
             {' · '}
             {booking.duration}hr
+            {booking.room && ` · ${booking.room === 'studio_a' ? 'Studio A' : 'Studio B'}`}
           </p>
         </div>
         <div className="text-right">
@@ -183,13 +229,38 @@ function BookingCard({ booking }: { booking: Booking }) {
           </p>
           {booking.actual_deposit_paid != null && booking.actual_deposit_paid > 0 && (
             <p className="font-mono text-[10px] text-black/40">
-              Deposit paid: {formatCents(booking.actual_deposit_paid)}
+              Deposit: {formatCents(booking.actual_deposit_paid)}
+              {remainder > 0 && ` · Remainder: ${formatCents(remainder)}`}
             </p>
           )}
         </div>
       </div>
+
       {booking.admin_notes && (
         <p className="font-mono text-xs text-black/50 mt-2 border-t border-black/5 pt-2">{booking.admin_notes}</p>
+      )}
+
+      {/* Engineer actions */}
+      {canCharge && (
+        <div className="mt-3 pt-3 border-t border-black/10 flex flex-wrap gap-2">
+          <button
+            onClick={chargeRemainder}
+            disabled={charging}
+            className="font-mono text-xs font-bold uppercase tracking-wider bg-black text-white px-4 py-2 hover:bg-black/80 disabled:opacity-50 transition-colors"
+          >
+            {charging ? 'Charging...' : `Charge Remainder — ${formatCents(remainder)}`}
+          </button>
+          <button
+            onClick={markComplete}
+            disabled={completing}
+            className="font-mono text-xs font-bold uppercase tracking-wider border-2 border-green-600 text-green-700 px-4 py-2 hover:bg-green-50 disabled:opacity-50 transition-colors"
+          >
+            {completing ? 'Updating...' : 'Mark Complete'}
+          </button>
+        </div>
+      )}
+      {chargeError && (
+        <p className="font-mono text-xs text-red-600 mt-2">{chargeError}</p>
       )}
     </div>
   );

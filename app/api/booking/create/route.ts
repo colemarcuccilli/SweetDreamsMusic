@@ -19,14 +19,13 @@ export async function POST(request: NextRequest) {
 
     const startHour = parseInt(startTime.split(':')[0]);
 
-    // Server-side double-booking check
+    // Server-side double-booking check (both studios — they share the same space)
     const supabase = createServiceClient();
     const { data: existingBookings } = await supabase
       .from('bookings')
-      .select('start_time, duration')
+      .select('start_time, duration, room')
       .gte('start_time', `${date}T00:00:00`)
       .lte('start_time', `${date}T23:59:59`)
-      .eq('room', room)
       .in('status', ['confirmed', 'pending']);
 
     if (existingBookings && existingBookings.length > 0) {
@@ -40,12 +39,10 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-    const bookingDate = new Date(date + 'T00:00:00');
-    const now = new Date();
-    const sameDayBooking =
-      bookingDate.getFullYear() === now.getFullYear() &&
-      bookingDate.getMonth() === now.getMonth() &&
-      bookingDate.getDate() === now.getDate();
+    // Same-day check using date strings to avoid UTC timezone mismatch
+    // Vercel runs UTC, studio is in Fort Wayne (America/Indiana/Indianapolis)
+    const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Indiana/Indianapolis' });
+    const sameDayBooking = date === todayLocal;
 
     const pricing = calculateSessionTotal(room as Room, duration, startHour, sameDayBooking);
 

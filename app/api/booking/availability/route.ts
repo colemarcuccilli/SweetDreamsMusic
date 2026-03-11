@@ -4,7 +4,6 @@ import { createServiceClient } from '@/lib/supabase/server';
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const date = searchParams.get('date');
-  const room = searchParams.get('room');
 
   if (!date) {
     return NextResponse.json({ error: 'Date is required' }, { status: 400 });
@@ -12,22 +11,16 @@ export async function GET(request: NextRequest) {
 
   const supabase = createServiceClient();
 
-  // Query bookings where start_time falls on this date
+  // Query ALL bookings on this date (studios share space, can't overlap)
   const dayStart = `${date}T00:00:00`;
   const dayEnd = `${date}T23:59:59`;
 
-  let query = supabase
+  const { data: bookings, error } = await supabase
     .from('bookings')
     .select('start_time, duration')
     .gte('start_time', dayStart)
     .lte('start_time', dayEnd)
     .in('status', ['confirmed', 'pending']);
-
-  if (room) {
-    query = query.eq('room', room);
-  }
-
-  const { data: bookings, error } = await query;
 
   if (error) {
     console.error('Availability check error:', error);

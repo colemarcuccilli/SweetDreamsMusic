@@ -68,24 +68,23 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
     return calculateSessionTotal(room, duration, startHour, isSameDayBooking);
   }, [room, duration, startHour, isSameDayBooking]);
 
-  // Fetch availability when date or room changes
+  // Fetch availability when date changes (checks ALL studios since they can't overlap)
   useEffect(() => {
     if (!selectedDate) return;
     const dateStr = selectedDate.toISOString().split('T')[0];
-    const key = `${dateStr}_${room}`;
-    if (bookedSlots[key] !== undefined) return; // already fetched
+    if (bookedSlots[dateStr] !== undefined) return; // already fetched
 
-    fetch(`/api/booking/availability?date=${dateStr}&room=${room}`)
+    fetch(`/api/booking/availability?date=${dateStr}`)
       .then(res => res.json())
       .then(data => {
-        setBookedSlots(prev => ({ ...prev, [key]: data.bookedSlots || [] }));
+        setBookedSlots(prev => ({ ...prev, [dateStr]: data.bookedSlots || [] }));
       })
       .catch(() => {});
-  }, [selectedDate, room, bookedSlots]);
+  }, [selectedDate, bookedSlots]);
 
-  // Get booked hours for current selection
+  // Get booked hours for current date (all studios)
   const currentBookedSlots = selectedDate
-    ? bookedSlots[`${selectedDate.toISOString().split('T')[0]}_${room}`] || []
+    ? bookedSlots[selectedDate.toISOString().split('T')[0]] || []
     : [];
 
   // Check if a time slot would conflict
