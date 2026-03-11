@@ -235,12 +235,20 @@ export default function ClientLibrary() {
 
             {showUpload && (
               <div className="border-2 border-accent p-4 mb-4 space-y-3">
-                <input
-                  type="file"
-                  accept="audio/*"
-                  onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                  className="w-full font-mono text-xs"
-                />
+                <label className="flex items-center gap-3 border-2 border-dashed border-black/20 p-3 cursor-pointer hover:border-accent transition-colors">
+                  <span className="bg-black text-white font-mono text-xs font-bold uppercase tracking-wider px-4 py-2 flex-shrink-0">
+                    Choose File
+                  </span>
+                  <span className="font-mono text-xs text-black/50 truncate">
+                    {uploadFile ? uploadFile.name : 'No file selected'}
+                  </span>
+                  <input
+                    type="file"
+                    accept="audio/*,.wav,.mp3,.flac,.aiff,.m4a,.zip"
+                    onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                    className="hidden"
+                  />
+                </label>
                 <input
                   type="text"
                   value={uploadName}

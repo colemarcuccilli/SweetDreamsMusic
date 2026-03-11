@@ -64,24 +64,32 @@ export async function sendEngineerNewBookingAlert(engineerEmails: string[], book
   id: string; customerName: string; date: string; startTime: string;
   duration: number; room: string;
 }) {
-  try {
-    const roomLabel = ROOM_LABELS[booking.room as Room] || booking.room;
-    await resend.emails.send({
-      from: FROM, to: engineerEmails, subject: 'New Session Available — Claim It',
-      html: wrap(`
-        ${h1('New Session Available')}
-        ${p('A new booking just came in. First to claim it gets the session.')}
-        ${detailTable(`
-          ${detail('Client', booking.customerName)}
-          ${detail('Date', booking.date)}
-          ${detail('Time', booking.startTime)}
-          ${detail('Duration', `${booking.duration} hour${booking.duration > 1 ? 's' : ''}`)}
-          ${detail('Studio', roomLabel)}
-        `)}
-        ${btn('Claim Session', `${SITE_URL}/engineer`)}
-      `),
-    });
-  } catch (e) { console.error('Email error (engineer alert):', e); }
+  const roomLabel = ROOM_LABELS[booking.room as Room] || booking.room;
+  const html = wrap(`
+    ${h1('New Session Available')}
+    ${p('A new booking just came in. First to claim it gets the session.')}
+    ${detailTable(`
+      ${detail('Client', booking.customerName)}
+      ${detail('Date', booking.date)}
+      ${detail('Time', booking.startTime)}
+      ${detail('Duration', `${booking.duration} hour${booking.duration > 1 ? 's' : ''}`)}
+      ${detail('Studio', roomLabel)}
+    `)}
+    ${btn('Claim Session', `${SITE_URL}/engineer`)}
+  `);
+
+  // Send individually so one bounce doesn't kill all
+  for (const email of engineerEmails) {
+    try {
+      console.log('[EMAIL] Sending engineer alert to:', email);
+      await resend.emails.send({
+        from: FROM, to: email, subject: 'New Session Available — Claim It', html,
+      });
+      console.log('[EMAIL] Sent successfully to:', email);
+    } catch (e) {
+      console.error('[EMAIL] Failed to send engineer alert to:', email, e);
+    }
+  }
 }
 
 export async function sendEngineerAssigned(to: string, details: {

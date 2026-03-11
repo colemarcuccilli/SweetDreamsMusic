@@ -10,8 +10,9 @@ export async function GET(request: NextRequest) {
   const email = new URL(request.url).searchParams.get('email');
   if (!email) return NextResponse.json({ error: 'email required' }, { status: 400 });
 
-  // Look up user by email in profiles
   const serviceClient = createServiceClient();
+
+  // 1. Check profiles table for email match
   const { data: profile } = await serviceClient
     .from('profiles')
     .select('user_id')
@@ -22,22 +23,33 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ userId: profile.user_id });
   }
 
-  // Fallback: look up by user_id from auth via profile join
-  const { data: profiles } = await serviceClient
-    .from('profiles')
-    .select('user_id, email')
-    .not('user_id', 'is', null);
+  // 2. Query auth.users directly via raw SQL for email match
+  const { data: authMatch } = await serviceClient
+    .rpc('lookup_user_by_email', { lookup_email: email });
 
-  // Check auth.users for email match
-  if (profiles) {
-    for (const p of profiles) {
-      if (!p.email) {
-        // Check if this user's auth email matches
-        const { data: authData } = await serviceClient.auth.admin.getUserById(p.user_id);
-        if (authData?.user?.email === email) {
-          return NextResponse.json({ userId: p.user_id });
-        }
-      }
+  if (authMatch) {
+    return NextResponse.json({ userId: authMatch });
+  }
+
+  // 3. Fallback: search profiles joined with bookings by customer_email
+  const { data: booking } = await serviceClient
+    .from('bookings')
+    .select('customer_email')
+    .eq('customer_email', email)
+    .limit(1)
+    .single();
+
+  if (booking) {
+    // Find profile by matching on auth email — use admin listUsers with filter
+    // This is a last resort
+    const { data: listData } = await serviceClient.auth.admin.listUsers({
+      perPage: 1,
+    });
+
+    // Search through users for email match
+    const matchedUser = listData?.users?.find(u => u.email === email);
+    if (matchedUser) {
+      return NextResponse.json({ userId: matchedUser.id });
     }
   }
 

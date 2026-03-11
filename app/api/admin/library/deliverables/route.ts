@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { verifyEngineerAccess } from '@/lib/admin-auth';
 import { sendSessionFilesDelivered } from '@/lib/email';
+
+// Allow longer timeout for large audio file uploads
+export const maxDuration = 60;
 
 // GET - fetch deliverables for a user
 export async function GET(request: NextRequest) {
@@ -12,7 +15,8 @@ export async function GET(request: NextRequest) {
   const userId = new URL(request.url).searchParams.get('user_id');
   if (!userId) return NextResponse.json({ error: 'user_id required' }, { status: 400 });
 
-  const { data, error } = await supabase
+  const serviceClient = createServiceClient();
+  const { data, error } = await serviceClient
     .from('deliverables')
     .select('*')
     .eq('user_id', userId)
@@ -29,38 +33,71 @@ export async function POST(request: NextRequest) {
   if (!hasAccess) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { data: { user } } = await supabase.auth.getUser();
+  const serviceClient = createServiceClient();
 
   const formData = await request.formData();
   const file = formData.get('file') as File;
-  const userId = formData.get('user_id') as string;
+  let userId = formData.get('user_id') as string;
+  const customerEmail = formData.get('customer_email') as string;
   const displayName = formData.get('display_name') as string;
   const description = formData.get('description') as string;
 
-  if (!file || !userId) {
-    return NextResponse.json({ error: 'file and user_id required' }, { status: 400 });
+  if (!file) {
+    return NextResponse.json({ error: 'file required' }, { status: 400 });
   }
 
-  // Upload to Supabase Storage
+  // If customer_email provided instead of user_id, look up the user
+  if (!userId && customerEmail) {
+    // Try profiles table first
+    const { data: profile } = await serviceClient
+      .from('profiles')
+      .select('user_id')
+      .eq('email', customerEmail)
+      .single();
+
+    if (profile?.user_id) {
+      userId = profile.user_id;
+    } else {
+      // Fallback: search auth.users via admin API
+      const { data: listData } = await serviceClient.auth.admin.listUsers();
+      const matchedUser = listData?.users?.find(u => u.email === customerEmail);
+      if (matchedUser) {
+        userId = matchedUser.id;
+        // Backfill the profile email so next lookup is faster
+        await serviceClient
+          .from('profiles')
+          .update({ email: customerEmail })
+          .eq('user_id', matchedUser.id);
+      }
+    }
+  }
+
+  if (!userId) {
+    return NextResponse.json({ error: 'Could not find client account. They may need to sign up first.' }, { status: 404 });
+  }
+
+  // Upload to Supabase Storage using service client (bypasses RLS on storage)
   const timestamp = Date.now();
   const filePath = `${userId}/${timestamp}_${file.name}`;
 
-  const { error: uploadError } = await supabase.storage
+  const { error: uploadError } = await serviceClient.storage
     .from('client-audio-files')
     .upload(filePath, file);
 
   if (uploadError) {
+    console.error('[DELIVERABLES] Storage upload error:', uploadError);
     return NextResponse.json({ error: uploadError.message }, { status: 500 });
   }
 
   // Get engineer's profile for the name
-  const { data: engineerProfile } = await supabase
+  const { data: engineerProfile } = await serviceClient
     .from('profiles')
     .select('display_name')
     .eq('user_id', user?.id)
     .single();
 
   // Create deliverable record
-  const { data: deliverable, error: dbError } = await supabase
+  const { data: deliverable, error: dbError } = await serviceClient
     .from('deliverables')
     .insert({
       user_id: userId,
@@ -77,10 +114,11 @@ export async function POST(request: NextRequest) {
     .single();
 
   if (dbError) {
+    console.error('[DELIVERABLES] DB insert error:', dbError);
     return NextResponse.json({ error: dbError.message }, { status: 500 });
   }
 
-  // Send thank-you email if sendEmail flag is set (from session completion flow)
+  // Send thank-you email if sendEmail flag is set
   const sendEmail = formData.get('send_email') as string;
   const bookingRoom = formData.get('booking_room') as string;
   const bookingDate = formData.get('booking_date') as string;
@@ -88,23 +126,24 @@ export async function POST(request: NextRequest) {
   const engineerDisplayName = engineerProfile?.display_name || user?.email || 'Your Engineer';
 
   if (sendEmail === 'true') {
-    // Get client's email
-    const { data: clientProfile } = await supabase
-      .from('profiles')
-      .select('email')
-      .eq('user_id', userId)
-      .single();
-
-    // Also check auth.users if profile email is empty
-    let clientEmail = clientProfile?.email;
+    // Use customerEmail directly if we have it, otherwise look it up
+    let clientEmail: string | undefined = customerEmail || undefined;
     if (!clientEmail) {
-      const { data: authUser } = await supabase.auth.admin.getUserById(userId);
-      clientEmail = authUser?.user?.email;
+      const { data: clientProfile } = await serviceClient
+        .from('profiles')
+        .select('email')
+        .eq('user_id', userId)
+        .single();
+      clientEmail = clientProfile?.email;
+
+      if (!clientEmail) {
+        const { data: authUser } = await serviceClient.auth.admin.getUserById(userId);
+        clientEmail = authUser?.user?.email || undefined;
+      }
     }
 
     if (clientEmail) {
-      // Count total files for this client
-      const { count } = await supabase
+      const { count } = await serviceClient
         .from('deliverables')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', userId);
@@ -131,18 +170,20 @@ export async function DELETE(request: NextRequest) {
   const { id } = await request.json();
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
+  const serviceClient = createServiceClient();
+
   // Get file path first
-  const { data: deliverable } = await supabase
+  const { data: deliverable } = await serviceClient
     .from('deliverables')
     .select('file_path')
     .eq('id', id)
     .single();
 
   if (deliverable?.file_path) {
-    await supabase.storage.from('client-audio-files').remove([deliverable.file_path]);
+    await serviceClient.storage.from('client-audio-files').remove([deliverable.file_path]);
   }
 
-  const { error } = await supabase.from('deliverables').delete().eq('id', id);
+  const { error } = await serviceClient.from('deliverables').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ success: true });

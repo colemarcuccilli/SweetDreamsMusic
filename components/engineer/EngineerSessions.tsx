@@ -254,11 +254,9 @@ function BookingCard({ booking, onUpdate, completed }: { booking: Booking; onUpd
     if (!uploadFile || !booking.customer_email) return;
     setUploading(true);
 
-    // We need the user_id for the client. Look it up by email via a helper approach.
-    // The deliverables API needs user_id, so we pass customer_email and let the API find them.
     const formData = new FormData();
     formData.append('file', uploadFile);
-    formData.append('user_id', booking.customer_email); // Will be resolved by lookup
+    formData.append('customer_email', booking.customer_email);
     formData.append('display_name', uploadName || uploadFile.name);
     formData.append('description', `From session on ${date.toLocaleDateString()}`);
     formData.append('send_email', 'true');
@@ -267,16 +265,6 @@ function BookingCard({ booking, onUpdate, completed }: { booking: Booking; onUpd
     formData.append('booking_date', date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }));
 
     try {
-      // First get the user_id from the email
-      const lookupRes = await fetch(`/api/booking/lookup-user?email=${encodeURIComponent(booking.customer_email)}`);
-      const lookupData = await lookupRes.json();
-      if (!lookupData.userId) {
-        alert('Could not find client account. They may need to sign up first.');
-        setUploading(false);
-        return;
-      }
-      formData.set('user_id', lookupData.userId);
-
       const res = await fetch('/api/admin/library/deliverables', { method: 'POST', body: formData });
       const data = await res.json();
       if (!res.ok) {
@@ -286,8 +274,9 @@ function BookingCard({ booking, onUpdate, completed }: { booking: Booking; onUpd
         setUploadFile(null);
         setUploadName('');
       }
-    } catch {
-      alert('Network error');
+    } catch (err) {
+      console.error('Upload error:', err);
+      alert('Network error — file may be too large or connection timed out');
     } finally {
       setUploading(false);
     }
@@ -454,12 +443,20 @@ function BookingCard({ booking, onUpdate, completed }: { booking: Booking; onUpd
                   <p className="font-mono text-[10px] text-black/50">
                     Upload the final files for {booking.customer_name}. They will receive an email with a download link and a Google review request.
                   </p>
-                  <input
-                    type="file"
-                    accept="audio/*,.wav,.mp3,.flac,.aiff,.m4a,.zip"
-                    onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                    className="w-full font-mono text-xs"
-                  />
+                  <label className="flex items-center gap-3 border-2 border-dashed border-black/20 p-3 cursor-pointer hover:border-accent transition-colors">
+                    <span className="bg-black text-white font-mono text-xs font-bold uppercase tracking-wider px-4 py-2 flex-shrink-0">
+                      Choose File
+                    </span>
+                    <span className="font-mono text-xs text-black/50 truncate">
+                      {uploadFile ? uploadFile.name : 'No file selected'}
+                    </span>
+                    <input
+                      type="file"
+                      accept="audio/*,.wav,.mp3,.flac,.aiff,.m4a,.zip"
+                      onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                      className="hidden"
+                    />
+                  </label>
                   <input
                     type="text"
                     value={uploadName}
