@@ -209,6 +209,30 @@ export async function sendWelcomeEmail(to: string, name: string) {
   } catch (e) { console.error('Email error (welcome):', e); }
 }
 
+export async function sendSessionFilesDelivered(to: string, details: {
+  customerName: string; engineerName: string; fileCount: number;
+  date: string; room: string;
+}) {
+  try {
+    const roomLabel = ROOM_LABELS[details.room as Room] || details.room;
+    const reviewUrl = 'https://g.page/r/CcWAY0XlIQNpEBM/review';
+    await resend.emails.send({
+      from: FROM, to, subject: 'Your Session Files Are Ready — Sweet Dreams Music',
+      html: wrap(`
+        ${h1('Your Files Are Ready')}
+        ${p(`Hey ${details.customerName},`)}
+        ${p(`Thanks for coming in! ${details.engineerName} has uploaded ${details.fileCount} file${details.fileCount > 1 ? 's' : ''} from your ${roomLabel} session. You can download them from your dashboard.`)}
+        ${btn('Download Files', `${SITE_URL}/dashboard`)}
+        <div style="margin-top:32px;padding:24px;background:#111;border-left:3px solid #F4C430">
+          ${p('We hope you had a great experience at Sweet Dreams Music. If you did, it would mean a lot if you left us a quick review on Google.')}
+          <a href="${reviewUrl}" style="display:inline-block;background:#F4C430;color:#000;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;font-size:13px;padding:14px 28px;text-decoration:none;margin-top:12px">Leave a Review</a>
+        </div>
+        ${p('See you next time!')}
+      `),
+    });
+  } catch (e) { console.error('Email error (files delivered):', e); }
+}
+
 export async function sendContactForm(details: {
   name: string; email: string; subject: string; message: string;
 }) {

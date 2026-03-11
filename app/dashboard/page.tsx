@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { Calendar, Music, FileAudio } from 'lucide-react';
+import { Calendar, Music, FileAudio, Download } from 'lucide-react';
 import { getSessionUser } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { formatCents } from '@/lib/utils';
@@ -28,10 +28,23 @@ export default async function DashboardPage() {
   // Fetch user's deliverables (files from engineers)
   const { data: deliverables } = await supabase
     .from('deliverables')
-    .select('id, file_name, display_name, file_type, file_size, uploaded_by_name, created_at')
+    .select('id, file_name, display_name, file_path, file_type, file_size, uploaded_by_name, created_at')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(10);
+
+  // Generate signed download URLs for each file
+  const filesWithUrls = await Promise.all(
+    (deliverables || []).map(async (file) => {
+      if (file.file_path) {
+        const { data } = await supabase.storage
+          .from('client-audio-files')
+          .createSignedUrl(file.file_path, 3600); // 1 hour
+        return { ...file, downloadUrl: data?.signedUrl || null };
+      }
+      return { ...file, downloadUrl: null };
+    })
+  );
 
   return (
     <>
@@ -123,7 +136,7 @@ export default async function DashboardPage() {
                 YOUR FILES
               </h2>
 
-              {(!deliverables || deliverables.length === 0) ? (
+              {filesWithUrls.length === 0 ? (
                 <div className="border-2 border-black/10 p-8 text-center">
                   <p className="font-mono text-sm text-black/50">
                     No files yet. Files from your sessions will appear here.
@@ -131,20 +144,32 @@ export default async function DashboardPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {deliverables.map((file) => (
+                  {filesWithUrls.map((file) => (
                     <div key={file.id} className="border-2 border-black/10 p-4 sm:p-5 hover:border-black/30 transition-colors">
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <p className="font-mono text-sm font-semibold">
+                      <div className="flex justify-between items-start gap-3">
+                        <div className="min-w-0">
+                          <p className="font-mono text-sm font-semibold truncate">
                             {file.display_name || file.file_name}
                           </p>
                           <p className="font-mono text-xs text-black/50 mt-1">
                             by {file.uploaded_by_name} — {new Date(file.created_at).toLocaleDateString()}
                           </p>
                         </div>
-                        <span className="font-mono text-xs text-black/40 uppercase">
-                          {file.file_type?.split('/')[1] || 'file'}
-                        </span>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className="font-mono text-xs text-black/40 uppercase">
+                            {file.file_type?.split('/')[1] || 'file'}
+                          </span>
+                          {file.downloadUrl && (
+                            <a
+                              href={file.downloadUrl}
+                              download={file.file_name}
+                              className="bg-black text-white p-2 hover:bg-black/80 transition-colors"
+                              title="Download"
+                            >
+                              <Download className="w-4 h-4" />
+                            </a>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}

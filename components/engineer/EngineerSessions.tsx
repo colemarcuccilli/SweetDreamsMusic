@@ -173,6 +173,11 @@ function BookingCard({ booking, onUpdate, completed }: { booking: Booking; onUpd
   const [showReschedule, setShowReschedule] = useState(false);
   const [newDate, setNewDate] = useState('');
   const [newTime, setNewTime] = useState('');
+  const [showFileUpload, setShowFileUpload] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadName, setUploadName] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
 
   const date = new Date(booking.start_time);
   const remainder = booking.remainder_amount || 0;
@@ -243,6 +248,49 @@ function BookingCard({ booking, onUpdate, completed }: { booking: Booking; onUpd
     if (!confirm(`Reschedule to ${newDate} at ${newTime}?`)) return;
     updateBooking({ startTime }, 'reschedule');
     setShowReschedule(false);
+  }
+
+  async function handleFileUpload() {
+    if (!uploadFile || !booking.customer_email) return;
+    setUploading(true);
+
+    // We need the user_id for the client. Look it up by email via a helper approach.
+    // The deliverables API needs user_id, so we pass customer_email and let the API find them.
+    const formData = new FormData();
+    formData.append('file', uploadFile);
+    formData.append('user_id', booking.customer_email); // Will be resolved by lookup
+    formData.append('display_name', uploadName || uploadFile.name);
+    formData.append('description', `From session on ${date.toLocaleDateString()}`);
+    formData.append('send_email', 'true');
+    formData.append('customer_name', booking.customer_name);
+    formData.append('booking_room', booking.room || '');
+    formData.append('booking_date', date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }));
+
+    try {
+      // First get the user_id from the email
+      const lookupRes = await fetch(`/api/booking/lookup-user?email=${encodeURIComponent(booking.customer_email)}`);
+      const lookupData = await lookupRes.json();
+      if (!lookupData.userId) {
+        alert('Could not find client account. They may need to sign up first.');
+        setUploading(false);
+        return;
+      }
+      formData.set('user_id', lookupData.userId);
+
+      const res = await fetch('/api/admin/library/deliverables', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Upload failed');
+      } else {
+        setUploadSuccess(true);
+        setUploadFile(null);
+        setUploadName('');
+      }
+    } catch {
+      alert('Network error');
+    } finally {
+      setUploading(false);
+    }
   }
 
   return (
@@ -368,6 +416,71 @@ function BookingCard({ booking, onUpdate, completed }: { booking: Booking; onUpd
               {actionLoading === 'reschedule' ? 'Saving...' : 'Confirm'}
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Send Files (for completed sessions) */}
+      {completed && (
+        <div className="mt-3 pt-3 border-t border-black/10">
+          {uploadSuccess ? (
+            <div className="bg-green-50 border border-green-200 p-4 text-center">
+              <p className="font-mono text-xs text-green-700 font-bold">Files sent! Client has been emailed with a download link and review request.</p>
+              <button
+                onClick={() => { setUploadSuccess(false); setShowFileUpload(true); }}
+                className="font-mono text-[10px] text-green-600 hover:underline mt-2"
+              >
+                Upload another file
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => setShowFileUpload(!showFileUpload)}
+                  className="font-mono text-xs font-bold uppercase tracking-wider bg-black text-white px-4 py-2 hover:bg-black/80 transition-colors"
+                >
+                  {showFileUpload ? 'Cancel' : 'Send Files to Client'}
+                </button>
+                <button
+                  onClick={() => setShowDebug(!showDebug)}
+                  className="font-mono text-xs uppercase tracking-wider text-black/30 px-3 py-2 hover:text-black/60 transition-colors"
+                >
+                  {showDebug ? 'Hide Details' : 'Debug'}
+                </button>
+              </div>
+              {showFileUpload && (
+                <div className="mt-3 p-4 bg-black/5 border border-black/10 space-y-3">
+                  <p className="font-mono text-xs font-semibold uppercase tracking-wider">Upload Session Files</p>
+                  <p className="font-mono text-[10px] text-black/50">
+                    Upload the final files for {booking.customer_name}. They will receive an email with a download link and a Google review request.
+                  </p>
+                  <input
+                    type="file"
+                    accept="audio/*,.wav,.mp3,.flac,.aiff,.m4a,.zip"
+                    onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                    className="w-full font-mono text-xs"
+                  />
+                  <input
+                    type="text"
+                    value={uploadName}
+                    onChange={(e) => setUploadName(e.target.value)}
+                    placeholder="Display name (e.g. 'Final Mix - Track Name')"
+                    className="w-full border border-black/20 px-3 py-2 font-mono text-xs focus:border-accent focus:outline-none"
+                  />
+                  <button
+                    onClick={handleFileUpload}
+                    disabled={!uploadFile || uploading || !booking.customer_email}
+                    className="bg-[#F4C430] text-black font-mono text-xs font-bold uppercase tracking-wider px-5 py-2.5 hover:bg-[#F4C430]/80 disabled:opacity-50 transition-colors"
+                  >
+                    {uploading ? 'Uploading & Sending Email...' : 'Upload & Send to Client'}
+                  </button>
+                  {!booking.customer_email && (
+                    <p className="font-mono text-[10px] text-red-500">No email on file for this client</p>
+                  )}
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 

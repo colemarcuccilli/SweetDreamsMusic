@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { verifyEngineerAccess } from '@/lib/admin-auth';
+import { sendSessionFilesDelivered } from '@/lib/email';
 
 // GET - fetch deliverables for a user
 export async function GET(request: NextRequest) {
@@ -77,6 +78,45 @@ export async function POST(request: NextRequest) {
 
   if (dbError) {
     return NextResponse.json({ error: dbError.message }, { status: 500 });
+  }
+
+  // Send thank-you email if sendEmail flag is set (from session completion flow)
+  const sendEmail = formData.get('send_email') as string;
+  const bookingRoom = formData.get('booking_room') as string;
+  const bookingDate = formData.get('booking_date') as string;
+  const customerName = formData.get('customer_name') as string;
+  const engineerDisplayName = engineerProfile?.display_name || user?.email || 'Your Engineer';
+
+  if (sendEmail === 'true') {
+    // Get client's email
+    const { data: clientProfile } = await supabase
+      .from('profiles')
+      .select('email')
+      .eq('user_id', userId)
+      .single();
+
+    // Also check auth.users if profile email is empty
+    let clientEmail = clientProfile?.email;
+    if (!clientEmail) {
+      const { data: authUser } = await supabase.auth.admin.getUserById(userId);
+      clientEmail = authUser?.user?.email;
+    }
+
+    if (clientEmail) {
+      // Count total files for this client
+      const { count } = await supabase
+        .from('deliverables')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId);
+
+      await sendSessionFilesDelivered(clientEmail, {
+        customerName: customerName || 'there',
+        engineerName: engineerDisplayName,
+        fileCount: count || 1,
+        date: bookingDate || new Date().toLocaleDateString(),
+        room: bookingRoom || '',
+      });
+    }
   }
 
   return NextResponse.json({ deliverable });

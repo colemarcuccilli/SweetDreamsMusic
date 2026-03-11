@@ -4,6 +4,7 @@ import Script from 'next/script';
 import { Analytics } from '@vercel/analytics/next';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
+import JsonLd from '@/components/seo/JsonLd';
 import { SEO, SITE_URL, GEO, BRAND } from '@/lib/constants';
 import './globals.css';
 
@@ -21,29 +22,41 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: {
     default: SEO.defaultTitle,
     template: SEO.titleTemplate,
   },
   description: SEO.defaultDescription,
   keywords: SEO.keywords.join(', '),
-  authors: [{ name: BRAND.legalName }],
+  authors: [{ name: BRAND.legalName, url: SITE_URL }],
+  creator: BRAND.name,
+  publisher: BRAND.name,
   robots: {
     index: true,
     follow: true,
-    googleBot: { index: true, follow: true },
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
   },
   alternates: {
-    canonical: SITE_URL,
+    canonical: '/',
   },
+  category: 'music',
+  classification: 'Recording Studio',
   other: {
     'geo.region': GEO.region,
     'geo.placename': GEO.placeName,
+    'format-detection': 'telephone=no',
   },
   openGraph: {
     type: 'website',
     title: SEO.defaultTitle,
-    description: SEO.defaultDescription,
+    description: 'Professional recording studio in Fort Wayne, IN. Two studios, four engineers, open 24/7. Book sessions starting at $50/hour. Recording, mixing, mastering & production.',
     url: SITE_URL,
     siteName: BRAND.name,
     locale: 'en_US',
@@ -51,7 +64,10 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: SEO.defaultTitle,
-    description: SEO.defaultDescription,
+    description: 'Professional recording studio in Fort Wayne, IN. Two studios, four engineers, open 24/7. Sessions starting at $50/hour.',
+  },
+  verification: {
+    google: process.env.GOOGLE_SITE_VERIFICATION || undefined,
   },
 };
 
@@ -75,6 +91,7 @@ export default function RootLayout({
             gtag('config', 'G-85S88F3K6K');
           `}
         </Script>
+        <JsonLd />
       </head>
       <body className={ibmPlexMono.className}>
         <Header />

@@ -22,13 +22,20 @@ export const SEO = {
   keywords: [
     'Fort Wayne recording studio',
     'recording studio near me',
+    'recording studio Fort Wayne Indiana',
     'music production Fort Wayne',
-    'studio booking',
-    'mixing and mastering',
-    'professional recording',
+    'studio booking online',
+    'mixing and mastering Fort Wayne',
+    'professional recording studio',
     'studio rental Fort Wayne',
+    'vocal recording Fort Wayne',
+    'band recording Indiana',
     'buy beats online',
     'beat store',
+    'music studio 24 hours',
+    'affordable recording studio',
+    'recording session booking',
+    'Sweet Dreams Music',
   ],
 };
 
