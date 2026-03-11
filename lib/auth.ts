@@ -21,11 +21,15 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   if (!user || !user.email) return null;
 
   // Fetch profile including role
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('id, display_name, public_profile_slug, profile_picture_url, role')
     .eq('user_id', user.id)
     .single();
+
+  if (profileError) {
+    console.error('[AUTH] Profile fetch error for', user.email, ':', JSON.stringify(profileError));
+  }
 
   const role = getUserRole(user.email, profile?.role);
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
+import { createServiceClient } from '@/lib/supabase/server';
 import { PRICING, SITE_URL, ROOM_LABELS, type Room } from '@/lib/constants';
 import { calculateSessionTotal } from '@/lib/utils';
 
@@ -17,6 +18,28 @@ export async function POST(request: NextRequest) {
     }
 
     const startHour = parseInt(startTime.split(':')[0]);
+
+    // Server-side double-booking check
+    const supabase = createServiceClient();
+    const { data: existingBookings } = await supabase
+      .from('bookings')
+      .select('start_time, duration')
+      .gte('start_time', `${date}T00:00:00`)
+      .lte('start_time', `${date}T23:59:59`)
+      .eq('room', room)
+      .in('status', ['confirmed', 'pending']);
+
+    if (existingBookings && existingBookings.length > 0) {
+      const requestedHours = Array.from({ length: duration }, (_, i) => (startHour + i) % 24);
+      for (const booking of existingBookings) {
+        const bookedStart = new Date(booking.start_time).getHours();
+        const bookedHours = Array.from({ length: booking.duration || 1 }, (_, i) => (bookedStart + i) % 24);
+        const overlap = requestedHours.some(h => bookedHours.includes(h));
+        if (overlap) {
+          return NextResponse.json({ error: 'This time slot is already booked. Please choose a different time.' }, { status: 409 });
+        }
+      }
+    }
     const bookingDate = new Date(date + 'T00:00:00');
     const now = new Date();
     const sameDayBooking =

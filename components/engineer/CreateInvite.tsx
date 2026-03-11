@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Copy, Check, Link as LinkIcon } from 'lucide-react';
-import { ROOMS, ROOM_LABELS, ROOM_RATES, PRICING, type Room } from '@/lib/constants';
+import { ROOMS, ROOM_LABELS, ROOM_RATES, ROOM_RATES_SINGLE, PRICING, type Room } from '@/lib/constants';
 import { formatCents, formatTime, calculateSessionTotal } from '@/lib/utils';
 
 export default function CreateInvite() {
@@ -156,9 +156,25 @@ export default function CreateInvite() {
       </div>
 
       {/* Price Summary */}
-      <div className="border-2 border-black p-4 font-mono text-sm">
-        <div className="flex justify-between"><span className="text-black/60">Session Total</span><span>{formatCents(pricing.total)}</span></div>
-        <div className="flex justify-between font-bold mt-1"><span>Client Deposit (50%)</span><span className="text-accent">{formatCents(pricing.deposit)}</span></div>
+      <div className="border-2 border-black p-4 font-mono text-sm space-y-2">
+        <div className="flex justify-between text-black/60">
+          <span>{ROOM_LABELS[room]} × {duration}hr @ {formatCents(duration === 1 ? ROOM_RATES_SINGLE[room] : ROOM_RATES[room])}/hr</span>
+          <span>{formatCents(pricing.subtotal)}</span>
+        </div>
+        {pricing.nightFees > 0 && (
+          <div className="flex justify-between text-amber-600">
+            <span>Night surcharges</span>
+            <span>+{formatCents(pricing.nightFees)}</span>
+          </div>
+        )}
+        <div className="flex justify-between border-t border-black/10 pt-2">
+          <span>Session Total</span>
+          <span className="font-bold">{formatCents(pricing.total)}</span>
+        </div>
+        <div className="flex justify-between font-bold">
+          <span>Client Deposit (50%)</span>
+          <span className="text-accent">{formatCents(pricing.deposit)}</span>
+        </div>
       </div>
 
       <button

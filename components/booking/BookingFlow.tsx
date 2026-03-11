@@ -52,6 +52,8 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
   const [customerPhone, setCustomerPhone] = useState('');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [bookedSlots, setBookedSlots] = useState<Record<string, number[]>>({});
+  const [checkoutError, setCheckoutError] = useState('');
 
   const today = new Date();
   const [calMonth, setCalMonth] = useState(today.getMonth());
@@ -65,6 +67,38 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
   const pricing = useMemo(() => {
     return calculateSessionTotal(room, duration, startHour, isSameDayBooking);
   }, [room, duration, startHour, isSameDayBooking]);
+
+  // Fetch availability when date or room changes
+  useEffect(() => {
+    if (!selectedDate) return;
+    const dateStr = selectedDate.toISOString().split('T')[0];
+    const key = `${dateStr}_${room}`;
+    if (bookedSlots[key] !== undefined) return; // already fetched
+
+    fetch(`/api/booking/availability?date=${dateStr}&room=${room}`)
+      .then(res => res.json())
+      .then(data => {
+        setBookedSlots(prev => ({ ...prev, [key]: data.bookedSlots || [] }));
+      })
+      .catch(() => {});
+  }, [selectedDate, room, bookedSlots]);
+
+  // Get booked hours for current selection
+  const currentBookedSlots = selectedDate
+    ? bookedSlots[`${selectedDate.toISOString().split('T')[0]}_${room}`] || []
+    : [];
+
+  // Check if a time slot would conflict
+  function isSlotBooked(hour: number): boolean {
+    return currentBookedSlots.includes(hour);
+  }
+
+  function wouldOverlap(startH: number, dur: number): boolean {
+    for (let i = 0; i < dur; i++) {
+      if (currentBookedSlots.includes((startH + i) % 24)) return true;
+    }
+    return false;
+  }
 
   // Refs for auto-scrolling
   const timeRef = useRef<HTMLDivElement>(null);
@@ -109,6 +143,14 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
 
   async function handleCheckout() {
     if (!selectedDate || !selectedTime || !customerName.trim()) return;
+    setCheckoutError('');
+
+    // Client-side overlap check
+    if (wouldOverlap(startHour, duration)) {
+      setCheckoutError('Your session overlaps with an existing booking. Please adjust your time or duration.');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -132,10 +174,12 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
       if (data.url) {
         window.location.href = data.url;
       } else {
-        throw new Error(data.error || 'Failed to create checkout session');
+        setCheckoutError(data.error || 'Failed to create checkout session');
+        setIsSubmitting(false);
       }
     } catch (err) {
       console.error('Checkout error:', err);
+      setCheckoutError('Something went wrong. Please try again.');
       setIsSubmitting(false);
     }
   }
@@ -257,24 +301,27 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
             {timeSlots.map((slot) => {
               const hour = parseInt(slot.split(':')[0]);
               const surcharge = getHourSurcharge(hour);
+              const booked = isSlotBooked(hour);
               return (
                 <button
                   key={slot}
-                  onClick={() => setSelectedTime(slot)}
+                  onClick={() => !booked && setSelectedTime(slot)}
+                  disabled={booked}
                   className={cn(
                     'px-2 py-3 font-mono text-xs border transition-colors text-center',
-                    selectedTime === slot
+                    booked && 'bg-black/10 text-black/30 border-black/10 cursor-not-allowed line-through',
+                    !booked && selectedTime === slot
                       ? 'bg-black text-white border-black'
-                      : 'border-black/20 hover:border-black',
-                    surcharge.tier === 'lateNight' && selectedTime !== slot && 'border-amber-400/50 bg-amber-50',
-                    surcharge.tier === 'deepNight' && selectedTime !== slot && 'border-red-400/50 bg-red-50'
+                      : !booked && 'border-black/20 hover:border-black',
+                    !booked && surcharge.tier === 'lateNight' && selectedTime !== slot && 'border-amber-400/50 bg-amber-50',
+                    !booked && surcharge.tier === 'deepNight' && selectedTime !== slot && 'border-red-400/50 bg-red-50'
                   )}
                 >
-                  {formatTime(slot)}
-                  {surcharge.tier === 'lateNight' && (
+                  {booked ? 'Booked' : formatTime(slot)}
+                  {!booked && surcharge.tier === 'lateNight' && (
                     <span className="block text-[9px] text-amber-600 font-semibold mt-0.5">+$10/hr</span>
                   )}
-                  {surcharge.tier === 'deepNight' && (
+                  {!booked && surcharge.tier === 'deepNight' && (
                     <span className="block text-[9px] text-red-500 font-semibold mt-0.5">+$30/hr</span>
                   )}
                 </button>
@@ -562,10 +609,24 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
           </div>
         </div>
 
+        {/* Overlap warning */}
+        {selectedTime && wouldOverlap(startHour, duration) && (
+          <div className="border-2 border-red-500 bg-red-50 p-4 mb-4 font-mono text-sm text-red-700">
+            <AlertTriangle className="w-4 h-4 inline mr-2" />
+            Your session overlaps with an existing booking. Please adjust your start time or duration.
+          </div>
+        )}
+
+        {checkoutError && (
+          <div className="border-2 border-red-500 bg-red-50 p-4 mb-4 font-mono text-sm text-red-700">
+            {checkoutError}
+          </div>
+        )}
+
         {/* Pay button */}
         <button
           onClick={handleCheckout}
-          disabled={!selectedDate || !selectedTime || !customerName.trim() || isSubmitting}
+          disabled={!selectedDate || !selectedTime || !customerName.trim() || isSubmitting || (selectedTime ? wouldOverlap(startHour, duration) : false)}
           className="w-full bg-accent text-black font-mono text-lg font-bold uppercase tracking-wider px-8 py-5 hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {isSubmitting ? 'PROCESSING...' : `PAY DEPOSIT — ${formatCents(pricing.deposit)}`}
