@@ -4,7 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
-type Mode = 'signin' | 'signup';
+type Mode = 'signin' | 'signup' | 'forgot';
 
 export default function AuthForm() {
   const [mode, setMode] = useState<Mode>('signin');
@@ -25,7 +25,13 @@ export default function AuthForm() {
     setLoading(true);
 
     try {
-      if (mode === 'signup') {
+      if (mode === 'forgot') {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/reset-password`,
+        });
+        if (error) throw error;
+        setMessage('Check your email for a password reset link.');
+      } else if (mode === 'signup') {
         const { error } = await supabase.auth.signUp({
           email,
           password,
@@ -86,31 +92,33 @@ export default function AuthForm() {
         />
       </div>
 
-      <div>
-        <label htmlFor="password" className="block font-mono text-xs font-semibold uppercase tracking-wider mb-2">
-          Password *
-        </label>
-        <div className="relative">
-          <input
-            type={showPassword ? 'text' : 'password'}
-            id="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={6}
-            className="w-full border-2 border-black px-4 py-3 pr-12 font-mono text-sm bg-transparent focus:border-accent focus:outline-none"
-            placeholder="Min 6 characters"
-          />
-          <button
-            type="button"
-            onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-black/40 hover:text-black transition-colors"
-            tabIndex={-1}
-          >
-            {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-          </button>
+      {mode !== 'forgot' && (
+        <div>
+          <label htmlFor="password" className="block font-mono text-xs font-semibold uppercase tracking-wider mb-2">
+            Password *
+          </label>
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              id="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={6}
+              className="w-full border-2 border-black px-4 py-3 pr-12 font-mono text-sm bg-transparent focus:border-accent focus:outline-none"
+              placeholder="Min 6 characters"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-black/40 hover:text-black transition-colors"
+              tabIndex={-1}
+            >
+              {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {error && (
         <p className="font-mono text-sm text-red-600">{error}</p>
@@ -125,8 +133,20 @@ export default function AuthForm() {
         disabled={loading}
         className="w-full bg-black text-white font-mono text-base font-bold tracking-wider uppercase px-8 py-4 hover:bg-black/80 transition-colors disabled:opacity-50"
       >
-        {loading ? 'LOADING...' : mode === 'signin' ? 'SIGN IN' : 'CREATE ACCOUNT'}
+        {loading ? 'LOADING...' : mode === 'forgot' ? 'SEND RESET LINK' : mode === 'signin' ? 'SIGN IN' : 'CREATE ACCOUNT'}
       </button>
+
+      {mode === 'signin' && (
+        <div className="text-center">
+          <button
+            type="button"
+            onClick={() => { setMode('forgot'); setError(''); setMessage(''); }}
+            className="font-mono text-sm text-black/40 hover:text-accent transition-colors underline"
+          >
+            Forgot your password?
+          </button>
+        </div>
+      )}
 
       <div className="text-center">
         <button
@@ -134,7 +154,7 @@ export default function AuthForm() {
           onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(''); setMessage(''); }}
           className="font-mono text-sm text-black/60 hover:text-accent transition-colors underline"
         >
-          {mode === 'signin' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
+          {mode === 'forgot' ? 'Back to sign in' : mode === 'signin' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
         </button>
       </div>
     </form>
