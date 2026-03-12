@@ -91,40 +91,14 @@ export default function EngineerSessions({ userEmail }: { userEmail: string }) {
         ) : (
           <div className="space-y-3">
             {unclaimed.map((b) => (
-              <div key={b.id} className="border-2 border-[#F4C430]/40 bg-[#F4C430]/5 p-4 sm:p-5">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <p className="font-mono text-sm font-bold">{b.customer_name}</p>
-                    {b.requested_engineer && (
-                      <p className="font-mono text-[10px] text-amber-600 font-semibold mt-0.5">
-                        Requested: {b.requested_engineer}
-                      </p>
-                    )}
-                    <p className="font-mono text-xs text-black/40 mt-1">
-                      {new Date(b.start_time).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                      {' · '}
-                      {new Date(b.start_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-                      {' · '}
-                      {b.duration}hr
-                      {b.room && ` · ${b.room === 'studio_a' ? 'Studio A' : 'Studio B'}`}
-                    </p>
-                    <p className="font-mono text-xs text-black/40 mt-0.5">
-                      Total: {formatCents(b.total_amount)}
-                      {b.remainder_amount ? ` · Remainder: ${formatCents(b.remainder_amount)}` : ''}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => claimSession(b.id)}
-                    disabled={claiming === b.id}
-                    className="font-mono text-xs font-bold uppercase tracking-wider bg-[#F4C430] text-black px-5 py-2.5 hover:bg-[#F4C430]/80 disabled:opacity-50 transition-colors"
-                  >
-                    {claiming === b.id ? 'Claiming...' : 'Claim Session'}
-                  </button>
-                </div>
-                {b.admin_notes && (
-                  <p className="font-mono text-xs text-black/50 mt-2 border-t border-black/5 pt-2">{b.admin_notes}</p>
-                )}
-              </div>
+              <BookingCard
+                key={b.id}
+                booking={b}
+                onUpdate={loadData}
+                unclaimed
+                onClaim={() => claimSession(b.id)}
+                claimLoading={claiming === b.id}
+              />
             ))}
           </div>
         )}
@@ -165,9 +139,14 @@ export default function EngineerSessions({ userEmail }: { userEmail: string }) {
   );
 }
 
-function BookingCard({ booking, onUpdate, completed }: { booking: Booking; onUpdate?: () => void; completed?: boolean }) {
+function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, claimLoading }: {
+  booking: Booking; onUpdate?: () => void; completed?: boolean;
+  unclaimed?: boolean; onClaim?: () => void; claimLoading?: boolean;
+}) {
   const [charging, setCharging] = useState(false);
   const [chargeError, setChargeError] = useState('');
+  const [showChargeEdit, setShowChargeEdit] = useState(false);
+  const [chargeAmountInput, setChargeAmountInput] = useState('');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [showDebug, setShowDebug] = useState(false);
   const [showReschedule, setShowReschedule] = useState(false);
@@ -185,15 +164,16 @@ function BookingCard({ booking, onUpdate, completed }: { booking: Booking; onUpd
   const canComplete = booking.status === 'confirmed' && booking.engineer_name;
   const canCancel = ['confirmed', 'pending'].includes(booking.status);
 
-  async function chargeRemainder() {
-    if (!confirm(`Charge ${formatCents(remainder)} to ${booking.customer_name}'s card on file?`)) return;
+  async function chargeRemainder(customAmount?: number) {
+    const amountToCharge = customAmount || remainder;
+    if (!confirm(`Charge $${(amountToCharge / 100).toFixed(2)} to ${booking.customer_name}'s card on file?`)) return;
     setCharging(true);
     setChargeError('');
     try {
       const res = await fetch('/api/booking/charge-remainder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookingId: booking.id }),
+        body: JSON.stringify({ bookingId: booking.id, amount: customAmount || undefined }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -201,6 +181,8 @@ function BookingCard({ booking, onUpdate, completed }: { booking: Booking; onUpd
         return;
       }
       alert(`Charged ${formatCents(data.amountCharged)} successfully`);
+      setShowChargeEdit(false);
+      setChargeAmountInput('');
       onUpdate?.();
     } catch {
       setChargeError('Network error');
@@ -283,7 +265,7 @@ function BookingCard({ booking, onUpdate, completed }: { booking: Booking; onUpd
   }
 
   return (
-    <div className="border-2 border-black/10 p-4 sm:p-5">
+    <div className={`border-2 p-4 sm:p-5 ${unclaimed ? 'border-[#F4C430]/40 bg-[#F4C430]/5' : 'border-black/10'}`}>
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div>
           <p className="font-mono text-sm font-bold">{booking.customer_name}</p>
@@ -332,14 +314,31 @@ function BookingCard({ booking, onUpdate, completed }: { booking: Booking; onUpd
       {/* Action buttons */}
       {!completed && (
         <div className="mt-3 pt-3 border-t border-black/10 flex flex-wrap gap-2">
-          {canCharge && (
+          {unclaimed && onClaim && (
             <button
-              onClick={chargeRemainder}
-              disabled={charging}
-              className="font-mono text-xs font-bold uppercase tracking-wider bg-black text-white px-4 py-2 hover:bg-black/80 disabled:opacity-50 transition-colors"
+              onClick={onClaim}
+              disabled={claimLoading}
+              className="font-mono text-xs font-bold uppercase tracking-wider bg-[#F4C430] text-black px-5 py-2.5 hover:bg-[#F4C430]/80 disabled:opacity-50 transition-colors"
             >
-              {charging ? 'Charging...' : `Charge Remainder — ${formatCents(remainder)}`}
+              {claimLoading ? 'Claiming...' : 'Claim Session'}
             </button>
+          )}
+          {canCharge && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => chargeRemainder()}
+                disabled={charging}
+                className="font-mono text-xs font-bold uppercase tracking-wider bg-black text-white px-4 py-2 hover:bg-black/80 disabled:opacity-50 transition-colors"
+              >
+                {charging ? 'Charging...' : `Charge — ${formatCents(remainder)}`}
+              </button>
+              <button
+                onClick={() => { setShowChargeEdit(!showChargeEdit); setChargeAmountInput((remainder / 100).toFixed(2)); }}
+                className="font-mono text-[10px] text-black/40 hover:text-black underline"
+              >
+                Edit
+              </button>
+            </div>
           )}
           {canComplete && (
             <button
@@ -371,6 +370,40 @@ function BookingCard({ booking, onUpdate, completed }: { booking: Booking; onUpd
           >
             {showDebug ? 'Hide Details' : 'Debug'}
           </button>
+        </div>
+      )}
+
+      {/* Charge edit form */}
+      {showChargeEdit && canCharge && (
+        <div className="mt-3 p-3 bg-black/5 border border-black/10 space-y-2">
+          <p className="font-mono text-xs font-semibold uppercase tracking-wider">Adjust Charge Amount</p>
+          <p className="font-mono text-[10px] text-black/50">
+            Default remainder is {formatCents(remainder)}. Change the amount if the session was adjusted (e.g. switched studios).
+          </p>
+          <div className="flex flex-wrap gap-2 items-end">
+            <div>
+              <label className="font-mono text-[10px] text-black/40 block">Amount ($)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0.50"
+                value={chargeAmountInput}
+                onChange={(e) => setChargeAmountInput(e.target.value)}
+                className="font-mono text-sm border border-black/20 px-3 py-1.5 w-28"
+              />
+            </div>
+            <button
+              onClick={() => {
+                const cents = Math.round(parseFloat(chargeAmountInput) * 100);
+                if (isNaN(cents) || cents < 50) { alert('Minimum charge is $0.50'); return; }
+                chargeRemainder(cents);
+              }}
+              disabled={charging}
+              className="font-mono text-xs font-bold uppercase tracking-wider bg-black text-white px-4 py-2 hover:bg-black/80 disabled:opacity-50 transition-colors"
+            >
+              {charging ? 'Charging...' : `Charge $${chargeAmountInput || '0.00'}`}
+            </button>
+          </div>
         </div>
       )}
 

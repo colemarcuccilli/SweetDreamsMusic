@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
 import { createServiceClient } from '@/lib/supabase/server';
 import { sendBookingConfirmation, sendAdminBookingAlert, sendEngineerNewBookingAlert } from '@/lib/email';
-import { ENGINEERS, type Room } from '@/lib/constants';
+import { ENGINEERS, TIMEZONE, type Room } from '@/lib/constants';
 import type Stripe from 'stripe';
 
 export async function POST(request: NextRequest) {
@@ -57,10 +57,10 @@ export async function POST(request: NextRequest) {
           admin_notes: meta.notes || null,
         }).select().single();
 
-        // Send emails
+        // Send emails — use Fort Wayne timezone since Vercel runs UTC
         const startDate = new Date(startDateTime);
-        const dateStr = startDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-        const timeStr = startDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+        const dateStr = startDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: TIMEZONE });
+        const timeStr = startDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: TIMEZONE });
         const duration = parseInt(meta.duration_hours);
 
         // Customer confirmation

@@ -106,9 +106,10 @@ export const ENGINEERS = [
 // Super admins — full access to everything
 export const SUPER_ADMINS = [
   'cole@sweetdreams.us',
-  'cole@marcuccilli.com',
-  'jay@sweetdreams.us',
+  'jayvalleo@sweetdreams.us',
 ] as const;
+
+export const TIMEZONE = 'America/Indiana/Indianapolis';
 
 // Beat store license types
 export const BEAT_LICENSES = {
