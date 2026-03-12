@@ -111,6 +111,9 @@ export const SUPER_ADMINS = [
 
 export const TIMEZONE = 'America/Indiana/Indianapolis';
 
+// Studio A is only available 6 PM+ on weekdays (Mon-Fri), all day on weekends
+export const STUDIO_A_WEEKDAY_START = 18; // 6 PM
+
 // Beat store license types
 export const BEAT_LICENSES = {
   mp3_lease: {

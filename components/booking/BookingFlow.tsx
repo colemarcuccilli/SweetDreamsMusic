@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Calendar, Clock, Home, User, ChevronLeft, ChevronRight, AlertTriangle, Star } from 'lucide-react';
-import { PRICING, ROOMS, ROOM_LABELS, ROOM_RATES, ROOM_RATES_SINGLE, SWEET_SPOTS, ENGINEERS, type Room } from '@/lib/constants';
+import { PRICING, ROOMS, ROOM_LABELS, ROOM_RATES, ROOM_RATES_SINGLE, SWEET_SPOTS, ENGINEERS, STUDIO_A_WEEKDAY_START, type Room } from '@/lib/constants';
 import { formatCents, cn, isSameDay, calculateSessionTotal, formatTime, getHourSurcharge } from '@/lib/utils';
 
 function getDaysInMonth(year: number, month: number) {
@@ -87,9 +87,16 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
     ? bookedSlots[selectedDate.toISOString().split('T')[0]] || []
     : [];
 
+  // Studio A weekday restriction: only available 6 PM+ on Mon-Fri
+  const isWeekday = selectedDate ? [1, 2, 3, 4, 5].includes(selectedDate.getDay()) : false;
+  const studioARestricted = room === 'studio_a' && isWeekday;
+
   // Check if a time slot would conflict
   function isSlotBooked(hour: number): boolean {
-    return currentBookedSlots.includes(hour);
+    if (currentBookedSlots.includes(hour)) return true;
+    // Studio A blocked before 6 PM on weekdays
+    if (studioARestricted && hour < STUDIO_A_WEEKDAY_START) return true;
+    return false;
   }
 
   function wouldOverlap(startH: number, dur: number): boolean {
@@ -296,6 +303,11 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
           <p className="font-mono text-xs text-black/40 mb-4">
             Open 24 hours. Surcharges apply for late night and after-hours bookings.
           </p>
+          {studioARestricted && (
+            <p className="font-mono text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 mb-4">
+              Studio A is available 6 PM and later on weekdays. Available all day on weekends.
+            </p>
+          )}
           <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
             {timeSlots.map((slot) => {
               const hour = parseInt(slot.split(':')[0]);
@@ -316,7 +328,9 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
                     !booked && surcharge.tier === 'deepNight' && selectedTime !== slot && 'border-red-400/50 bg-red-50'
                   )}
                 >
-                  {booked ? 'Booked' : formatTime(slot)}
+                  {booked
+                    ? (studioARestricted && hour < STUDIO_A_WEEKDAY_START ? 'Unavail.' : 'Booked')
+                    : formatTime(slot)}
                   {!booked && surcharge.tier === 'lateNight' && (
                     <span className="block text-[9px] text-amber-600 font-semibold mt-0.5">+$10/hr</span>
                   )}
@@ -415,7 +429,15 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
             {ROOMS.map((r) => (
               <button
                 key={r}
-                onClick={() => { setRoom(r); setEngineer('any'); }}
+                onClick={() => {
+                  setRoom(r);
+                  setEngineer('any');
+                  // Clear time if switching to Studio A and current time is restricted
+                  if (r === 'studio_a' && isWeekday && selectedTime) {
+                    const h = parseInt(selectedTime.split(':')[0]);
+                    if (h < STUDIO_A_WEEKDAY_START) setSelectedTime(null);
+                  }
+                }}
                 className={cn(
                   'p-6 border-2 font-mono text-left transition-colors',
                   room === r ? 'border-black bg-black text-white' : 'border-black/20 hover:border-black'
@@ -426,6 +448,11 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
                 <p className={cn('text-xs mt-1', room === r ? 'text-white/60' : 'text-black/40')}>
                   {formatCents(ROOM_RATES[r])}/hour
                   <span className="block text-[10px] mt-0.5">1hr: {formatCents(ROOM_RATES_SINGLE[r])}</span>
+                  {r === 'studio_a' && (
+                    <span className={cn('block text-[10px] mt-1', room === r ? 'text-amber-300' : 'text-amber-600')}>
+                      Weekdays 6 PM+ only
+                    </span>
+                  )}
                 </p>
               </button>
             ))}

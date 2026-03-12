@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
 import { createServiceClient } from '@/lib/supabase/server';
-import { PRICING, SITE_URL, ROOM_LABELS, type Room } from '@/lib/constants';
+import { PRICING, SITE_URL, ROOM_LABELS, STUDIO_A_WEEKDAY_START, type Room } from '@/lib/constants';
 import { calculateSessionTotal } from '@/lib/utils';
 
 export async function POST(request: NextRequest) {
@@ -18,6 +18,17 @@ export async function POST(request: NextRequest) {
     }
 
     const startHour = parseInt(startTime.split(':')[0]);
+
+    // Studio A weekday restriction: only available 6 PM+ on Mon-Fri
+    if (room === 'studio_a') {
+      // Parse date string (YYYY-MM-DD) to get day of week
+      const [y, m, d] = date.split('-').map(Number);
+      const bookingDate = new Date(y, m - 1, d); // local date, no UTC shift
+      const dow = bookingDate.getDay(); // 0=Sun, 1-5=Mon-Fri, 6=Sat
+      if (dow >= 1 && dow <= 5 && startHour < STUDIO_A_WEEKDAY_START) {
+        return NextResponse.json({ error: 'Studio A is only available 6 PM and later on weekdays. Try Studio B or choose an evening time.' }, { status: 400 });
+      }
+    }
 
     // Server-side double-booking check (both studios — they share the same space)
     const supabase = createServiceClient();
