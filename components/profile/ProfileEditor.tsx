@@ -19,9 +19,20 @@ interface Project {
   description: string;
   cover_image_url: string | null;
   link: string;
+  links: Record<string, string>;
   is_public: boolean;
   display_order: number;
 }
+
+const PROJECT_LINK_FIELDS = [
+  { key: 'spotify', label: 'Spotify', placeholder: 'https://open.spotify.com/...' },
+  { key: 'appleMusic', label: 'Apple Music', placeholder: 'https://music.apple.com/...' },
+  { key: 'youtube', label: 'YouTube', placeholder: 'https://youtube.com/watch?v=...' },
+  { key: 'soundcloud', label: 'SoundCloud', placeholder: 'https://soundcloud.com/...' },
+  { key: 'tidal', label: 'Tidal', placeholder: 'https://tidal.com/...' },
+  { key: 'amazonMusic', label: 'Amazon Music', placeholder: 'https://music.amazon.com/...' },
+  { key: 'other', label: 'Other Link', placeholder: 'https://...' },
+];
 
 const SOCIAL_FIELDS = [
   { key: 'spotify', label: 'Spotify', placeholder: 'https://open.spotify.com/artist/...' },
@@ -105,29 +116,48 @@ export default function ProfileEditor({ userId, profileSlug }: { userId: string;
 
   async function handlePhotoUpload(file: File, type: 'profile' | 'cover') {
     setUploading(type);
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('type', type);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', type);
 
-    const res = await fetch('/api/profile/photo', { method: 'POST', body: formData });
-    const data = await res.json();
-    if (data.url) {
-      if (type === 'profile') setProfilePicUrl(data.url);
-      else setCoverPhotoUrl(data.url);
+      const res = await fetch('/api/profile/photo', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(`Upload failed: ${data.error || 'Unknown error'}`);
+        return;
+      }
+      if (data.url) {
+        if (type === 'profile') setProfilePicUrl(data.url);
+        else setCoverPhotoUrl(data.url);
+      }
+    } catch (err) {
+      alert('Upload failed. Please try again.');
+      console.error('Photo upload error:', err);
+    } finally {
+      setUploading(null);
     }
-    setUploading(null);
   }
 
   async function handleProjectImageUpload(file: File, projectId: string) {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('type', 'project');
-    formData.append('projectId', projectId);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'project');
+      formData.append('projectId', projectId);
 
-    const res = await fetch('/api/profile/photo', { method: 'POST', body: formData });
-    const data = await res.json();
-    if (data.url) {
-      setProjects((prev) => prev.map((p) => p.id === projectId ? { ...p, cover_image_url: data.url } : p));
+      const res = await fetch('/api/profile/photo', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(`Upload failed: ${data.error || 'Unknown error'}`);
+        return;
+      }
+      if (data.url) {
+        setProjects((prev) => prev.map((p) => p.id === projectId ? { ...p, cover_image_url: data.url } : p));
+      }
+    } catch (err) {
+      alert('Upload failed. Please try again.');
+      console.error('Project image upload error:', err);
     }
   }
 
@@ -350,22 +380,13 @@ export default function ProfileEditor({ userId, profileSlug }: { userId: string;
                       className="w-full border border-black/20 px-3 py-2 font-mono text-sm font-bold focus:border-accent focus:outline-none"
                       placeholder="Project name"
                     />
-                    <div className="flex gap-3">
-                      <input
-                        type="text"
-                        value={project.project_type}
-                        onChange={(e) => updateProject(project.id, { project_type: e.target.value })}
-                        className="w-32 border border-black/20 px-3 py-2 font-mono text-xs focus:border-accent focus:outline-none"
-                        placeholder="Type (Single, EP...)"
-                      />
-                      <input
-                        type="url"
-                        value={project.link || ''}
-                        onChange={(e) => updateProject(project.id, { link: e.target.value })}
-                        className="flex-1 border border-black/20 px-3 py-2 font-mono text-xs focus:border-accent focus:outline-none"
-                        placeholder="Link (Spotify, Apple Music, etc.)"
-                      />
-                    </div>
+                    <input
+                      type="text"
+                      value={project.project_type}
+                      onChange={(e) => updateProject(project.id, { project_type: e.target.value })}
+                      className="w-full border border-black/20 px-3 py-2 font-mono text-xs focus:border-accent focus:outline-none"
+                      placeholder="Type (Single, EP, Album, Music Video...)"
+                    />
                     <textarea
                       value={project.description}
                       onChange={(e) => updateProject(project.id, { description: e.target.value })}
@@ -373,6 +394,27 @@ export default function ProfileEditor({ userId, profileSlug }: { userId: string;
                       className="w-full border border-black/20 px-3 py-2 font-mono text-xs focus:border-accent focus:outline-none resize-vertical"
                       placeholder="Description (optional)"
                     />
+
+                    {/* Platform Links */}
+                    <div className="border border-black/10 p-3 space-y-2">
+                      <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider font-bold">Platform Links</p>
+                      {PROJECT_LINK_FIELDS.map((field) => (
+                        <div key={field.key} className="flex items-center gap-2">
+                          <span className="font-mono text-[10px] text-black/50 w-24 flex-shrink-0">{field.label}</span>
+                          <input
+                            type="url"
+                            value={(project.links || {})[field.key] || ''}
+                            onChange={(e) => {
+                              const newLinks = { ...(project.links || {}), [field.key]: e.target.value };
+                              updateProject(project.id, { links: newLinks });
+                            }}
+                            className="flex-1 border border-black/15 px-2 py-1.5 font-mono text-[11px] focus:border-accent focus:outline-none"
+                            placeholder={field.placeholder}
+                          />
+                        </div>
+                      ))}
+                    </div>
+
                     <div className="flex items-center justify-between">
                       <div className="flex gap-2">
                         <button

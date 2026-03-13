@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { DollarSign, TrendingUp, Calendar } from 'lucide-react';
+import { DollarSign, TrendingUp, Calendar, Filter } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
 
-const ENGINEER_SPLIT = 0.6; // 60% to engineer
-const MEDIA_COMMISSION = 0.15; // 15% commission on media sales
+const ENGINEER_SPLIT = 0.6;
+const MEDIA_COMMISSION = 0.15;
 
 interface Booking {
   id: string;
@@ -36,22 +36,88 @@ const ROOM_LABELS: Record<string, string> = {
   studio_b: 'Studio B',
 };
 
+type DatePreset = 'thisMonth' | 'lastMonth' | 'month' | '30d' | '90d' | 'custom';
+
+function getMonthOptions(): { value: string; label: string }[] {
+  const options: { value: string; label: string }[] = [];
+  const now = new Date();
+  // Show last 12 months
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    options.push({ value, label });
+  }
+  return options;
+}
+
+function getDateRange(preset: DatePreset, selectedMonth: string): { from: string; to: string } | null {
+  const now = new Date();
+  if (preset === 'thisMonth') {
+    const from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    const to = now.toISOString().split('T')[0];
+    return { from, to };
+  }
+  if (preset === 'lastMonth') {
+    const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const from = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+    const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    const to = `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`;
+    return { from, to };
+  }
+  if (preset === 'month' && selectedMonth) {
+    const [y, m] = selectedMonth.split('-').map(Number);
+    const from = `${y}-${String(m).padStart(2, '0')}-01`;
+    const last = new Date(y, m, 0);
+    const to = `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`;
+    return { from, to };
+  }
+  if (preset === '30d') {
+    const from = new Date(now);
+    from.setDate(from.getDate() - 30);
+    return { from: from.toISOString().split('T')[0], to: now.toISOString().split('T')[0] };
+  }
+  if (preset === '90d') {
+    const from = new Date(now);
+    from.setDate(from.getDate() - 90);
+    return { from: from.toISOString().split('T')[0], to: now.toISOString().split('T')[0] };
+  }
+  return null;
+}
+
 export default function EngineerAccounting() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [mediaSales, setMediaSales] = useState<MediaSale[]>([]);
   const [engineerName, setEngineerName] = useState('');
   const [loading, setLoading] = useState(true);
+  const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth');
+  const [selectedMonth, setSelectedMonth] = useState('');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+
+  const monthOptions = useMemo(() => getMonthOptions(), []);
 
   useEffect(() => {
-    fetch('/api/engineer/accounting')
-      .then((r) => r.json())
-      .then((data) => {
-        setBookings(data.bookings || []);
-        setMediaSales(data.mediaSales || []);
-        setEngineerName(data.engineerName || '');
-      })
-      .finally(() => setLoading(false));
-  }, []);
+    fetchData();
+  }, [datePreset, selectedMonth, customFrom, customTo]);
+
+  async function fetchData() {
+    setLoading(true);
+    const range = datePreset === 'custom'
+      ? (customFrom ? { from: customFrom, to: customTo || new Date().toISOString().split('T')[0] } : null)
+      : getDateRange(datePreset, selectedMonth);
+
+    const params = new URLSearchParams();
+    if (range?.from) params.set('from', range.from);
+    if (range?.to) params.set('to', range.to);
+
+    const res = await fetch(`/api/engineer/accounting?${params}`);
+    const data = await res.json();
+    setBookings(data.bookings || []);
+    setMediaSales(data.mediaSales || []);
+    setEngineerName(data.engineerName || '');
+    setLoading(false);
+  }
 
   const invited = useMemo(() =>
     bookings.filter((b) => b.requested_engineer === engineerName),
@@ -84,84 +150,136 @@ export default function EngineerAccounting() {
     bookings.reduce((s, b) => s + b.duration, 0),
   [bookings]);
 
-  if (loading) return <p className="font-mono text-sm text-black/40">Loading accounting...</p>;
+  const presets: { key: DatePreset; label: string }[] = [
+    { key: 'thisMonth', label: 'This Month' },
+    { key: 'lastMonth', label: 'Last Month' },
+    { key: 'month', label: 'Pick Month' },
+    { key: '30d', label: '30 Days' },
+    { key: '90d', label: '90 Days' },
+    { key: 'custom', label: 'Custom' },
+  ];
 
   return (
     <div className="space-y-8">
-      {/* Overview Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard icon={DollarSign} label="Your Earnings (60%)" value={formatCents(engineerSessionPay)} accent />
-        <StatCard icon={TrendingUp} label="Total Session Revenue" value={formatCents(sessionRevenue)} />
-        <StatCard icon={Calendar} label="Total Sessions" value={String(bookings.length)} />
-        <StatCard icon={Calendar} label="Total Hours" value={`${totalHours}hr`} />
+      {/* Date Filter */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <Filter className="w-4 h-4 text-black/30" />
+        {presets.map((p) => (
+          <button
+            key={p.key}
+            onClick={() => setDatePreset(p.key)}
+            className={`font-mono text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 transition-colors ${
+              datePreset === p.key ? 'bg-accent text-black' : 'bg-black/5 text-black/40 hover:bg-black/10'
+            }`}
+          >
+            {p.label}
+          </button>
+        ))}
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard icon={DollarSign} label="Deposits Collected" value={formatCents(totalDeposits)} />
-        <StatCard icon={DollarSign} label="Completed Sessions" value={String(completed.length)} />
-        <StatCard icon={TrendingUp} label="Media Commission (15%)" value={formatCents(mediaCommission)} />
-        <StatCard icon={DollarSign} label="Total Payout" value={formatCents(engineerSessionPay + mediaCommission)} accent />
-      </div>
+      {datePreset === 'month' && (
+        <select
+          value={selectedMonth}
+          onChange={(e) => setSelectedMonth(e.target.value)}
+          className="border border-black/20 px-3 py-2 font-mono text-xs focus:border-accent focus:outline-none"
+        >
+          <option value="">Select a month...</option>
+          {monthOptions.map((m) => (
+            <option key={m.value} value={m.value}>{m.label}</option>
+          ))}
+        </select>
+      )}
 
-      {/* Split Explanation */}
-      <div className="border border-black/10 p-4">
-        <p className="font-mono text-xs text-black/50">
-          <strong className="text-black">Revenue Split:</strong> You earn 60% of session revenue. Business retains 40%.
-          Media sales you bring in earn a 15% commission.
-        </p>
-      </div>
-
-      {/* Sessions I Was Requested For (Invited) */}
-      <div>
-        <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">
-          Sessions Invited ({invited.length})
-        </h3>
-        {invited.length === 0 ? (
-          <p className="font-mono text-xs text-black/30 border border-black/10 p-6 text-center">
-            No invited sessions yet
-          </p>
-        ) : (
-          <SessionTable sessions={invited} />
-        )}
-      </div>
-
-      {/* Sessions I Claimed */}
-      <div>
-        <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">
-          Sessions Claimed ({claimed.length})
-        </h3>
-        {claimed.length === 0 ? (
-          <p className="font-mono text-xs text-black/30 border border-black/10 p-6 text-center">
-            No claimed sessions yet
-          </p>
-        ) : (
-          <SessionTable sessions={claimed} />
-        )}
-      </div>
-
-      {/* Media Sales */}
-      {mediaSales.length > 0 && (
-        <div>
-          <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">
-            Media Sales ({mediaSales.length})
-          </h3>
-          <div className="space-y-1">
-            {mediaSales.map((sale) => (
-              <div key={sale.id} className="flex justify-between items-center py-3 px-3 border-b border-black/5 font-mono text-xs">
-                <div>
-                  <span className="font-semibold">{sale.description}</span>
-                  <span className="text-black/40 ml-3">
-                    {new Date(sale.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                  </span>
-                </div>
-                <div className="text-right">
-                  <span className="text-black/50">{formatCents(sale.amount)}</span>
-                  <span className="font-bold ml-3 text-accent">{formatCents(Math.round(sale.amount * MEDIA_COMMISSION))}</span>
-                </div>
-              </div>
-            ))}
-          </div>
+      {datePreset === 'custom' && (
+        <div className="flex gap-3 items-center">
+          <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)}
+            className="border border-black/20 px-3 py-2 font-mono text-xs focus:border-accent focus:outline-none" />
+          <span className="font-mono text-xs text-black/40">to</span>
+          <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)}
+            className="border border-black/20 px-3 py-2 font-mono text-xs focus:border-accent focus:outline-none" />
         </div>
+      )}
+
+      {loading ? (
+        <p className="font-mono text-sm text-black/40">Loading accounting...</p>
+      ) : (
+        <>
+          {/* Overview Stats */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <StatCard icon={DollarSign} label="Your Earnings (60%)" value={formatCents(engineerSessionPay)} accent />
+            <StatCard icon={TrendingUp} label="Total Session Revenue" value={formatCents(sessionRevenue)} />
+            <StatCard icon={Calendar} label="Total Sessions" value={String(bookings.length)} />
+            <StatCard icon={Calendar} label="Total Hours" value={`${totalHours}hr`} />
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <StatCard icon={DollarSign} label="Deposits Collected" value={formatCents(totalDeposits)} />
+            <StatCard icon={DollarSign} label="Completed Sessions" value={String(completed.length)} />
+            <StatCard icon={TrendingUp} label="Media Commission (15%)" value={formatCents(mediaCommission)} />
+            <StatCard icon={DollarSign} label="Total Payout" value={formatCents(engineerSessionPay + mediaCommission)} accent />
+          </div>
+
+          {/* Split Explanation */}
+          <div className="border border-black/10 p-4">
+            <p className="font-mono text-xs text-black/50">
+              <strong className="text-black">Revenue Split:</strong> You earn 60% of session revenue. Business retains 40%.
+              Media sales you bring in earn a 15% commission.
+            </p>
+          </div>
+
+          {/* Sessions I Was Requested For (Invited) */}
+          <div>
+            <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">
+              Sessions Invited ({invited.length})
+            </h3>
+            {invited.length === 0 ? (
+              <p className="font-mono text-xs text-black/30 border border-black/10 p-6 text-center">
+                No invited sessions yet
+              </p>
+            ) : (
+              <SessionTable sessions={invited} />
+            )}
+          </div>
+
+          {/* Sessions I Claimed */}
+          <div>
+            <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">
+              Sessions Claimed ({claimed.length})
+            </h3>
+            {claimed.length === 0 ? (
+              <p className="font-mono text-xs text-black/30 border border-black/10 p-6 text-center">
+                No claimed sessions yet
+              </p>
+            ) : (
+              <SessionTable sessions={claimed} />
+            )}
+          </div>
+
+          {/* Media Sales */}
+          {mediaSales.length > 0 && (
+            <div>
+              <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">
+                Media Sales ({mediaSales.length})
+              </h3>
+              <div className="space-y-1">
+                {mediaSales.map((sale) => (
+                  <div key={sale.id} className="flex justify-between items-center py-3 px-3 border-b border-black/5 font-mono text-xs">
+                    <div>
+                      <span className="font-semibold">{sale.description}</span>
+                      <span className="text-black/40 ml-3">
+                        {new Date(sale.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-black/50">{formatCents(sale.amount)}</span>
+                      <span className="font-bold ml-3 text-accent">{formatCents(Math.round(sale.amount * MEDIA_COMMISSION))}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -195,7 +313,7 @@ function SessionTable({ sessions }: { sessions: Booking[] }) {
           <div className="col-span-1 text-black/60">{ROOM_LABELS[b.room || ''] || '—'}</div>
           <div className="col-span-1">{b.duration}hr</div>
           <div className="col-span-2 text-right">{formatCents(b.total_amount)}</div>
-          <div className="col-span-2 text-right font-bold text-accent">{formatCents(Math.round(b.total_amount * ENGINEER_SPLIT))}</div>
+          <div className="col-span-2 text-right font-bold text-accent">{formatCents(Math.round(b.total_amount * 0.6))}</div>
           <div className="col-span-2 text-right">
             <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 ${STATUS_COLORS[b.status] || 'bg-black/5 text-black/50'}`}>
               {b.status}

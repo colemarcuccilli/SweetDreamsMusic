@@ -250,13 +250,22 @@ export default async function PublicProfilePage({ params }: Props) {
             <h2 className="text-heading-xl mb-8">PROJECTS</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               {projects.map((project) => {
-                const Wrapper = project.link ? 'a' : 'div';
-                const linkProps = project.link ? { href: project.link, target: '_blank', rel: 'noopener noreferrer' } : {};
+                const links = (project.links || {}) as Record<string, string>;
+                const hasLinks = Object.values(links).some(Boolean) || project.link;
+                const PLATFORM_LABELS: Record<string, string> = {
+                  spotify: 'Spotify',
+                  appleMusic: 'Apple Music',
+                  youtube: 'YouTube',
+                  soundcloud: 'SoundCloud',
+                  tidal: 'Tidal',
+                  amazonMusic: 'Amazon Music',
+                  other: 'Listen',
+                };
+
                 return (
-                  <Wrapper
+                  <div
                     key={project.id}
-                    {...linkProps}
-                    className={`border border-white/10 overflow-hidden hover:border-accent/50 transition-colors block no-underline ${project.link ? 'cursor-pointer' : ''}`}
+                    className="border border-white/10 overflow-hidden hover:border-accent/50 transition-colors"
                   >
                     {project.cover_image_url && (
                       <img src={project.cover_image_url} alt={project.project_name} className="w-full aspect-square object-cover" />
@@ -269,13 +278,35 @@ export default async function PublicProfilePage({ params }: Props) {
                       {project.description && (
                         <p className="font-mono text-xs text-white/50">{project.description}</p>
                       )}
-                      {project.link && (
-                        <p className="font-mono text-[10px] text-accent mt-3 inline-flex items-center gap-1">
-                          Listen <ExternalLink className="w-3 h-3" />
-                        </p>
+                      {hasLinks && (
+                        <div className="flex flex-wrap gap-2 mt-3">
+                          {Object.entries(links).map(([platform, url]) => (
+                            url && (
+                              <a
+                                key={platform}
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-mono text-[10px] text-accent border border-accent/30 px-2.5 py-1 hover:bg-accent hover:text-black transition-colors no-underline inline-flex items-center gap-1"
+                              >
+                                {PLATFORM_LABELS[platform] || platform} <ExternalLink className="w-2.5 h-2.5" />
+                              </a>
+                            )
+                          ))}
+                          {project.link && !Object.values(links).some(Boolean) && (
+                            <a
+                              href={project.link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-mono text-[10px] text-accent border border-accent/30 px-2.5 py-1 hover:bg-accent hover:text-black transition-colors no-underline inline-flex items-center gap-1"
+                            >
+                              Listen <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                          )}
+                        </div>
                       )}
                     </div>
-                  </Wrapper>
+                  </div>
                 );
               })}
             </div>

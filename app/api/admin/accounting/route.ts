@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
   let bookingsQuery = supabase
     .from('bookings')
     .select('id, customer_name, customer_email, start_time, duration, total_amount, deposit_amount, remainder_amount, actual_deposit_paid, status, engineer_name, room, created_at')
+    .not('status', 'eq', 'cancelled')
     .order('created_at', { ascending: false });
 
   if (from) bookingsQuery = bookingsQuery.gte('start_time', from);

@@ -31,18 +31,54 @@ interface BeatPurchase {
 }
 
 type View = 'overview' | 'sessions' | 'beats';
-type DatePreset = 'all' | '7d' | '30d' | '90d' | 'year' | 'custom';
+type DatePreset = 'thisMonth' | 'lastMonth' | 'month' | '30d' | '90d' | 'year' | 'custom';
 
-function getDateRange(preset: DatePreset): { from: string; to: string } | null {
-  if (preset === 'all') return null;
-  const to = new Date();
-  const from = new Date();
-  if (preset === '7d') from.setDate(from.getDate() - 7);
-  else if (preset === '30d') from.setDate(from.getDate() - 30);
-  else if (preset === '90d') from.setDate(from.getDate() - 90);
-  else if (preset === 'year') from.setFullYear(from.getFullYear() - 1);
-  else return null;
-  return { from: from.toISOString().split('T')[0], to: to.toISOString().split('T')[0] };
+function getMonthOptions(): { value: string; label: string }[] {
+  const options: { value: string; label: string }[] = [];
+  const now = new Date();
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    options.push({ value, label });
+  }
+  return options;
+}
+
+function getDateRange(preset: DatePreset, selectedMonth?: string): { from: string; to: string } | null {
+  const now = new Date();
+  if (preset === 'thisMonth') {
+    const from = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    const to = now.toISOString().split('T')[0];
+    return { from, to };
+  }
+  if (preset === 'lastMonth') {
+    const d = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const from = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+    const last = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    const to = `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`;
+    return { from, to };
+  }
+  if (preset === 'month' && selectedMonth) {
+    const [y, m] = selectedMonth.split('-').map(Number);
+    const from = `${y}-${String(m).padStart(2, '0')}-01`;
+    const last = new Date(y, m, 0);
+    const to = `${last.getFullYear()}-${String(last.getMonth() + 1).padStart(2, '0')}-${String(last.getDate()).padStart(2, '0')}`;
+    return { from, to };
+  }
+  if (preset === '30d') {
+    const from = new Date(now); from.setDate(from.getDate() - 30);
+    return { from: from.toISOString().split('T')[0], to: now.toISOString().split('T')[0] };
+  }
+  if (preset === '90d') {
+    const from = new Date(now); from.setDate(from.getDate() - 90);
+    return { from: from.toISOString().split('T')[0], to: now.toISOString().split('T')[0] };
+  }
+  if (preset === 'year') {
+    const from = new Date(now); from.setFullYear(from.getFullYear() - 1);
+    return { from: from.toISOString().split('T')[0], to: now.toISOString().split('T')[0] };
+  }
+  return null;
 }
 
 const LICENSE_LABELS: Record<string, string> = {
@@ -57,7 +93,8 @@ export default function Accounting() {
   const [beatPurchases, setBeatPurchases] = useState<BeatPurchase[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>('overview');
-  const [datePreset, setDatePreset] = useState<DatePreset>('all');
+  const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth');
+  const [selectedMonth, setSelectedMonth] = useState('');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [engineerFilter, setEngineerFilter] = useState('all');
@@ -65,15 +102,17 @@ export default function Accounting() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
 
+  const monthOptions = getMonthOptions();
+
   useEffect(() => {
     fetchData();
-  }, [datePreset, customFrom, customTo]);
+  }, [datePreset, selectedMonth, customFrom, customTo]);
 
   async function fetchData() {
     setLoading(true);
     const range = datePreset === 'custom'
       ? (customFrom ? { from: customFrom, to: customTo || new Date().toISOString().split('T')[0] } : null)
-      : getDateRange(datePreset);
+      : getDateRange(datePreset, selectedMonth);
 
     const params = new URLSearchParams();
     if (range?.from) params.set('from', range.from);
@@ -241,19 +280,42 @@ export default function Accounting() {
         </div>
         <div className="flex flex-wrap gap-2 items-center">
           <Filter className="w-4 h-4 text-black/30" />
-          {(['all', '7d', '30d', '90d', 'year', 'custom'] as DatePreset[]).map((p) => (
+          {([
+            { key: 'thisMonth' as DatePreset, label: 'This Month' },
+            { key: 'lastMonth' as DatePreset, label: 'Last Month' },
+            { key: 'month' as DatePreset, label: 'Pick Month' },
+            { key: '30d' as DatePreset, label: '30 Days' },
+            { key: '90d' as DatePreset, label: '90 Days' },
+            { key: 'year' as DatePreset, label: '1 Year' },
+            { key: 'custom' as DatePreset, label: 'Custom' },
+          ]).map((p) => (
             <button
-              key={p}
-              onClick={() => setDatePreset(p)}
+              key={p.key}
+              onClick={() => setDatePreset(p.key)}
               className={`font-mono text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 transition-colors ${
-                datePreset === p ? 'bg-accent text-black' : 'bg-black/5 text-black/40 hover:bg-black/10'
+                datePreset === p.key ? 'bg-accent text-black' : 'bg-black/5 text-black/40 hover:bg-black/10'
               }`}
             >
-              {p === 'all' ? 'All Time' : p === '7d' ? '7 Days' : p === '30d' ? '30 Days' : p === '90d' ? '90 Days' : p === 'year' ? '1 Year' : 'Custom'}
+              {p.label}
             </button>
           ))}
         </div>
       </div>
+
+      {datePreset === 'month' && (
+        <div className="mb-6">
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            className="border border-black/20 px-3 py-2 font-mono text-xs focus:border-accent focus:outline-none"
+          >
+            <option value="">Select a month...</option>
+            {monthOptions.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {datePreset === 'custom' && (
         <div className="flex gap-3 mb-6 items-center">

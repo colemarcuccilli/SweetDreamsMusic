@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 
 export async function POST(request: NextRequest) {
+  // Use regular client for auth check
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
@@ -20,44 +21,48 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'File must be under 5MB' }, { status: 400 });
   }
 
+  // Use service client for storage (bypasses RLS policies)
+  const serviceClient = createServiceClient();
+
   const ext = file.name.split('.').pop() || 'jpg';
   const timestamp = Date.now();
   let filePath: string;
 
   if (type === 'cover') {
-    filePath = `cover-photos/${user.id}.${ext}`;
+    filePath = `cover-photos/${user.id}-${timestamp}.${ext}`;
   } else if (type === 'project' && projectId) {
     filePath = `project-covers/${user.id}/${projectId}-${timestamp}.${ext}`;
   } else {
-    filePath = `profile-pictures/${user.id}.${ext}`;
+    filePath = `profile-pictures/${user.id}-${timestamp}.${ext}`;
   }
 
-  const { error: uploadError } = await supabase.storage
+  const { error: uploadError } = await serviceClient.storage
     .from('media')
     .upload(filePath, file, { upsert: true });
 
   if (uploadError) {
+    console.error('Storage upload error:', uploadError);
     return NextResponse.json({ error: uploadError.message }, { status: 500 });
   }
 
-  const { data: { publicUrl } } = supabase.storage
+  const { data: { publicUrl } } = serviceClient.storage
     .from('media')
     .getPublicUrl(filePath);
 
   // Update the appropriate record
   if (type === 'cover') {
-    await supabase
+    await serviceClient
       .from('profiles')
       .update({ cover_photo_url: publicUrl, updated_at: new Date().toISOString() })
       .eq('user_id', user.id);
   } else if (type === 'project' && projectId) {
-    await supabase
+    await serviceClient
       .from('profile_projects')
       .update({ cover_image_url: publicUrl })
       .eq('id', projectId)
       .eq('user_id', user.id);
   } else {
-    await supabase
+    await serviceClient
       .from('profiles')
       .update({ profile_picture_url: publicUrl, updated_at: new Date().toISOString() })
       .eq('user_id', user.id);

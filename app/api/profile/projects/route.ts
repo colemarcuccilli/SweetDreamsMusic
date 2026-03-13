@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
       project_type: body.project_type || '',
       description: body.description || '',
       link: body.link || '',
+      links: body.links || {},
       cover_image_url: null,
       is_public: true,
       display_order: body.display_order || 0,
@@ -58,6 +59,7 @@ export async function PUT(request: NextRequest) {
       project_type: body.project_type,
       description: body.description,
       link: body.link,
+      links: body.links || {},
       is_public: body.is_public,
       display_order: body.display_order,
     })
