@@ -157,6 +157,10 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, claimLo
   const [uploadName, setUploadName] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [showCashPayment, setShowCashPayment] = useState(false);
+  const [cashAmount, setCashAmount] = useState('');
+  const [cashNote, setCashNote] = useState('');
+  const [notifying, setNotifying] = useState(false);
 
   const date = new Date(booking.start_time);
   const remainder = booking.remainder_amount || 0;
@@ -264,6 +268,54 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, claimLo
     }
   }
 
+  async function recordCash() {
+    const amount = parseFloat(cashAmount);
+    if (isNaN(amount) || amount <= 0) return;
+    setActionLoading('cash');
+    try {
+      const res = await fetch('/api/booking/record-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId: booking.id, amount, method: 'cash', note: cashNote }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`Cash payment of $${amount.toFixed(2)} recorded`);
+        setShowCashPayment(false);
+        setCashAmount('');
+        setCashNote('');
+        onUpdate?.();
+      } else {
+        alert(`Failed: ${data.error}`);
+      }
+    } catch {
+      alert('Error recording payment');
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function resendEmail(type: 'confirmation' | 'engineer_alert') {
+    setNotifying(true);
+    try {
+      const res = await fetch('/api/booking/renotify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId: booking.id, type }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`Email sent to: ${data.to}`);
+      } else {
+        alert(`Failed: ${data.error}`);
+      }
+    } catch {
+      alert('Error sending email');
+    } finally {
+      setNotifying(false);
+    }
+  }
+
   return (
     <div className={`border-2 p-4 sm:p-5 ${unclaimed ? 'border-[#F4C430]/40 bg-[#F4C430]/5' : 'border-black/10'}`}>
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
@@ -340,6 +392,17 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, claimLo
               </button>
             </div>
           )}
+          {remainder > 0 && (
+            <button
+              onClick={() => { setShowCashPayment(!showCashPayment); setCashAmount((remainder / 100).toFixed(2)); setCashNote(''); }}
+              className="font-mono text-xs font-bold uppercase tracking-wider border-2 border-black/20 text-black/60 px-4 py-2 hover:bg-black/5 transition-colors"
+            >
+              Record Cash
+            </button>
+          )}
+          {remainder === 0 && booking.status !== 'cancelled' && (
+            <span className="font-mono text-xs text-green-600 font-bold uppercase px-3 py-2">Paid in Full</span>
+          )}
           {canComplete && (
             <button
               onClick={handleComplete}
@@ -363,6 +426,13 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, claimLo
             className="font-mono text-xs font-bold uppercase tracking-wider border-2 border-black/20 text-black/60 px-4 py-2 hover:bg-black/5 transition-colors"
           >
             Reschedule
+          </button>
+          <button
+            onClick={() => resendEmail('confirmation')}
+            disabled={notifying}
+            className="font-mono text-xs font-bold uppercase tracking-wider border-2 border-black/20 text-black/60 px-4 py-2 hover:bg-black/5 disabled:opacity-50 transition-colors"
+          >
+            {notifying ? 'Sending...' : 'Resend Email'}
           </button>
           <button
             onClick={() => setShowDebug(!showDebug)}
@@ -402,6 +472,43 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, claimLo
               className="font-mono text-xs font-bold uppercase tracking-wider bg-black text-white px-4 py-2 hover:bg-black/80 disabled:opacity-50 transition-colors"
             >
               {charging ? 'Charging...' : `Charge $${chargeAmountInput || '0.00'}`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Cash payment form */}
+      {showCashPayment && (
+        <div className="mt-3 p-3 bg-black/5 border border-black/10 space-y-2">
+          <p className="font-mono text-xs font-semibold uppercase tracking-wider">Record Cash Payment</p>
+          <div className="flex flex-wrap gap-2 items-end">
+            <div>
+              <label className="font-mono text-[10px] text-black/40 block">Amount ($)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={cashAmount}
+                onChange={(e) => setCashAmount(e.target.value)}
+                className="font-mono text-sm border border-black/20 px-3 py-1.5 w-28"
+              />
+            </div>
+            <div className="flex-1 min-w-[120px]">
+              <label className="font-mono text-[10px] text-black/40 block">Note (optional)</label>
+              <input
+                type="text"
+                value={cashNote}
+                onChange={(e) => setCashNote(e.target.value)}
+                className="font-mono text-xs border border-black/20 px-3 py-1.5 w-full"
+                placeholder="e.g. paid at studio"
+              />
+            </div>
+            <button
+              onClick={recordCash}
+              disabled={actionLoading === 'cash'}
+              className="font-mono text-xs font-bold uppercase tracking-wider bg-black text-white px-4 py-2 hover:bg-black/80 disabled:opacity-50 transition-colors"
+            >
+              {actionLoading === 'cash' ? 'Recording...' : `Record $${cashAmount || '0.00'}`}
             </button>
           </div>
         </div>

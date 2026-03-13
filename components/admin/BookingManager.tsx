@@ -55,6 +55,8 @@ export default function BookingManager() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [editingRemainder, setEditingRemainder] = useState<string | null>(null);
   const [remainderInput, setRemainderInput] = useState('');
+  const [editingCharge, setEditingCharge] = useState<string | null>(null);
+  const [chargeInput, setChargeInput] = useState('');
   const [editingTime, setEditingTime] = useState<string | null>(null);
   const [timeInput, setTimeInput] = useState('');
   const [dateInput, setDateInput] = useState('');
@@ -470,12 +472,33 @@ export default function BookingManager() {
                         </button>
                       )}
                       {b.remainder_amount > 0 && b.stripe_customer_id && (
-                        <button
-                          onClick={() => chargeRemainder(b.id, b.remainder_amount)}
-                          disabled={updatingId === b.id}
-                          className="border border-green-600 text-green-700 font-mono text-xs font-bold uppercase px-3 py-2 hover:bg-green-50 disabled:opacity-50 inline-flex items-center gap-1">
-                          <DollarSign className="w-3 h-3" /> Charge {formatCents(b.remainder_amount)}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => chargeRemainder(b.id, editingCharge === b.id ? Math.round(parseFloat(chargeInput) * 100) : b.remainder_amount)}
+                            disabled={updatingId === b.id}
+                            className="border border-green-600 text-green-700 font-mono text-xs font-bold uppercase px-3 py-2 hover:bg-green-50 disabled:opacity-50 inline-flex items-center gap-1">
+                            <DollarSign className="w-3 h-3" /> Charge {editingCharge === b.id ? `$${chargeInput}` : formatCents(b.remainder_amount)}
+                          </button>
+                          {editingCharge === b.id ? (
+                            <div className="flex items-center gap-1">
+                              <span className="font-mono text-xs">$</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={chargeInput}
+                                onChange={(e) => setChargeInput(e.target.value)}
+                                className="w-20 border border-black/20 px-1 py-0.5 text-xs font-mono"
+                                autoFocus
+                              />
+                              <button onClick={() => setEditingCharge(null)} className="text-black/40 font-mono text-[10px]">Done</button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => { setEditingCharge(b.id); setChargeInput((b.remainder_amount / 100).toFixed(2)); }}
+                              className="font-mono text-[10px] text-accent hover:underline"
+                            >Edit</button>
+                          )}
+                        </div>
                       )}
                       {b.remainder_amount > 0 && (
                         <button
