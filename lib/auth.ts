@@ -42,7 +42,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 }
 
 export function isAdmin(email: string): boolean {
-  return SUPER_ADMINS.includes(email as typeof SUPER_ADMINS[number]);
+  return SUPER_ADMINS.includes(email.toLowerCase() as typeof SUPER_ADMINS[number]);
 }
 
 export { getUserRole };

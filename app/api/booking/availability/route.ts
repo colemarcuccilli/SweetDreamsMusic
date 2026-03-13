@@ -27,13 +27,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to check availability' }, { status: 500 });
   }
 
-  // Convert bookings to blocked hour slots
+  // Convert bookings to blocked half-hour slots (decimal: 18.5 = 6:30 PM)
   const bookedSlots: number[] = [];
   for (const booking of bookings || []) {
-    const startHour = new Date(booking.start_time).getHours();
+    const st = new Date(booking.start_time);
+    const startSlot = st.getUTCHours() + st.getUTCMinutes() / 60;
     const hours = booking.duration || 1;
-    for (let i = 0; i < hours; i++) {
-      const slot = (startHour + i) % 24;
+    const halfHourCount = hours * 2;
+    for (let i = 0; i < halfHourCount; i++) {
+      const slot = (startSlot + i * 0.5) % 24;
       if (!bookedSlots.includes(slot)) {
         bookedSlots.push(slot);
       }

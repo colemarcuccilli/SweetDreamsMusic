@@ -107,7 +107,7 @@ export default async function DashboardPage() {
                         <div>
                           <p className="font-mono text-sm font-semibold">
                             {new Date(booking.start_time).toLocaleDateString('en-US', {
-                              weekday: 'short', month: 'short', day: 'numeric'
+                              weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC'
                             })}
                           </p>
                           <p className="font-mono text-xs text-black/50 mt-1">

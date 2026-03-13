@@ -107,12 +107,13 @@ export const ENGINEERS = [
 export const SUPER_ADMINS = [
   'cole@sweetdreams.us',
   'jayvalleo@sweetdreams.us',
+  'jayvalleo@sweetdreamsmusic.com',
 ] as const;
 
 export const TIMEZONE = 'America/Indiana/Indianapolis';
 
-// Studio A is only available 6 PM+ on weekdays (Mon-Fri), all day on weekends
-export const STUDIO_A_WEEKDAY_START = 18; // 6 PM
+// Studio A is only available 6:30 PM+ on weekdays (Mon-Fri), all day on weekends
+export const STUDIO_A_WEEKDAY_START = 18.5; // 6:30 PM
 
 // Beat store license types
 export const BEAT_LICENSES = {

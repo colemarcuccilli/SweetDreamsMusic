@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { verifyEngineerAccess } from '@/lib/admin-auth';
 import { sendEngineerAssigned, sendEngineerClaimConfirmation } from '@/lib/email';
-import { ENGINEERS, TIMEZONE } from '@/lib/constants';
+import { ENGINEERS } from '@/lib/constants';
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -64,8 +64,9 @@ export async function POST(request: NextRequest) {
   }
 
   const startDate = new Date(updated.start_time);
-  const dateStr = startDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: TIMEZONE });
-  const timeStr = startDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: TIMEZONE });
+  // Times are stored as local Fort Wayne hours in UTC — format as UTC to preserve the intended hour
+  const dateStr = startDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
+  const timeStr = startDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
 
   // Notify the customer that an engineer has been assigned
   if (updated.customer_email) {

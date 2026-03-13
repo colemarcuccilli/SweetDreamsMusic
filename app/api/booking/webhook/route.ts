@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
 import { createServiceClient } from '@/lib/supabase/server';
 import { sendBookingConfirmation, sendAdminBookingAlert, sendEngineerNewBookingAlert } from '@/lib/email';
-import { ENGINEERS, TIMEZONE, type Room } from '@/lib/constants';
+import { ENGINEERS, type Room } from '@/lib/constants';
 import type Stripe from 'stripe';
 
 export async function POST(request: NextRequest) {
@@ -59,8 +59,9 @@ export async function POST(request: NextRequest) {
 
         // Send emails — use Fort Wayne timezone since Vercel runs UTC
         const startDate = new Date(startDateTime);
-        const dateStr = startDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: TIMEZONE });
-        const timeStr = startDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: TIMEZONE });
+        // Times are stored as local Fort Wayne hours in UTC — format as UTC to preserve the intended hour
+        const dateStr = startDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
+        const timeStr = startDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
         const duration = parseInt(meta.duration_hours);
 
         // Customer confirmation

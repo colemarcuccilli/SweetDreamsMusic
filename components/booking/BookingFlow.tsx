@@ -3,7 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Calendar, Clock, Home, User, ChevronLeft, ChevronRight, AlertTriangle, Star } from 'lucide-react';
 import { PRICING, ROOMS, ROOM_LABELS, ROOM_RATES, ROOM_RATES_SINGLE, SWEET_SPOTS, ENGINEERS, STUDIO_A_WEEKDAY_START, type Room } from '@/lib/constants';
-import { formatCents, cn, isSameDay, calculateSessionTotal, formatTime, getHourSurcharge } from '@/lib/utils';
+import { formatCents, cn, isSameDay, calculateSessionTotal, formatTime, getHourSurcharge, parseTimeSlot, decimalToTimeStr } from '@/lib/utils';
 
 function getDaysInMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate();
@@ -20,11 +20,12 @@ const MONTH_NAMES = [
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-// Generate 24-hour time slots
+// Generate 30-minute time slots (48 per day)
 function generateTimeSlots() {
   const slots: string[] = [];
   for (let h = 0; h < 24; h++) {
     slots.push(`${h}:00`);
+    slots.push(`${h}:30`);
   }
   return slots;
 }
@@ -61,7 +62,7 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
 
   const timeSlots = useMemo(() => generateTimeSlots(), []);
 
-  const startHour = selectedTime ? parseInt(selectedTime.split(':')[0]) : 0;
+  const startHour = selectedTime ? parseTimeSlot(selectedTime) : 0;
   const isSameDayBooking = selectedDate ? isSameDay(selectedDate) : false;
 
   const pricing = useMemo(() => {
@@ -91,17 +92,20 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
   const isWeekday = selectedDate ? [1, 2, 3, 4, 5].includes(selectedDate.getDay()) : false;
   const studioARestricted = room === 'studio_a' && isWeekday;
 
-  // Check if a time slot would conflict
-  function isSlotBooked(hour: number): boolean {
-    if (currentBookedSlots.includes(hour)) return true;
-    // Studio A blocked before 6 PM on weekdays
-    if (studioARestricted && hour < STUDIO_A_WEEKDAY_START) return true;
+  // Check if a half-hour slot would conflict (slot is decimal, e.g. 18.5)
+  function isSlotBooked(slot: number): boolean {
+    if (currentBookedSlots.includes(slot)) return true;
+    // Studio A blocked before 6:30 PM on weekdays
+    if (studioARestricted && slot < STUDIO_A_WEEKDAY_START) return true;
     return false;
   }
 
-  function wouldOverlap(startH: number, dur: number): boolean {
-    for (let i = 0; i < dur; i++) {
-      if (currentBookedSlots.includes((startH + i) % 24)) return true;
+  function wouldOverlap(startSlot: number, dur: number): boolean {
+    // dur is in hours, each hour = 2 half-hour slots
+    const halfHourCount = dur * 2;
+    for (let i = 0; i < halfHourCount; i++) {
+      const slot = (startSlot + i * 0.5) % 24;
+      if (currentBookedSlots.includes(slot)) return true;
     }
     return false;
   }
@@ -117,27 +121,29 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
   const [showReview, setShowReview] = useState(false);
 
   // Auto-reveal and scroll to next section
+  // Step 2: Show studio selection after date is picked
   useEffect(() => {
-    if (selectedDate && !showTime) {
-      setShowTime(true);
-      setTimeout(() => timeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
-    }
-  }, [selectedDate, showTime]);
-
-  useEffect(() => {
-    if (selectedTime && !showStudio) {
+    if (selectedDate && !showStudio) {
       setShowStudio(true);
       setTimeout(() => studioRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
     }
-  }, [selectedTime, showStudio]);
+  }, [selectedDate, showStudio]);
 
+  // Step 3: Show time selection after studio section is visible (studio has a default)
   useEffect(() => {
-    if (showStudio && !showReview) {
-      // Show review once studio section is visible (it has defaults)
+    if (showStudio && !showTime) {
+      setShowTime(true);
+      setTimeout(() => timeRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+    }
+  }, [showStudio, showTime]);
+
+  // Step 4: Show review after time is selected
+  useEffect(() => {
+    if (selectedTime && !showReview) {
       setShowReview(true);
       setTimeout(() => reviewRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 300);
     }
-  }, [showStudio, showReview]);
+  }, [selectedTime, showReview]);
 
   // Re-scroll to review when pricing changes
   useEffect(() => {
@@ -284,7 +290,91 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
         </div>
       </section>
 
-      {/* ============ SECTION 2: TIME & DURATION ============ */}
+      {/* ============ SECTION 2: STUDIO & ENGINEER ============ */}
+      <section
+        ref={studioRef}
+        className={cn(
+          'transition-all duration-700 ease-out scroll-mt-8',
+          showStudio ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8 pointer-events-none h-0 overflow-hidden'
+        )}
+      >
+        <div className="flex items-center gap-3 mb-6">
+          <span className="w-8 h-8 bg-black text-white font-mono text-sm font-bold flex items-center justify-center flex-shrink-0">2</span>
+          <h2 className="text-heading-lg">STUDIO & ENGINEER</h2>
+        </div>
+
+        <div className="mb-8">
+          <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">Select Studio</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {ROOMS.map((r) => (
+              <button
+                key={r}
+                onClick={() => {
+                  setRoom(r);
+                  setEngineer('any');
+                  // Clear time if switching to Studio A and current time is restricted
+                  if (r === 'studio_a' && isWeekday && selectedTime) {
+                    if (parseTimeSlot(selectedTime) < STUDIO_A_WEEKDAY_START) setSelectedTime(null);
+                  }
+                }}
+                className={cn(
+                  'p-6 border-2 font-mono text-left transition-colors',
+                  room === r ? 'border-black bg-black text-white' : 'border-black/20 hover:border-black'
+                )}
+              >
+                <Home className={cn('w-6 h-6 mb-3', room === r ? 'text-accent' : 'text-black/40')} />
+                <p className="font-bold text-sm uppercase tracking-wider">{ROOM_LABELS[r]}</p>
+                <p className={cn('text-xs mt-1', room === r ? 'text-white/60' : 'text-black/40')}>
+                  {formatCents(ROOM_RATES[r])}/hour
+                  <span className="block text-[10px] mt-0.5">1hr: {formatCents(ROOM_RATES_SINGLE[r])}</span>
+                  {r === 'studio_a' && (
+                    <span className={cn('block text-[10px] mt-1', room === r ? 'text-amber-300' : 'text-amber-600')}>
+                      Weekdays 6:30 PM+ only
+                    </span>
+                  )}
+                </p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mb-4">
+          <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">
+            Request an Engineer <span className="font-normal text-black/40">(not guaranteed)</span>
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <button
+              onClick={() => setEngineer('any')}
+              className={cn(
+                'p-4 border-2 font-mono text-sm text-left transition-colors',
+                engineer === 'any' ? 'border-black bg-black text-white' : 'border-black/20 hover:border-black'
+              )}
+            >
+              <p className="font-bold uppercase tracking-wider">Any Available</p>
+              <p className={cn('text-xs mt-1', engineer === 'any' ? 'text-white/60' : 'text-black/40')}>
+                We&apos;ll match you
+              </p>
+            </button>
+            {ENGINEERS.filter((eng) => eng.studios.includes(room)).map((eng) => (
+              <button
+                key={eng.name}
+                onClick={() => setEngineer(eng.name)}
+                className={cn(
+                  'p-4 border-2 font-mono text-sm text-left transition-colors',
+                  engineer === eng.name ? 'border-black bg-black text-white' : 'border-black/20 hover:border-black'
+                )}
+              >
+                <p className="font-bold uppercase tracking-wider">{eng.displayName}</p>
+                <p className={cn('text-xs mt-1', engineer === eng.name ? 'text-white/60' : 'text-black/40')}>
+                  {eng.specialties.join(', ')}
+                </p>
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ============ SECTION 3: TIME & DURATION ============ */}
       <section
         ref={timeRef}
         className={cn(
@@ -293,7 +383,7 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
         )}
       >
         <div className="flex items-center gap-3 mb-6">
-          <span className="w-8 h-8 bg-black text-white font-mono text-sm font-bold flex items-center justify-center flex-shrink-0">2</span>
+          <span className="w-8 h-8 bg-black text-white font-mono text-sm font-bold flex items-center justify-center flex-shrink-0">3</span>
           <h2 className="text-heading-lg">CHOOSE YOUR TIME</h2>
         </div>
 
@@ -305,14 +395,14 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
           </p>
           {studioARestricted && (
             <p className="font-mono text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 mb-4">
-              Studio A is available 6 PM and later on weekdays. Available all day on weekends.
+              Studio A is available 6:30 PM and later on weekdays. Available all day on weekends.
             </p>
           )}
           <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
             {timeSlots.map((slot) => {
-              const hour = parseInt(slot.split(':')[0]);
-              const surcharge = getHourSurcharge(hour);
-              const booked = isSlotBooked(hour);
+              const slotDec = parseTimeSlot(slot);
+              const surcharge = getHourSurcharge(slotDec);
+              const booked = isSlotBooked(slotDec);
               return (
                 <button
                   key={slot}
@@ -329,7 +419,7 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
                   )}
                 >
                   {booked
-                    ? (studioARestricted && hour < STUDIO_A_WEEKDAY_START ? 'Unavail.' : 'Booked')
+                    ? (studioARestricted && slotDec < STUDIO_A_WEEKDAY_START ? 'Unavail.' : 'Booked')
                     : formatTime(slot)}
                   {!booked && surcharge.tier === 'lateNight' && (
                     <span className="block text-[9px] text-amber-600 font-semibold mt-0.5">+$10/hr</span>
@@ -385,7 +475,7 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
               {pricing.hourBreakdown.map((hb, i) => (
                 <div key={i} className="flex items-center justify-between font-mono text-xs py-1.5 border-b border-black/5 last:border-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-black/60 w-20">{formatTime(`${hb.hour}:00`)}</span>
+                    <span className="text-black/60 w-20">{formatTime(decimalToTimeStr(hb.hour))}</span>
                     {hb.tier !== 'regular' && (
                       <span className={cn('text-[10px] font-bold uppercase px-1.5 py-0.5', tierColor(hb.tier),
                         hb.tier === 'lateNight' ? 'bg-amber-50' : 'bg-red-50'
@@ -408,91 +498,6 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
             </div>
           </div>
         )}
-      </section>
-
-      {/* ============ SECTION 3: STUDIO & ENGINEER ============ */}
-      <section
-        ref={studioRef}
-        className={cn(
-          'transition-all duration-700 ease-out scroll-mt-8',
-          showStudio ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8 pointer-events-none h-0 overflow-hidden'
-        )}
-      >
-        <div className="flex items-center gap-3 mb-6">
-          <span className="w-8 h-8 bg-black text-white font-mono text-sm font-bold flex items-center justify-center flex-shrink-0">3</span>
-          <h2 className="text-heading-lg">STUDIO & ENGINEER</h2>
-        </div>
-
-        <div className="mb-8">
-          <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">Select Studio</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {ROOMS.map((r) => (
-              <button
-                key={r}
-                onClick={() => {
-                  setRoom(r);
-                  setEngineer('any');
-                  // Clear time if switching to Studio A and current time is restricted
-                  if (r === 'studio_a' && isWeekday && selectedTime) {
-                    const h = parseInt(selectedTime.split(':')[0]);
-                    if (h < STUDIO_A_WEEKDAY_START) setSelectedTime(null);
-                  }
-                }}
-                className={cn(
-                  'p-6 border-2 font-mono text-left transition-colors',
-                  room === r ? 'border-black bg-black text-white' : 'border-black/20 hover:border-black'
-                )}
-              >
-                <Home className={cn('w-6 h-6 mb-3', room === r ? 'text-accent' : 'text-black/40')} />
-                <p className="font-bold text-sm uppercase tracking-wider">{ROOM_LABELS[r]}</p>
-                <p className={cn('text-xs mt-1', room === r ? 'text-white/60' : 'text-black/40')}>
-                  {formatCents(ROOM_RATES[r])}/hour
-                  <span className="block text-[10px] mt-0.5">1hr: {formatCents(ROOM_RATES_SINGLE[r])}</span>
-                  {r === 'studio_a' && (
-                    <span className={cn('block text-[10px] mt-1', room === r ? 'text-amber-300' : 'text-amber-600')}>
-                      Weekdays 6 PM+ only
-                    </span>
-                  )}
-                </p>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="mb-4">
-          <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">
-            Request an Engineer <span className="font-normal text-black/40">(not guaranteed)</span>
-          </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <button
-              onClick={() => setEngineer('any')}
-              className={cn(
-                'p-4 border-2 font-mono text-sm text-left transition-colors',
-                engineer === 'any' ? 'border-black bg-black text-white' : 'border-black/20 hover:border-black'
-              )}
-            >
-              <p className="font-bold uppercase tracking-wider">Any Available</p>
-              <p className={cn('text-xs mt-1', engineer === 'any' ? 'text-white/60' : 'text-black/40')}>
-                We&apos;ll match you
-              </p>
-            </button>
-            {ENGINEERS.filter((eng) => eng.studios.includes(room)).map((eng) => (
-              <button
-                key={eng.name}
-                onClick={() => setEngineer(eng.name)}
-                className={cn(
-                  'p-4 border-2 font-mono text-sm text-left transition-colors',
-                  engineer === eng.name ? 'border-black bg-black text-white' : 'border-black/20 hover:border-black'
-                )}
-              >
-                <p className="font-bold uppercase tracking-wider">{eng.displayName}</p>
-                <p className={cn('text-xs mt-1', engineer === eng.name ? 'text-white/60' : 'text-black/40')}>
-                  {eng.specialties.join(', ')}
-                </p>
-              </button>
-            ))}
-          </div>
-        </div>
       </section>
 
       {/* ============ SECTION 4: REVIEW & PAY ============ */}
@@ -522,7 +527,7 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
               <span className="text-black/60">Time</span>
               <span className="font-semibold">
                 {selectedTime && formatTime(selectedTime)}
-                {selectedTime && ` – ${formatTime(`${(startHour + duration) % 24}:00`)}`}
+                {selectedTime && ` – ${formatTime(decimalToTimeStr((startHour + duration) % 24))}`}
               </span>
             </div>
             <div className="flex justify-between">
@@ -568,7 +573,7 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
                   .filter((hb) => hb.nightFee > 0)
                   .map((hb, i) => (
                     <div key={i} className={cn('flex justify-between text-xs', tierColor(hb.tier))}>
-                      <span>{formatTime(`${hb.hour}:00`)} — {tierLabel(hb.tier)}</span>
+                      <span>{formatTime(decimalToTimeStr(hb.hour))} — {tierLabel(hb.tier)}</span>
                       <span>+{formatCents(hb.nightFee)}</span>
                     </div>
                   ))

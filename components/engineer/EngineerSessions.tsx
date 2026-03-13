@@ -240,11 +240,11 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, claimLo
     formData.append('file', uploadFile);
     formData.append('customer_email', booking.customer_email);
     formData.append('display_name', uploadName || uploadFile.name);
-    formData.append('description', `From session on ${date.toLocaleDateString()}`);
+    formData.append('description', `From session on ${date.toLocaleDateString('en-US', { timeZone: 'UTC' })}`);
     formData.append('send_email', 'true');
     formData.append('customer_name', booking.customer_name);
     formData.append('booking_room', booking.room || '');
-    formData.append('booking_date', date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }));
+    formData.append('booking_date', date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' }));
 
     try {
       const res = await fetch('/api/admin/library/deliverables', { method: 'POST', body: formData });
@@ -278,9 +278,9 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, claimLo
             </p>
           )}
           <p className="font-mono text-xs text-black/40 mt-1">
-            {date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+            {date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })}
             {' · '}
-            {date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+            {date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' })}
             {' · '}
             {booking.duration}hr
             {booking.room && ` · ${booking.room === 'studio_a' ? 'Studio A' : 'Studio B'}`}

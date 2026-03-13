@@ -189,7 +189,7 @@ function SessionTable({ sessions }: { sessions: Booking[] }) {
       {sessions.map((b) => (
         <div key={b.id} className="grid grid-cols-2 md:grid-cols-12 gap-2 font-mono text-xs py-3 px-3 border-b border-black/5 hover:bg-black/[0.02]">
           <div className="col-span-2">
-            {new Date(b.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
+            {new Date(b.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit', timeZone: 'UTC' })}
           </div>
           <div className="col-span-2 font-semibold truncate">{b.customer_name}</div>
           <div className="col-span-1 text-black/60">{ROOM_LABELS[b.room || ''] || '—'}</div>

@@ -11,12 +11,13 @@ export function cn(...classes: (string | boolean | undefined | null)[]): string 
   return classes.filter(Boolean).join(' ');
 }
 
-/** Returns the surcharge tier for a given hour (0-23) */
+/** Returns the surcharge tier for a given hour (0-23, can be decimal like 18.5) */
 export function getHourSurcharge(hour: number): { tier: 'regular' | 'lateNight' | 'deepNight'; amount: number } {
+  const h = Math.floor(hour) % 24;
   // 2AM-8AM: deep night (+$30/hr)
-  if (hour >= 2 && hour < 9) return { tier: 'deepNight', amount: PRICING.deepNightSurcharge };
+  if (h >= 2 && h < 9) return { tier: 'deepNight', amount: PRICING.deepNightSurcharge };
   // 10PM-1AM: late night (+$10/hr)
-  if (hour >= 22 || hour < 2) return { tier: 'lateNight', amount: PRICING.lateNightSurcharge };
+  if (h >= 22 || h < 2) return { tier: 'lateNight', amount: PRICING.lateNightSurcharge };
   // 9AM-10PM: regular (no surcharge)
   return { tier: 'regular', amount: 0 };
 }
@@ -69,14 +70,14 @@ export function calculateSessionTotal(
     basePerHour = ROOM_RATES[room];
   }
 
-  // Build per-hour breakdown
+  // Build per-hour breakdown (startHour can be decimal, e.g. 18.5 for 6:30 PM)
   const hourBreakdown: HourBreakdown[] = [];
   let nightFees = 0;
   let sameDayFee = 0;
 
   for (let i = 0; i < hours; i++) {
     const h = (startHour + i) % 24;
-    const surcharge = getHourSurcharge(h);
+    const surcharge = getHourSurcharge(Math.floor(h));
     const sdFee = isSameDayBooking ? PRICING.sameDaySurcharge : 0;
 
     const entry: HourBreakdown = {
@@ -102,15 +103,29 @@ export function calculateSessionTotal(
 
 export function getUserRole(email: string | undefined, profileRole?: string): UserRole {
   if (!email) return 'user';
-  if (SUPER_ADMINS.includes(email as typeof SUPER_ADMINS[number])) return 'admin';
+  if (SUPER_ADMINS.includes(email.toLowerCase() as typeof SUPER_ADMINS[number])) return 'admin';
   if (profileRole === 'engineer') return 'engineer';
   return 'user';
 }
 
 export function formatTime(slot: string): string {
-  const hour = parseInt(slot.split(':')[0]);
-  if (hour === 0) return '12:00 AM';
-  if (hour < 12) return `${hour}:00 AM`;
-  if (hour === 12) return '12:00 PM';
-  return `${hour - 12}:00 PM`;
+  const [h, m] = slot.split(':').map(Number);
+  const min = (m || 0) >= 30 ? ':30' : ':00';
+  if (h === 0) return `12${min} AM`;
+  if (h < 12) return `${h}${min} AM`;
+  if (h === 12) return `12${min} PM`;
+  return `${h - 12}${min} PM`;
+}
+
+/** Parse "18:30" → 18.5 */
+export function parseTimeSlot(time: string): number {
+  const [h, m] = time.split(':').map(Number);
+  return h + (m || 0) / 60;
+}
+
+/** Convert decimal hour 18.5 → "18:30" */
+export function decimalToTimeStr(dec: number): string {
+  const h = Math.floor(dec) % 24;
+  const m = dec % 1 >= 0.5 ? '30' : '00';
+  return `${h}:${m}`;
 }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
 import { createServiceClient } from '@/lib/supabase/server';
 import { PRICING, SITE_URL, ROOM_LABELS, STUDIO_A_WEEKDAY_START, type Room } from '@/lib/constants';
-import { calculateSessionTotal } from '@/lib/utils';
+import { calculateSessionTotal, parseTimeSlot } from '@/lib/utils';
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,20 +17,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid duration' }, { status: 400 });
     }
 
-    const startHour = parseInt(startTime.split(':')[0]);
+    const startHour = parseTimeSlot(startTime);
 
-    // Studio A weekday restriction: only available 6 PM+ on Mon-Fri
+    // Studio A weekday restriction: only available 6:30 PM+ on Mon-Fri
     if (room === 'studio_a') {
-      // Parse date string (YYYY-MM-DD) to get day of week
       const [y, m, d] = date.split('-').map(Number);
-      const bookingDate = new Date(y, m - 1, d); // local date, no UTC shift
+      const bookingDate = new Date(y, m - 1, d);
       const dow = bookingDate.getDay(); // 0=Sun, 1-5=Mon-Fri, 6=Sat
       if (dow >= 1 && dow <= 5 && startHour < STUDIO_A_WEEKDAY_START) {
-        return NextResponse.json({ error: 'Studio A is only available 6 PM and later on weekdays. Try Studio B or choose an evening time.' }, { status: 400 });
+        return NextResponse.json({ error: 'Studio A is only available 6:30 PM and later on weekdays. Try Studio B or choose an evening time.' }, { status: 400 });
       }
     }
 
-    // Server-side double-booking check (both studios — they share the same space)
+    // Server-side double-booking check using half-hour slots
     const supabase = createServiceClient();
     const { data: existingBookings } = await supabase
       .from('bookings')
@@ -40,11 +39,12 @@ export async function POST(request: NextRequest) {
       .in('status', ['confirmed', 'pending']);
 
     if (existingBookings && existingBookings.length > 0) {
-      const requestedHours = Array.from({ length: duration }, (_, i) => (startHour + i) % 24);
+      const requestedSlots = Array.from({ length: duration * 2 }, (_, i) => (startHour + i * 0.5) % 24);
       for (const booking of existingBookings) {
-        const bookedStart = new Date(booking.start_time).getHours();
-        const bookedHours = Array.from({ length: booking.duration || 1 }, (_, i) => (bookedStart + i) % 24);
-        const overlap = requestedHours.some(h => bookedHours.includes(h));
+        const bt = new Date(booking.start_time);
+        const bookedStart = bt.getUTCHours() + bt.getUTCMinutes() / 60;
+        const bookedSlots = Array.from({ length: (booking.duration || 1) * 2 }, (_, i) => (bookedStart + i * 0.5) % 24);
+        const overlap = requestedSlots.some(s => bookedSlots.includes(s));
         if (overlap) {
           return NextResponse.json({ error: 'This time slot is already booked. Please choose a different time.' }, { status: 409 });
         }
@@ -57,8 +57,8 @@ export async function POST(request: NextRequest) {
 
     const pricing = calculateSessionTotal(room as Room, duration, startHour, sameDayBooking);
 
-    const endHour = (startHour + duration) % 24;
-    const endTime = `${endHour}:00`;
+    const endDec = (startHour + duration) % 24;
+    const endTime = `${Math.floor(endDec)}:${endDec % 1 >= 0.5 ? '30' : '00'}`;
     const roomLabel = ROOM_LABELS[room as Room] || room;
 
     // Find or create Stripe customer
