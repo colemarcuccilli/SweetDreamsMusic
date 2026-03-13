@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { verifyEngineerAccess } from '@/lib/admin-auth';
+import { ENGINEERS } from '@/lib/constants';
 
 export async function GET() {
   const supabase = await createClient();
@@ -19,18 +20,27 @@ export async function GET() {
 
   const engineerName = profile?.display_name || user.email || '';
 
-  // Fetch all bookings where this engineer is assigned
+  // Build list of names this engineer might be stored under
+  // (profile display_name, ENGINEERS constant name, and displayName)
+  const matchNames = new Set<string>([engineerName]);
+  const engineerConfig = ENGINEERS.find(e => e.email === user.email);
+  if (engineerConfig) {
+    matchNames.add(engineerConfig.name);
+    matchNames.add(engineerConfig.displayName);
+  }
+
+  // Fetch all bookings where this engineer is assigned under any of their names
   const { data: bookings } = await supabase
     .from('bookings')
     .select('id, customer_name, customer_email, start_time, end_time, duration, total_amount, deposit_amount, remainder_amount, actual_deposit_paid, status, room, requested_engineer, engineer_name, claimed_at, created_at, admin_notes, stripe_customer_id, stripe_payment_intent_id')
-    .eq('engineer_name', engineerName)
+    .in('engineer_name', [...matchNames])
     .order('start_time', { ascending: false });
 
   // Fetch media sales this engineer brought in
   const { data: mediaSales } = await supabase
     .from('media_sales')
     .select('*')
-    .eq('engineer_name', engineerName)
+    .in('engineer_name', [...matchNames])
     .order('created_at', { ascending: false });
 
   return NextResponse.json({

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { RefreshCw, ChevronDown, DollarSign, X, Check, Clock, Pencil } from 'lucide-react';
+import { RefreshCw, ChevronDown, DollarSign, X, Check, Clock, Pencil, Mail, Banknote } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
 import { ENGINEERS, ROOM_LABELS } from '@/lib/constants';
 
@@ -59,6 +59,9 @@ export default function BookingManager() {
   const [timeInput, setTimeInput] = useState('');
   const [dateInput, setDateInput] = useState('');
   const [showDebug, setShowDebug] = useState<string | null>(null);
+  const [showCashPayment, setShowCashPayment] = useState<string | null>(null);
+  const [cashAmount, setCashAmount] = useState('');
+  const [cashNote, setCashNote] = useState('');
 
   async function fetchBookings() {
     setLoading(true);
@@ -144,6 +147,52 @@ export default function BookingManager() {
     });
     setUpdatingId(null);
     fetchBookings();
+  }
+
+  async function renotify(bookingId: string, type: 'confirmation' | 'engineer_alert') {
+    setUpdatingId(bookingId);
+    try {
+      const res = await fetch('/api/booking/renotify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId, type }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`Email sent to: ${data.to}`);
+      } else {
+        alert(`Failed: ${data.error}`);
+      }
+    } catch {
+      alert('Error sending email');
+    }
+    setUpdatingId(null);
+  }
+
+  async function recordCashPayment(bookingId: string) {
+    const amount = parseFloat(cashAmount);
+    if (isNaN(amount) || amount <= 0) return;
+    setUpdatingId(bookingId);
+    try {
+      const res = await fetch('/api/booking/record-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId, amount, method: 'cash', note: cashNote }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`Cash payment of $${amount.toFixed(2)} recorded`);
+        setShowCashPayment(null);
+        setCashAmount('');
+        setCashNote('');
+        fetchBookings();
+      } else {
+        alert(`Failed: ${data.error}`);
+      }
+    } catch {
+      alert('Error recording payment');
+    }
+    setUpdatingId(null);
   }
 
   function saveRemainder(bookingId: string) {
@@ -420,12 +469,79 @@ export default function BookingManager() {
                           <X className="w-3 h-3" /> Cancel
                         </button>
                       )}
-                      {(b.status === 'completed' || b.status === 'confirmed') && b.remainder_amount > 0 && b.stripe_customer_id && (
+                      {b.remainder_amount > 0 && b.stripe_customer_id && (
                         <button
                           onClick={() => chargeRemainder(b.id, b.remainder_amount)}
                           disabled={updatingId === b.id}
                           className="border border-green-600 text-green-700 font-mono text-xs font-bold uppercase px-3 py-2 hover:bg-green-50 disabled:opacity-50 inline-flex items-center gap-1">
                           <DollarSign className="w-3 h-3" /> Charge {formatCents(b.remainder_amount)}
+                        </button>
+                      )}
+                      {b.remainder_amount > 0 && (
+                        <button
+                          onClick={() => { setShowCashPayment(showCashPayment === b.id ? null : b.id); setCashAmount((b.remainder_amount / 100).toFixed(2)); setCashNote(''); }}
+                          disabled={updatingId === b.id}
+                          className="border border-black/30 text-black/70 font-mono text-xs font-bold uppercase px-3 py-2 hover:bg-black/5 disabled:opacity-50 inline-flex items-center gap-1">
+                          <Banknote className="w-3 h-3" /> Record Cash
+                        </button>
+                      )}
+                      {b.remainder_amount === 0 && (
+                        <span className="font-mono text-xs text-green-600 font-bold uppercase px-3 py-2 inline-flex items-center gap-1">
+                          <Check className="w-3 h-3" /> Paid in Full
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Cash Payment Form */}
+                    {showCashPayment === b.id && (
+                      <div className="border border-black/10 p-3 space-y-2">
+                        <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Record Cash/External Payment</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex items-center gap-1">
+                            <span className="font-mono text-sm">$</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={cashAmount}
+                              onChange={(e) => setCashAmount(e.target.value)}
+                              className="w-24 border border-black/20 px-2 py-1.5 font-mono text-xs"
+                              placeholder="Amount"
+                            />
+                          </div>
+                          <input
+                            type="text"
+                            value={cashNote}
+                            onChange={(e) => setCashNote(e.target.value)}
+                            className="flex-1 min-w-[120px] border border-black/20 px-2 py-1.5 font-mono text-xs"
+                            placeholder="Note (optional)"
+                          />
+                          <button
+                            onClick={() => recordCashPayment(b.id)}
+                            disabled={updatingId === b.id}
+                            className="bg-black text-white font-mono text-[10px] font-bold uppercase px-3 py-1.5 disabled:opacity-50"
+                          >Record</button>
+                          <button
+                            onClick={() => setShowCashPayment(null)}
+                            className="border border-black/20 font-mono text-[10px] text-black/60 uppercase px-3 py-1.5"
+                          >Cancel</button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Email Actions */}
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => renotify(b.id, 'confirmation')}
+                        disabled={updatingId === b.id}
+                        className="border border-black/20 text-black/60 font-mono text-[10px] font-bold uppercase px-3 py-2 hover:bg-black/5 disabled:opacity-50 inline-flex items-center gap-1">
+                        <Mail className="w-3 h-3" /> Resend Confirmation
+                      </button>
+                      {!b.engineer_name && (
+                        <button
+                          onClick={() => renotify(b.id, 'engineer_alert')}
+                          disabled={updatingId === b.id}
+                          className="border border-black/20 text-black/60 font-mono text-[10px] font-bold uppercase px-3 py-2 hover:bg-black/5 disabled:opacity-50 inline-flex items-center gap-1">
+                          <Mail className="w-3 h-3" /> Re-alert Engineers
                         </button>
                       )}
                     </div>
