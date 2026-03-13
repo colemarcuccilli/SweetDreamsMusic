@@ -107,6 +107,71 @@ export async function POST(request: NextRequest) {
         } else {
           console.warn('[WEBHOOK] No engineers found for room:', room);
         }
+      } else if (meta.type === 'invite_deposit') {
+        // Invite booking — deposit paid, confirm the existing pending booking
+        const bookingId = meta.booking_id;
+
+        const { data: existingBooking } = await supabase
+          .from('bookings')
+          .select('*')
+          .eq('id', bookingId)
+          .single();
+
+        if (existingBooking) {
+          await supabase.from('bookings').update({
+            status: 'confirmed',
+            actual_deposit_paid: session.amount_total,
+            stripe_customer_id: session.customer as string,
+            stripe_checkout_session_id: session.id,
+            stripe_payment_intent_id: session.payment_intent as string,
+            updated_at: new Date().toISOString(),
+          }).eq('id', bookingId);
+
+          // Send confirmation emails
+          const startDate = new Date(existingBooking.start_time);
+          const dateStr = startDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
+          const timeStr = startDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
+
+          if (existingBooking.customer_email) {
+            await sendBookingConfirmation(existingBooking.customer_email, {
+              customerName: existingBooking.customer_name,
+              date: dateStr,
+              startTime: timeStr,
+              duration: existingBooking.duration,
+              room: existingBooking.room || '',
+              total: existingBooking.total_amount,
+              deposit: session.amount_total || existingBooking.deposit_amount,
+            });
+          }
+
+          await sendAdminBookingAlert({
+            id: bookingId,
+            customerName: existingBooking.customer_name,
+            customerEmail: existingBooking.customer_email || '',
+            date: dateStr,
+            startTime: timeStr,
+            duration: existingBooking.duration,
+            room: existingBooking.room || '',
+            total: existingBooking.total_amount,
+          });
+
+          // Notify engineers
+          const room = existingBooking.room as string;
+          const engineerEmails = ENGINEERS
+            .filter((e) => e.studios.includes(room as Room))
+            .map((e) => e.email);
+
+          if (engineerEmails.length > 0) {
+            await sendEngineerNewBookingAlert(engineerEmails, {
+              id: bookingId,
+              customerName: existingBooking.customer_name,
+              date: dateStr,
+              startTime: timeStr,
+              duration: existingBooking.duration,
+              room: existingBooking.room || '',
+            });
+          }
+        }
       } else if (meta.type === 'beat_purchase') {
         // Beat store purchase
         await supabase.from('beat_purchases').insert({

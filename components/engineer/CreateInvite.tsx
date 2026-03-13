@@ -3,20 +3,35 @@
 import { useState } from 'react';
 import { Copy, Check, Link as LinkIcon } from 'lucide-react';
 import { ROOMS, ROOM_LABELS, ROOM_RATES, ROOM_RATES_SINGLE, PRICING, type Room } from '@/lib/constants';
-import { formatCents, formatTime, calculateSessionTotal } from '@/lib/utils';
+import { formatCents, formatTime, calculateSessionTotal, parseTimeSlot } from '@/lib/utils';
 
 export default function CreateInvite() {
   const [date, setDate] = useState('');
-  const [startTime, setStartTime] = useState('11');
+  const [startTime, setStartTime] = useState('11:00');
   const [duration, setDuration] = useState(2);
   const [room, setRoom] = useState<Room>('studio_a');
   const [clientEmail, setClientEmail] = useState('');
+  const [clientName, setClientName] = useState('');
   const [notes, setNotes] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'online' | 'cash'>('online');
+  const [customPrice, setCustomPrice] = useState('');
   const [creating, setCreating] = useState(false);
   const [inviteUrl, setInviteUrl] = useState('');
   const [copied, setCopied] = useState(false);
 
-  const pricing = calculateSessionTotal(room, duration, parseInt(startTime), false);
+  const startHour = parseTimeSlot(startTime);
+  const pricing = calculateSessionTotal(room, duration, startHour, false);
+  const useCustomPrice = customPrice.trim() !== '';
+  const customPriceCents = useCustomPrice ? Math.round(parseFloat(customPrice) * 100) : 0;
+  const finalTotal = useCustomPrice ? customPriceCents : pricing.total;
+  const finalDeposit = Math.round(finalTotal * (PRICING.depositPercent / 100));
+
+  // Generate 30-min time slots
+  const timeSlots: string[] = [];
+  for (let h = 0; h < 24; h++) {
+    timeSlots.push(`${h}:00`);
+    timeSlots.push(`${h}:30`);
+  }
 
   async function handleCreate() {
     if (!date || !startTime) return;
@@ -28,18 +43,24 @@ export default function CreateInvite() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           date,
-          startTime: `${startTime}:00`,
+          startTime,
           duration,
           room,
-          totalAmount: pricing.total,
+          totalAmount: finalTotal,
+          depositAmount: paymentMethod === 'cash' ? 0 : finalDeposit,
           clientEmail,
+          clientName,
           notes,
+          paymentMethod,
+          customPrice: useCustomPrice ? customPriceCents : null,
         }),
       });
 
       const data = await res.json();
       if (data.inviteUrl) {
         setInviteUrl(data.inviteUrl);
+      } else {
+        alert(data.error || 'Failed to create invite');
       }
     } catch (err) {
       console.error('Failed to create invite:', err);
@@ -63,7 +84,9 @@ export default function CreateInvite() {
             <h3 className="text-heading-sm">INVITE CREATED</h3>
           </div>
           <p className="font-mono text-xs text-black/60 mb-4">
-            Send this link to the client. They&apos;ll sign in (or create an account) and pay the deposit.
+            {paymentMethod === 'cash'
+              ? 'Send this link to the client. They\'ll confirm the session. Payment is collected at the studio.'
+              : 'Send this link to the client. They\'ll sign in and pay the deposit online.'}
           </p>
           <div className="flex gap-2">
             <input
@@ -81,7 +104,7 @@ export default function CreateInvite() {
             </button>
           </div>
           <button
-            onClick={() => { setInviteUrl(''); setDate(''); setClientEmail(''); setNotes(''); }}
+            onClick={() => { setInviteUrl(''); setDate(''); setClientEmail(''); setClientName(''); setNotes(''); setCustomPrice(''); }}
             className="font-mono text-xs text-accent hover:underline mt-4"
           >
             Create another invite
@@ -94,8 +117,46 @@ export default function CreateInvite() {
   return (
     <div className="max-w-lg space-y-6">
       <p className="font-mono text-sm text-black/60">
-        Create a session and generate a link. The client clicks the link, signs in, and pays the deposit.
+        Create a session and send the link to your client. You&apos;ll be auto-assigned as the engineer.
       </p>
+
+      {/* Payment Method */}
+      <div>
+        <label className="block font-mono text-xs font-semibold uppercase tracking-wider mb-2">Payment Method</label>
+        <div className="flex gap-3">
+          <button
+            onClick={() => setPaymentMethod('online')}
+            className={`flex-1 p-3 border-2 font-mono text-xs font-bold uppercase transition-colors ${
+              paymentMethod === 'online' ? 'bg-black text-white border-black' : 'border-black/20 hover:border-black'
+            }`}
+          >
+            Pay Online (Stripe)
+          </button>
+          <button
+            onClick={() => setPaymentMethod('cash')}
+            className={`flex-1 p-3 border-2 font-mono text-xs font-bold uppercase transition-colors ${
+              paymentMethod === 'cash' ? 'bg-black text-white border-black' : 'border-black/20 hover:border-black'
+            }`}
+          >
+            Cash at Studio
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block font-mono text-xs font-semibold uppercase tracking-wider mb-1">Client Name</label>
+          <input type="text" value={clientName} onChange={(e) => setClientName(e.target.value)}
+            className="w-full border-2 border-black/20 px-4 py-3 font-mono text-sm focus:border-accent focus:outline-none"
+            placeholder="Client name" />
+        </div>
+        <div>
+          <label className="block font-mono text-xs font-semibold uppercase tracking-wider mb-1">Client Email</label>
+          <input type="email" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)}
+            className="w-full border-2 border-black/20 px-4 py-3 font-mono text-sm focus:border-accent focus:outline-none"
+            placeholder="client@email.com" />
+        </div>
+      </div>
 
       <div>
         <label className="block font-mono text-xs font-semibold uppercase tracking-wider mb-1">Date *</label>
@@ -107,9 +168,9 @@ export default function CreateInvite() {
         <label className="block font-mono text-xs font-semibold uppercase tracking-wider mb-1">Start Time *</label>
         <select value={startTime} onChange={(e) => setStartTime(e.target.value)}
           className="w-full border-2 border-black px-4 py-3 font-mono text-sm focus:border-accent focus:outline-none">
-          {Array.from({ length: 24 }, (_, i) => i).map((h) => (
-              <option key={h} value={h}>{formatTime(`${h}:00`)}</option>
-            ))}
+          {timeSlots.map((slot) => (
+            <option key={slot} value={slot}>{formatTime(slot)}</option>
+          ))}
         </select>
       </div>
 
@@ -141,11 +202,27 @@ export default function CreateInvite() {
         </div>
       </div>
 
+      {/* Custom Price Override */}
       <div>
-        <label className="block font-mono text-xs font-semibold uppercase tracking-wider mb-1">Client Email (optional)</label>
-        <input type="email" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)}
-          className="w-full border-2 border-black/20 px-4 py-3 font-mono text-sm focus:border-accent focus:outline-none"
-          placeholder="client@email.com" />
+        <label className="block font-mono text-xs font-semibold uppercase tracking-wider mb-1">
+          Custom Total Price <span className="font-normal text-black/40">(leave blank for standard rate)</span>
+        </label>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-sm">$</span>
+          <input
+            type="number"
+            step="0.01"
+            value={customPrice}
+            onChange={(e) => setCustomPrice(e.target.value)}
+            className="w-32 border-2 border-black/20 px-4 py-3 font-mono text-sm focus:border-accent focus:outline-none"
+            placeholder={`${(pricing.total / 100).toFixed(2)}`}
+          />
+          {useCustomPrice && (
+            <button onClick={() => setCustomPrice('')} className="font-mono text-[10px] text-red-500 hover:underline">
+              Reset to standard
+            </button>
+          )}
+        </div>
       </div>
 
       <div>
@@ -157,24 +234,40 @@ export default function CreateInvite() {
 
       {/* Price Summary */}
       <div className="border-2 border-black p-4 font-mono text-sm space-y-2">
-        <div className="flex justify-between text-black/60">
-          <span>{ROOM_LABELS[room]} × {duration}hr @ {formatCents(duration === 1 ? ROOM_RATES_SINGLE[room] : ROOM_RATES[room])}/hr</span>
-          <span>{formatCents(pricing.subtotal)}</span>
-        </div>
-        {pricing.nightFees > 0 && (
-          <div className="flex justify-between text-amber-600">
-            <span>Night surcharges</span>
-            <span>+{formatCents(pricing.nightFees)}</span>
+        {useCustomPrice ? (
+          <div className="flex justify-between">
+            <span className="text-black/60">Custom deal — {ROOM_LABELS[room]} × {duration}hr</span>
+            <span>{formatCents(customPriceCents)}</span>
           </div>
+        ) : (
+          <>
+            <div className="flex justify-between text-black/60">
+              <span>{ROOM_LABELS[room]} × {duration}hr @ {formatCents(duration === 1 ? ROOM_RATES_SINGLE[room] : ROOM_RATES[room])}/hr</span>
+              <span>{formatCents(pricing.subtotal)}</span>
+            </div>
+            {pricing.nightFees > 0 && (
+              <div className="flex justify-between text-amber-600">
+                <span>Night surcharges</span>
+                <span>+{formatCents(pricing.nightFees)}</span>
+              </div>
+            )}
+          </>
         )}
         <div className="flex justify-between border-t border-black/10 pt-2">
           <span>Session Total</span>
-          <span className="font-bold">{formatCents(pricing.total)}</span>
+          <span className="font-bold">{formatCents(finalTotal)}</span>
         </div>
-        <div className="flex justify-between font-bold">
-          <span>Client Deposit (50%)</span>
-          <span className="text-accent">{formatCents(pricing.deposit)}</span>
-        </div>
+        {paymentMethod === 'online' ? (
+          <div className="flex justify-between font-bold">
+            <span>Client Deposit (50%)</span>
+            <span className="text-accent">{formatCents(finalDeposit)}</span>
+          </div>
+        ) : (
+          <div className="flex justify-between font-bold text-green-700">
+            <span>Cash — Collected at Studio</span>
+            <span>{formatCents(finalTotal)}</span>
+          </div>
+        )}
       </div>
 
       <button
