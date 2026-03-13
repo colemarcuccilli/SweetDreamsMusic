@@ -331,6 +331,9 @@ export default function BookingManager() {
                           {ENGINEERS.map((eng) => (
                             <option key={eng.name} value={eng.name}>{eng.displayName} ({eng.studios.map(s => ROOM_LABELS[s as keyof typeof ROOM_LABELS]).join(', ')})</option>
                           ))}
+                          {b.engineer_name && !ENGINEERS.some(e => e.name === b.engineer_name) && (
+                            <option value={b.engineer_name}>{b.engineer_name} (profile name)</option>
+                          )}
                         </select>
                         {b.requested_engineer && (
                           <span className="text-black/40">Requested: {b.requested_engineer}</span>
