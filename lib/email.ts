@@ -241,6 +241,26 @@ export async function sendSessionFilesDelivered(to: string, details: {
   } catch (e) { console.error('Email error (files delivered):', e); }
 }
 
+export async function sendPaymentLink(to: string, details: {
+  customerName: string; amount: number; paymentUrl: string;
+}) {
+  try {
+    await resend.emails.send({
+      from: FROM, to, subject: 'Complete Your Remaining Balance — Sweet Dreams Music',
+      html: wrap(`
+        ${h1('Remaining Balance')}
+        ${p(`Hey ${details.customerName}, your session is complete! Please pay the remaining balance below.`)}
+        ${detailTable(`
+          ${detail('Amount Due', formatMoney(details.amount))}
+        `)}
+        ${p('Click the button below to securely complete your payment.')}
+        ${btn('PAY NOW', details.paymentUrl)}
+        ${p('<span style="color:#666;font-size:11px">This is a secure payment link powered by Stripe. If you have any questions, reply to this email.</span>')}
+      `),
+    });
+  } catch (e) { console.error('Email error (payment link):', e); }
+}
+
 export async function sendContactForm(details: {
   name: string; email: string; subject: string; message: string;
 }) {

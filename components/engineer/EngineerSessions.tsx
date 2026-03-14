@@ -185,13 +185,12 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, claimLo
         return;
       }
       if (data.fallback && data.paymentUrl) {
-        const sendLink = confirm(
-          `Could not charge saved card (bank may require authentication).\n\nA payment link has been generated. Copy it to send to the client?`
+        alert(
+          data.emailSent
+            ? 'Could not charge saved card (bank requires authentication). A payment link has been automatically emailed to the client.'
+            : 'Could not charge saved card. Payment link copied to clipboard — send it to the client.'
         );
-        if (sendLink) {
-          navigator.clipboard.writeText(data.paymentUrl);
-          alert('Payment link copied to clipboard! Send it to the client.');
-        }
+        navigator.clipboard.writeText(data.paymentUrl);
         return;
       }
       alert(`Charged ${formatCents(data.amountCharged)} successfully`);

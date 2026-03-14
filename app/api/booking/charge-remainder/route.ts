@@ -3,6 +3,7 @@ import { stripe } from '@/lib/stripe';
 import { createClient } from '@/lib/supabase/server';
 import { verifyEngineerAccess } from '@/lib/admin-auth';
 import { PRICING, SITE_URL } from '@/lib/constants';
+import { sendPaymentLink } from '@/lib/email';
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -122,11 +123,22 @@ async function createPaymentLink(
       cancel_url: `${SITE_URL}/dashboard`,
     });
 
+    // Auto-send payment link email to the client
+    if (booking.customer_email && session.url) {
+      await sendPaymentLink(booking.customer_email, {
+        customerName: booking.customer_name || 'there',
+        amount: chargeAmount,
+        paymentUrl: session.url,
+      });
+      console.log(`[CHARGE] Payment link emailed to ${booking.customer_email} for ${chargeAmount} cents`);
+    }
+
     return NextResponse.json({
       success: false,
       fallback: true,
       paymentUrl: session.url,
-      message: 'Could not charge saved card automatically. A payment link has been generated for the client.',
+      emailSent: !!booking.customer_email,
+      message: 'Could not charge saved card automatically. A payment link has been emailed to the client.',
     });
   } catch (linkErr) {
     console.error('Failed to create payment link fallback:', linkErr);
