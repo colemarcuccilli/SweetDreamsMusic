@@ -60,6 +60,7 @@ export default function BookingManager() {
   const [editingTime, setEditingTime] = useState<string | null>(null);
   const [timeInput, setTimeInput] = useState('');
   const [dateInput, setDateInput] = useState('');
+  const [durationInput, setDurationInput] = useState(2);
   const [showDebug, setShowDebug] = useState<string | null>(null);
   const [showCashPayment, setShowCashPayment] = useState<string | null>(null);
   const [cashAmount, setCashAmount] = useState('');
@@ -211,15 +212,15 @@ export default function BookingManager() {
     setEditingRemainder(null);
   }
 
-  function saveTimeChange(bookingId: string, duration: number) {
+  function saveTimeChange(bookingId: string) {
     if (!dateInput || !timeInput) return;
     const [h, m] = timeInput.split(':').map(Number);
-    const endDec = (h + (m || 0) / 60 + duration) % 24;
+    const endDec = (h + (m || 0) / 60 + durationInput) % 24;
     const endH = Math.floor(endDec);
     const endM = endDec % 1 >= 0.5 ? '30' : '00';
     const startDateTime = `${dateInput}T${timeInput}:00`;
     const endDateTime = `${dateInput}T${endH}:${endM}:00`;
-    updateBooking(bookingId, { start_time: startDateTime, end_time: endDateTime });
+    updateBooking(bookingId, { start_time: startDateTime, end_time: endDateTime, duration: durationInput });
     setEditingTime(null);
   }
 
@@ -416,8 +417,17 @@ export default function BookingManager() {
                             onChange={(e) => setTimeInput(e.target.value)}
                             className="border border-black/20 px-2 py-1.5 font-mono text-xs"
                           />
+                          <select
+                            value={durationInput}
+                            onChange={(e) => setDurationInput(Number(e.target.value))}
+                            className="border border-black/20 px-2 py-1.5 font-mono text-xs"
+                          >
+                            {[1,2,3,4,5,6,7,8].map(h => (
+                              <option key={h} value={h}>{h}hr</option>
+                            ))}
+                          </select>
                           <button
-                            onClick={() => saveTimeChange(b.id, b.duration)}
+                            onClick={() => saveTimeChange(b.id)}
                             className="bg-accent text-black font-bold text-[10px] uppercase px-2 py-1.5"
                           >Save</button>
                           <button
@@ -437,6 +447,7 @@ export default function BookingManager() {
                               const d = new Date(b.start_time);
                               setDateInput(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`);
                               setTimeInput(`${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`);
+                              setDurationInput(b.duration || 2);
                             }}
                             className="text-accent hover:underline inline-flex items-center gap-0.5"
                           >

@@ -152,6 +152,7 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, claimLo
   const [showReschedule, setShowReschedule] = useState(false);
   const [newDate, setNewDate] = useState('');
   const [newTime, setNewTime] = useState('');
+  const [newDuration, setNewDuration] = useState(booking.duration || 2);
   const [showFileUpload, setShowFileUpload] = useState(false);
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -241,8 +242,8 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, claimLo
       return;
     }
     const startTime = `${newDate}T${newTime}:00`;
-    if (!confirm(`Reschedule to ${newDate} at ${newTime}?`)) return;
-    updateBooking({ startTime }, 'reschedule');
+    if (!confirm(`Reschedule to ${newDate} at ${newTime}, ${newDuration}hr?`)) return;
+    updateBooking({ startTime, duration: newDuration }, 'reschedule');
     setShowReschedule(false);
   }
 
@@ -571,6 +572,18 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, claimLo
                 onChange={(e) => setNewTime(e.target.value)}
                 className="font-mono text-xs border border-black/20 px-2 py-1.5"
               />
+            </div>
+            <div>
+              <label className="font-mono text-[10px] text-black/40 block">Duration</label>
+              <select
+                value={newDuration}
+                onChange={(e) => setNewDuration(Number(e.target.value))}
+                className="font-mono text-xs border border-black/20 px-2 py-1.5"
+              >
+                {[1,2,3,4,5,6,7,8].map(h => (
+                  <option key={h} value={h}>{h}hr</option>
+                ))}
+              </select>
             </div>
             <button
               onClick={handleReschedule}

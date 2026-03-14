@@ -10,10 +10,10 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-  const { bookingId, status, startTime, notes } = await request.json();
+  const { bookingId, status, startTime, duration, notes } = await request.json();
   if (!bookingId) return NextResponse.json({ error: 'bookingId required' }, { status: 400 });
 
-  // Build update object — engineers can update status, time, and notes
+  // Build update object — engineers can update status, time, duration, and notes
   const updates: Record<string, unknown> = {};
 
   if (status && ['completed', 'cancelled'].includes(status)) {
@@ -22,6 +22,10 @@ export async function POST(request: NextRequest) {
 
   if (startTime) {
     updates.start_time = startTime;
+  }
+
+  if (duration !== undefined && duration > 0) {
+    updates.duration = duration;
   }
 
   if (notes !== undefined) {
