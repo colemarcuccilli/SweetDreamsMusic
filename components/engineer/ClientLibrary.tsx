@@ -50,10 +50,10 @@ export default function ClientLibrary() {
 
   // Upload state
   const [showUpload, setShowUpload] = useState(false);
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploadName, setUploadName] = useState('');
-  const [uploadDesc, setUploadDesc] = useState('');
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
 
   // Note state
   const [showNote, setShowNote] = useState(false);
@@ -88,65 +88,55 @@ export default function ClientLibrary() {
   }
 
   async function handleUpload() {
-    if (!uploadFile || !selectedClient) return;
+    if (uploadFiles.length === 0 || !selectedClient) return;
     setUploading(true);
 
     try {
-      // Step 1: Get signed upload URL (bypasses Vercel's 4.5MB limit)
-      const urlRes = await fetch('/api/admin/library/upload-url', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileName: uploadFile.name,
-          userId: selectedClient.user_id,
-        }),
-      });
-      const urlData = await urlRes.json();
-      if (!urlRes.ok) {
-        alert(urlData.error || 'Could not prepare upload');
-        setUploading(false);
-        return;
+      const newDeliverables: typeof deliverables = [];
+
+      for (let i = 0; i < uploadFiles.length; i++) {
+        const file = uploadFiles[i];
+        setUploadProgress(`Uploading ${i + 1} of ${uploadFiles.length}: ${file.name}`);
+
+        const urlRes = await fetch('/api/admin/library/upload-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileName: file.name, userId: selectedClient.user_id }),
+        });
+        const urlData = await urlRes.json();
+        if (!urlRes.ok) { alert(`Failed: ${urlData.error}`); continue; }
+
+        const uploadRes = await fetch(urlData.signedUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': file.type || 'application/octet-stream' },
+          body: file,
+        });
+        if (!uploadRes.ok) { alert(`Upload failed for ${file.name}`); continue; }
+
+        const formData = new FormData();
+        formData.append('user_id', urlData.userId);
+        formData.append('file_name', file.name);
+        formData.append('file_path', urlData.filePath);
+        formData.append('file_size', String(file.size));
+        formData.append('file_type', file.type);
+        formData.append('display_name', file.name);
+        formData.append('skip_upload', 'true');
+
+        const res = await fetch('/api/admin/library/deliverables', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.deliverable) newDeliverables.push(data.deliverable);
       }
 
-      // Step 2: Upload directly to Supabase Storage
-      const uploadRes = await fetch(urlData.signedUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': uploadFile.type || 'application/octet-stream' },
-        body: uploadFile,
-      });
-      if (!uploadRes.ok) {
-        alert('File upload failed. Please try again.');
-        setUploading(false);
-        return;
-      }
-
-      // Step 3: Create deliverable record via API
-      const formData = new FormData();
-      formData.append('user_id', urlData.userId);
-      formData.append('file_name', uploadFile.name);
-      formData.append('file_path', urlData.filePath);
-      formData.append('file_size', String(uploadFile.size));
-      formData.append('file_type', uploadFile.type);
-      formData.append('display_name', uploadName || uploadFile.name);
-      formData.append('description', uploadDesc);
-      formData.append('skip_upload', 'true');
-
-      const res = await fetch('/api/admin/library/deliverables', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (data.deliverable) {
-        setDeliverables((prev) => [data.deliverable, ...prev]);
-        setUploadFile(null);
-        setUploadName('');
-        setUploadDesc('');
-        setShowUpload(false);
-      } else {
-        alert(data.error || 'Failed to save file record');
-      }
+      setDeliverables((prev) => [...newDeliverables, ...prev]);
+      setUploadFiles([]);
+      setUploadProgress('');
+      setShowUpload(false);
     } catch (err) {
       console.error('Upload error:', err);
       alert('Upload failed. Please try again.');
     }
     setUploading(false);
+    setUploadProgress('');
   }
 
   async function handleAddNote() {
@@ -276,40 +266,58 @@ export default function ClientLibrary() {
 
             {showUpload && (
               <div className="border-2 border-accent p-4 mb-4 space-y-3">
-                <label className="flex items-center gap-3 border-2 border-dashed border-black/20 p-3 cursor-pointer hover:border-accent transition-colors">
-                  <span className="bg-black text-white font-mono text-xs font-bold uppercase tracking-wider px-4 py-2 flex-shrink-0">
-                    Choose File
-                  </span>
-                  <span className="font-mono text-xs text-black/50 truncate">
-                    {uploadFile ? uploadFile.name : 'No file selected'}
-                  </span>
-                  <input
-                    type="file"
-                    accept="audio/*,.wav,.mp3,.flac,.aiff,.m4a,.zip"
-                    onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                    className="hidden"
-                  />
-                </label>
-                <input
-                  type="text"
-                  value={uploadName}
-                  onChange={(e) => setUploadName(e.target.value)}
-                  placeholder="Display name"
-                  className="w-full border border-black/20 px-3 py-2 font-mono text-xs focus:border-accent focus:outline-none"
-                />
-                <input
-                  type="text"
-                  value={uploadDesc}
-                  onChange={(e) => setUploadDesc(e.target.value)}
-                  placeholder="Description (optional)"
-                  className="w-full border border-black/20 px-3 py-2 font-mono text-xs focus:border-accent focus:outline-none"
-                />
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    setIsDragging(false);
+                    const files = Array.from(e.dataTransfer.files);
+                    setUploadFiles(prev => [...prev, ...files]);
+                  }}
+                  className={`border-2 border-dashed p-6 text-center cursor-pointer transition-colors ${
+                    isDragging ? 'border-accent bg-accent/10' : 'border-black/20 hover:border-accent'
+                  }`}
+                >
+                  <label className="cursor-pointer block">
+                    <p className="font-mono text-xs font-bold uppercase tracking-wider mb-1">
+                      {isDragging ? 'Drop files here' : 'Drag & drop files here'}
+                    </p>
+                    <p className="font-mono text-[10px] text-black/40">or click to browse — WAV, MP3, FLAC, ZIP</p>
+                    <input
+                      type="file"
+                      accept="audio/*,.wav,.mp3,.flac,.aiff,.m4a,.zip"
+                      multiple
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files || []);
+                        setUploadFiles(prev => [...prev, ...files]);
+                        e.target.value = '';
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+                {uploadFiles.length > 0 && (
+                  <div className="space-y-1">
+                    {uploadFiles.map((file, i) => (
+                      <div key={`${file.name}-${i}`} className="flex items-center justify-between py-1.5 px-2 bg-white border border-black/10">
+                        <span className="font-mono text-xs truncate">{file.name}</span>
+                        <button
+                          onClick={() => setUploadFiles(prev => prev.filter((_, idx) => idx !== i))}
+                          className="font-mono text-[10px] text-red-500 hover:underline ml-2 flex-shrink-0"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <button
                   onClick={handleUpload}
-                  disabled={!uploadFile || uploading}
+                  disabled={uploadFiles.length === 0 || uploading}
                   className="bg-black text-white font-mono text-xs font-bold uppercase px-4 py-2 hover:bg-black/80 disabled:opacity-50"
                 >
-                  {uploading ? 'Uploading...' : 'Upload File'}
+                  {uploading ? (uploadProgress || 'Uploading...') : `Upload ${uploadFiles.length || ''} File${uploadFiles.length !== 1 ? 's' : ''}`}
                 </button>
               </div>
             )}

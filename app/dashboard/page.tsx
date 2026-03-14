@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { Calendar, Music, FileAudio, Download } from 'lucide-react';
 import { getSessionUser } from '@/lib/auth';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { formatCents } from '@/lib/utils';
 import DashboardNav from '@/components/layout/DashboardNav';
 
@@ -33,11 +33,12 @@ export default async function DashboardPage() {
     .order('created_at', { ascending: false })
     .limit(10);
 
-  // Generate signed download URLs for each file
+  // Generate signed download URLs using service client (bypasses storage RLS)
+  const serviceClient = createServiceClient();
   const filesWithUrls = await Promise.all(
     (deliverables || []).map(async (file) => {
       if (file.file_path) {
-        const { data } = await supabase.storage
+        const { data } = await serviceClient.storage
           .from('client-audio-files')
           .createSignedUrl(file.file_path, 3600); // 1 hour
         return { ...file, downloadUrl: data?.signedUrl || null };
