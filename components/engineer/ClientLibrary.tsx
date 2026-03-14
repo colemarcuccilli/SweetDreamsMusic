@@ -90,20 +90,61 @@ export default function ClientLibrary() {
   async function handleUpload() {
     if (!uploadFile || !selectedClient) return;
     setUploading(true);
-    const formData = new FormData();
-    formData.append('file', uploadFile);
-    formData.append('user_id', selectedClient.user_id);
-    formData.append('display_name', uploadName || uploadFile.name);
-    formData.append('description', uploadDesc);
 
-    const res = await fetch('/api/admin/library/deliverables', { method: 'POST', body: formData });
-    const data = await res.json();
-    if (data.deliverable) {
-      setDeliverables((prev) => [data.deliverable, ...prev]);
-      setUploadFile(null);
-      setUploadName('');
-      setUploadDesc('');
-      setShowUpload(false);
+    try {
+      // Step 1: Get signed upload URL (bypasses Vercel's 4.5MB limit)
+      const urlRes = await fetch('/api/admin/library/upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: uploadFile.name,
+          userId: selectedClient.user_id,
+        }),
+      });
+      const urlData = await urlRes.json();
+      if (!urlRes.ok) {
+        alert(urlData.error || 'Could not prepare upload');
+        setUploading(false);
+        return;
+      }
+
+      // Step 2: Upload directly to Supabase Storage
+      const uploadRes = await fetch(urlData.signedUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': uploadFile.type || 'application/octet-stream' },
+        body: uploadFile,
+      });
+      if (!uploadRes.ok) {
+        alert('File upload failed. Please try again.');
+        setUploading(false);
+        return;
+      }
+
+      // Step 3: Create deliverable record via API
+      const formData = new FormData();
+      formData.append('user_id', urlData.userId);
+      formData.append('file_name', uploadFile.name);
+      formData.append('file_path', urlData.filePath);
+      formData.append('file_size', String(uploadFile.size));
+      formData.append('file_type', uploadFile.type);
+      formData.append('display_name', uploadName || uploadFile.name);
+      formData.append('description', uploadDesc);
+      formData.append('skip_upload', 'true');
+
+      const res = await fetch('/api/admin/library/deliverables', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.deliverable) {
+        setDeliverables((prev) => [data.deliverable, ...prev]);
+        setUploadFile(null);
+        setUploadName('');
+        setUploadDesc('');
+        setShowUpload(false);
+      } else {
+        alert(data.error || 'Failed to save file record');
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+      alert('Upload failed. Please try again.');
     }
     setUploading(false);
   }
