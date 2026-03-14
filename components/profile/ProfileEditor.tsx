@@ -114,25 +114,46 @@ export default function ProfileEditor({ userId, profileSlug }: { userId: string;
     setSaving(false);
   }
 
+  async function uploadViaSigned(file: File, type: string, projectId?: string) {
+    // Step 1: Get signed upload URL
+    const urlRes = await fetch('/api/profile/photo/upload-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName: file.name, type, projectId }),
+    });
+    const urlData = await urlRes.json();
+    if (!urlRes.ok) throw new Error(urlData.error || 'Could not prepare upload');
+
+    // Step 2: Upload directly to Supabase Storage
+    const uploadRes = await fetch(urlData.signedUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': file.type || 'image/jpeg' },
+      body: file,
+    });
+    if (!uploadRes.ok) throw new Error('Storage upload failed');
+
+    // Step 3: Save record (get public URL back)
+    const saveRes = await fetch('/api/profile/photo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filePath: urlData.filePath, type, projectId }),
+    });
+    const saveData = await saveRes.json();
+    if (!saveRes.ok) throw new Error(saveData.error || 'Failed to save');
+
+    return saveData.url;
+  }
+
   async function handlePhotoUpload(file: File, type: 'profile' | 'cover') {
     setUploading(type);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('type', type);
-
-      const res = await fetch('/api/profile/photo', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (!res.ok) {
-        alert(`Upload failed: ${data.error || 'Unknown error'}`);
-        return;
-      }
-      if (data.url) {
-        if (type === 'profile') setProfilePicUrl(data.url);
-        else setCoverPhotoUrl(data.url);
+      const url = await uploadViaSigned(file, type);
+      if (url) {
+        if (type === 'profile') setProfilePicUrl(url);
+        else setCoverPhotoUrl(url);
       }
     } catch (err) {
-      alert('Upload failed. Please try again.');
+      alert(`Upload failed: ${err instanceof Error ? err.message : 'Please try again.'}`);
       console.error('Photo upload error:', err);
     } finally {
       setUploading(null);
@@ -141,22 +162,12 @@ export default function ProfileEditor({ userId, profileSlug }: { userId: string;
 
   async function handleProjectImageUpload(file: File, projectId: string) {
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('type', 'project');
-      formData.append('projectId', projectId);
-
-      const res = await fetch('/api/profile/photo', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (!res.ok) {
-        alert(`Upload failed: ${data.error || 'Unknown error'}`);
-        return;
-      }
-      if (data.url) {
-        setProjects((prev) => prev.map((p) => p.id === projectId ? { ...p, cover_image_url: data.url } : p));
+      const url = await uploadViaSigned(file, 'project', projectId);
+      if (url) {
+        setProjects((prev) => prev.map((p) => p.id === projectId ? { ...p, cover_image_url: url } : p));
       }
     } catch (err) {
-      alert('Upload failed. Please try again.');
+      alert(`Upload failed: ${err instanceof Error ? err.message : 'Please try again.'}`);
       console.error('Project image upload error:', err);
     }
   }
