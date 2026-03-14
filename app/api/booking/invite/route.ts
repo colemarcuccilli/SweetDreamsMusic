@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { SITE_URL, ENGINEERS, ROOM_LABELS, type Room } from '@/lib/constants';
+import { SITE_URL, ENGINEERS } from '@/lib/constants';
 import { getUserRole, parseTimeSlot } from '@/lib/utils';
-import { sendBookingConfirmation, sendEngineerNewBookingAlert } from '@/lib/email';
+import { sendBookingConfirmation } from '@/lib/email';
 
 // Engineer creates a session and generates an invite link
 export async function POST(request: NextRequest) {
@@ -85,25 +85,7 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // Notify engineers for this studio
-      const engineerEmails = ENGINEERS
-        .filter(e => e.studios.includes(room as Room))
-        .map(e => e.email);
-
-      if (engineerEmails.length > 0) {
-        const startDate = new Date(`${date}T${startTime}:00+00:00`);
-        const dateStr = startDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
-        const timeStr = startDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
-
-        await sendEngineerNewBookingAlert(engineerEmails, {
-          id: booking.id,
-          customerName: clientName || 'Cash Client',
-          date: dateStr,
-          startTime: timeStr,
-          duration,
-          room,
-        });
-      }
+      // No engineer claim emails — the creating engineer is already assigned
 
       // Return a shareable link even for cash bookings
       const inviteUrl = `${SITE_URL}/book/invite/${inviteToken}?booking=${booking.id}`;

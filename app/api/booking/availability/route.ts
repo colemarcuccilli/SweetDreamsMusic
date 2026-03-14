@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 
+const SAME_DAY_BUFFER_HOURS = 3; // 3-hour buffer from current time for same-day bookings
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const date = searchParams.get('date');
@@ -27,6 +29,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to check availability' }, { status: 500 });
   }
 
+  // Query admin block-off times for this date
+  const { data: blocks } = await supabase
+    .from('studio_blocks')
+    .select('start_time, end_time')
+    .gte('start_time', dayStart)
+    .lte('start_time', dayEnd);
+
   // Convert bookings to blocked half-hour slots (decimal: 18.5 = 6:30 PM)
   const bookedSlots: number[] = [];
   for (const booking of bookings || []) {
@@ -36,6 +45,38 @@ export async function GET(request: NextRequest) {
     const halfHourCount = hours * 2;
     for (let i = 0; i < halfHourCount; i++) {
       const slot = (startSlot + i * 0.5) % 24;
+      if (!bookedSlots.includes(slot)) {
+        bookedSlots.push(slot);
+      }
+    }
+  }
+
+  // Add admin block-off slots
+  for (const block of blocks || []) {
+    const bStart = new Date(block.start_time);
+    const bEnd = new Date(block.end_time);
+    const startSlot = bStart.getUTCHours() + bStart.getUTCMinutes() / 60;
+    const endSlot = bEnd.getUTCHours() + bEnd.getUTCMinutes() / 60;
+    const totalSlots = Math.ceil((endSlot - startSlot) * 2);
+    for (let i = 0; i < totalSlots; i++) {
+      const slot = (startSlot + i * 0.5) % 24;
+      if (!bookedSlots.includes(slot)) {
+        bookedSlots.push(slot);
+      }
+    }
+  }
+
+  // Same-day buffer: block slots within 3 hours from now (Fort Wayne time)
+  const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Indiana/Indianapolis' });
+  if (date === todayLocal) {
+    const nowFW = new Date().toLocaleString('en-US', { timeZone: 'America/Indiana/Indianapolis' });
+    const nowDate = new Date(nowFW);
+    const currentDecimal = nowDate.getHours() + nowDate.getMinutes() / 60;
+    const bufferCutoff = currentDecimal + SAME_DAY_BUFFER_HOURS;
+    // Round up to next 30-min slot
+    const cutoffSlot = Math.ceil(bufferCutoff * 2) / 2;
+
+    for (let slot = 0; slot < cutoffSlot; slot += 0.5) {
       if (!bookedSlots.includes(slot)) {
         bookedSlots.push(slot);
       }

@@ -55,6 +55,17 @@ export async function POST(request: NextRequest) {
     const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Indiana/Indianapolis' });
     const sameDayBooking = date === todayLocal;
 
+    // 3-hour buffer for same-day bookings
+    if (sameDayBooking) {
+      const nowFW = new Date().toLocaleString('en-US', { timeZone: 'America/Indiana/Indianapolis' });
+      const nowDate = new Date(nowFW);
+      const currentDecimal = nowDate.getHours() + nowDate.getMinutes() / 60;
+      const bufferCutoff = Math.ceil((currentDecimal + 3) * 2) / 2; // round up to next 30-min
+      if (startHour < bufferCutoff) {
+        return NextResponse.json({ error: `Same-day bookings require a 3-hour buffer. The earliest available time is ${Math.floor(bufferCutoff)}:${bufferCutoff % 1 >= 0.5 ? '30' : '00'} ${bufferCutoff >= 12 ? 'PM' : 'AM'}.` }, { status: 400 });
+      }
+    }
+
     const pricing = calculateSessionTotal(room as Room, duration, startHour, sameDayBooking);
 
     const endDec = (startHour + duration) % 24;
