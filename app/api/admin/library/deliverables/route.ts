@@ -36,13 +36,14 @@ export async function POST(request: NextRequest) {
   const serviceClient = createServiceClient();
 
   const formData = await request.formData();
-  const file = formData.get('file') as File;
+  const file = formData.get('file') as File | null;
+  const skipUpload = formData.get('skip_upload') === 'true';
   let userId = formData.get('user_id') as string;
   const customerEmail = formData.get('customer_email') as string;
   const displayName = formData.get('display_name') as string;
   const description = formData.get('description') as string;
 
-  if (!file) {
+  if (!file && !skipUpload) {
     return NextResponse.json({ error: 'file required' }, { status: 400 });
   }
 
@@ -76,17 +77,33 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Could not find client account. They may need to sign up first.' }, { status: 404 });
   }
 
-  // Upload to Supabase Storage using service client (bypasses RLS on storage)
-  const timestamp = Date.now();
-  const filePath = `${userId}/${timestamp}_${file.name}`;
+  let filePath: string;
+  let fileName: string;
+  let fileSize: number;
+  let fileType: string;
 
-  const { error: uploadError } = await serviceClient.storage
-    .from('client-audio-files')
-    .upload(filePath, file);
+  if (skipUpload) {
+    // File was already uploaded directly to storage via signed URL
+    filePath = formData.get('file_path') as string;
+    fileName = formData.get('file_name') as string;
+    fileSize = parseInt(formData.get('file_size') as string) || 0;
+    fileType = formData.get('file_type') as string || '';
+  } else {
+    // Upload to Supabase Storage using service client (bypasses RLS on storage)
+    const timestamp = Date.now();
+    filePath = `${userId}/${timestamp}_${file!.name}`;
+    fileName = file!.name;
+    fileSize = file!.size;
+    fileType = file!.type;
 
-  if (uploadError) {
-    console.error('[DELIVERABLES] Storage upload error:', uploadError);
-    return NextResponse.json({ error: uploadError.message }, { status: 500 });
+    const { error: uploadError } = await serviceClient.storage
+      .from('client-audio-files')
+      .upload(filePath, file!);
+
+    if (uploadError) {
+      console.error('[DELIVERABLES] Storage upload error:', uploadError);
+      return NextResponse.json({ error: uploadError.message }, { status: 500 });
+    }
   }
 
   // Get engineer's profile for the name
@@ -101,11 +118,11 @@ export async function POST(request: NextRequest) {
     .from('deliverables')
     .insert({
       user_id: userId,
-      file_name: file.name,
-      display_name: displayName || file.name,
+      file_name: fileName,
+      display_name: displayName || fileName,
       file_path: filePath,
-      file_size: file.size,
-      file_type: file.type,
+      file_size: fileSize,
+      file_type: fileType,
       uploaded_by: user?.id,
       uploaded_by_name: engineerProfile?.display_name || user?.email || 'Engineer',
       description: description || null,

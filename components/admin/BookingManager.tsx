@@ -117,6 +117,14 @@ export default function BookingManager() {
       if (data.success) {
         alert(`Successfully charged ${formatCents(data.amountCharged)}`);
         fetchBookings();
+      } else if (data.fallback && data.paymentUrl) {
+        const sendLink = confirm(
+          `Could not charge saved card automatically (bank may require authentication).\n\nA payment link has been generated. Copy it to send to the client?`
+        );
+        if (sendLink) {
+          navigator.clipboard.writeText(data.paymentUrl);
+          alert('Payment link copied to clipboard! Send it to the client.');
+        }
       } else {
         alert(`Failed: ${data.error}`);
       }

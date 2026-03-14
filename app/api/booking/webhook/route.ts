@@ -172,6 +172,23 @@ export async function POST(request: NextRequest) {
             });
           }
         }
+      } else if (meta.type === 'booking_remainder') {
+        // Remainder paid via Checkout (fallback when off-session charge failed)
+        const bookingId = meta.booking_id;
+        const chargeAmount = parseInt(meta.charge_amount || '0') || (session.amount_total || 0);
+
+        const { data: remainderBooking } = await supabase
+          .from('bookings')
+          .select('remainder_amount, total_amount')
+          .eq('id', bookingId)
+          .single();
+
+        if (remainderBooking) {
+          await supabase.from('bookings').update({
+            remainder_amount: Math.max(0, remainderBooking.remainder_amount - chargeAmount),
+            updated_at: new Date().toISOString(),
+          }).eq('id', bookingId);
+        }
       } else if (meta.type === 'beat_purchase') {
         // Beat store purchase
         await supabase.from('beat_purchases').insert({

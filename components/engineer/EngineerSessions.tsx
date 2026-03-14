@@ -180,8 +180,18 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, claimLo
         body: JSON.stringify({ bookingId: booking.id, amount: customAmount || undefined }),
       });
       const data = await res.json();
-      if (!res.ok) {
+      if (!res.ok && !data.fallback) {
         setChargeError(data.error || 'Failed to charge');
+        return;
+      }
+      if (data.fallback && data.paymentUrl) {
+        const sendLink = confirm(
+          `Could not charge saved card (bank may require authentication).\n\nA payment link has been generated. Copy it to send to the client?`
+        );
+        if (sendLink) {
+          navigator.clipboard.writeText(data.paymentUrl);
+          alert('Payment link copied to clipboard! Send it to the client.');
+        }
         return;
       }
       alert(`Charged ${formatCents(data.amountCharged)} successfully`);
@@ -240,21 +250,54 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, claimLo
     if (!uploadFile || !booking.customer_email) return;
     setUploading(true);
 
-    const formData = new FormData();
-    formData.append('file', uploadFile);
-    formData.append('customer_email', booking.customer_email);
-    formData.append('display_name', uploadName || uploadFile.name);
-    formData.append('description', `From session on ${date.toLocaleDateString('en-US', { timeZone: 'UTC' })}`);
-    formData.append('send_email', 'true');
-    formData.append('customer_name', booking.customer_name);
-    formData.append('booking_room', booking.room || '');
-    formData.append('booking_date', date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' }));
-
     try {
+      // Step 1: Get a signed upload URL (bypasses Vercel's 4.5MB body limit)
+      const urlRes = await fetch('/api/admin/library/upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName: uploadFile.name,
+          customerEmail: booking.customer_email,
+        }),
+      });
+      const urlData = await urlRes.json();
+      if (!urlRes.ok) {
+        alert(urlData.error || 'Could not prepare upload');
+        return;
+      }
+
+      // Step 2: Upload file directly to Supabase Storage using signed URL
+      const uploadRes = await fetch(urlData.signedUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': uploadFile.type || 'application/octet-stream' },
+        body: uploadFile,
+      });
+
+      if (!uploadRes.ok) {
+        alert('File upload failed. Please try again.');
+        return;
+      }
+
+      // Step 3: Create the deliverable record + send email via API
+      const formData = new FormData();
+      formData.append('user_id', urlData.userId);
+      formData.append('file_name', uploadFile.name);
+      formData.append('file_path', urlData.filePath);
+      formData.append('file_size', String(uploadFile.size));
+      formData.append('file_type', uploadFile.type);
+      formData.append('display_name', uploadName || uploadFile.name);
+      formData.append('description', `From session on ${date.toLocaleDateString('en-US', { timeZone: 'UTC' })}`);
+      formData.append('send_email', 'true');
+      formData.append('customer_email', booking.customer_email);
+      formData.append('customer_name', booking.customer_name);
+      formData.append('booking_room', booking.room || '');
+      formData.append('booking_date', date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' }));
+      formData.append('skip_upload', 'true');
+
       const res = await fetch('/api/admin/library/deliverables', { method: 'POST', body: formData });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || 'Upload failed');
+        alert(data.error || 'Failed to save record');
       } else {
         setUploadSuccess(true);
         setUploadFile(null);
@@ -262,7 +305,7 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, claimLo
       }
     } catch (err) {
       console.error('Upload error:', err);
-      alert('Network error — file may be too large or connection timed out');
+      alert('Network error — please try again');
     } finally {
       setUploading(false);
     }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
 import { createClient } from '@/lib/supabase/server';
 import { verifyEngineerAccess } from '@/lib/admin-auth';
+import { PRICING, SITE_URL } from '@/lib/constants';
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -14,7 +15,7 @@ export async function POST(request: NextRequest) {
   // Get booking details
   const { data: booking, error } = await supabase
     .from('bookings')
-    .select('id, stripe_customer_id, stripe_payment_intent_id, remainder_amount, total_amount, status, customer_email')
+    .select('id, stripe_customer_id, stripe_payment_intent_id, remainder_amount, total_amount, status, customer_email, customer_name')
     .eq('id', bookingId)
     .single();
 
@@ -40,10 +41,11 @@ export async function POST(request: NextRequest) {
     });
 
     if (paymentMethods.data.length === 0) {
-      return NextResponse.json({ error: 'No saved card found for this customer' }, { status: 400 });
+      // No saved card — fall back to payment link
+      return createPaymentLink(booking, chargeAmount);
     }
 
-    // Charge the saved card
+    // Try charging the saved card off-session
     const paymentIntent = await stripe.paymentIntents.create({
       amount: chargeAmount,
       currency: 'usd',
@@ -58,7 +60,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Update booking with new total if amount was adjusted
+    // Update booking
     const updates: Record<string, unknown> = {
       remainder_amount: Math.max(0, booking.remainder_amount - chargeAmount),
     };
@@ -75,13 +77,59 @@ export async function POST(request: NextRequest) {
       amountCharged: chargeAmount,
     });
   } catch (err: unknown) {
-    const stripeError = err as { type?: string; message?: string };
-    console.error('Charge remainder error:', stripeError);
+    const stripeError = err as { type?: string; code?: string; message?: string };
+    console.error('Off-session charge failed:', stripeError.type, stripeError.code, stripeError.message);
 
-    if (stripeError.type === 'StripeCardError') {
-      return NextResponse.json({ error: `Card declined: ${stripeError.message}` }, { status: 400 });
+    // If the card was declined for any reason (insufficient funds, SCA required, etc.)
+    // fall back to a Stripe Checkout payment link the client can complete themselves
+    if (stripeError.type === 'StripeCardError' || stripeError.code === 'authentication_required') {
+      return createPaymentLink(booking, chargeAmount);
     }
 
-    return NextResponse.json({ error: 'Failed to charge remainder' }, { status: 500 });
+    return NextResponse.json({ error: `Charge failed: ${stripeError.message || 'Unknown error'}` }, { status: 500 });
+  }
+}
+
+// Create a Stripe Checkout session the client can pay through
+async function createPaymentLink(
+  booking: { id: string; stripe_customer_id: string; customer_email: string; customer_name: string; remainder_amount: number; total_amount: number },
+  chargeAmount: number,
+) {
+  try {
+    const session = await stripe.checkout.sessions.create({
+      customer: booking.stripe_customer_id,
+      payment_method_types: ['card'],
+      mode: 'payment',
+      line_items: [
+        {
+          price_data: {
+            currency: PRICING.currency,
+            product_data: {
+              name: 'Recording Session — Remaining Balance',
+              description: `Remaining balance for booking ${booking.id.slice(0, 8)}`,
+            },
+            unit_amount: chargeAmount,
+          },
+          quantity: 1,
+        },
+      ],
+      metadata: {
+        type: 'booking_remainder',
+        booking_id: booking.id,
+        charge_amount: String(chargeAmount),
+      },
+      success_url: `${SITE_URL}/dashboard?paid=1`,
+      cancel_url: `${SITE_URL}/dashboard`,
+    });
+
+    return NextResponse.json({
+      success: false,
+      fallback: true,
+      paymentUrl: session.url,
+      message: 'Could not charge saved card automatically. A payment link has been generated for the client.',
+    });
+  } catch (linkErr) {
+    console.error('Failed to create payment link fallback:', linkErr);
+    return NextResponse.json({ error: 'Card declined and could not create payment link' }, { status: 500 });
   }
 }
