@@ -533,6 +533,61 @@ export default function BookingManager() {
                       )}
                     </div>
 
+                    {/* Cancelled — Record Kept Deposit */}
+                    {b.status === 'cancelled' && (
+                      <div className="border border-red-200 bg-red-50/50 p-3 space-y-2">
+                        <p className="font-mono text-[10px] text-red-600 uppercase tracking-wider font-bold">Cancelled Session — Deposit Tracking</p>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 font-mono text-xs">
+                          <div>
+                            <p className="text-black/40">Original Total</p>
+                            <p className="font-semibold">{formatCents(b.total_amount)}</p>
+                          </div>
+                          <div>
+                            <p className="text-black/40">Deposit on Card</p>
+                            <p className="font-semibold">{b.actual_deposit_paid ? formatCents(b.actual_deposit_paid) : '$0.00'}</p>
+                          </div>
+                          <div>
+                            <p className="text-black/40">Deposit Kept</p>
+                            <p className="font-semibold text-red-600">{formatCents(b.deposit_amount)}</p>
+                            <button
+                              onClick={() => { setEditingRemainder(b.id); setRemainderInput((b.deposit_amount / 100).toFixed(2)); }}
+                              className="text-[10px] text-accent hover:underline"
+                            >Edit kept amount</button>
+                          </div>
+                        </div>
+                        {!b.actual_deposit_paid && b.deposit_amount === 0 && (
+                          <div className="flex items-center gap-2 flex-wrap mt-1">
+                            <p className="font-mono text-[10px] text-black/40">Record cash deposit kept:</p>
+                            <div className="flex items-center gap-1">
+                              <span className="font-mono text-xs">$</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={cashAmount}
+                                onChange={(e) => setCashAmount(e.target.value)}
+                                className="w-24 border border-black/20 px-2 py-1.5 font-mono text-xs"
+                                placeholder="Amount"
+                              />
+                            </div>
+                            <button
+                              onClick={async () => {
+                                const amt = Math.round(parseFloat(cashAmount) * 100);
+                                if (!amt || amt <= 0) return;
+                                await fetch('/api/booking/record-payment', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ bookingId: b.id, amount: parseFloat(cashAmount), method: 'cash', note: 'Kept deposit from cancelled session' }),
+                                });
+                                updateBooking(b.id, { deposit_amount: amt, actual_deposit_paid: amt });
+                                setCashAmount('');
+                              }}
+                              className="bg-black text-white font-mono text-[10px] font-bold uppercase px-3 py-1.5"
+                            >Save</button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* Cash Payment Form */}
                     {showCashPayment === b.id && (
                       <div className="border border-black/10 p-3 space-y-2">

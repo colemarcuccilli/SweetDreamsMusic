@@ -92,6 +92,7 @@ export default function Accounting() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [beatPurchases, setBeatPurchases] = useState<BeatPurchase[]>([]);
   const [mediaSales, setMediaSales] = useState<{ amount: number }[]>([]);
+  const [cancelledBookings, setCancelledBookings] = useState<{ id: string; customer_name: string; start_time: string; total_amount: number; deposit_amount: number; actual_deposit_paid: number | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>('overview');
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth');
@@ -124,6 +125,7 @@ export default function Accounting() {
     setBookings(data.bookings || []);
     setBeatPurchases(data.beatPurchases || []);
     setMediaSales(data.mediaSales || []);
+    setCancelledBookings(data.cancelledBookings || []);
     setLoading(false);
   }
 
@@ -350,6 +352,14 @@ export default function Accounting() {
                 <StatCard icon={Calendar} label="Total Hours" value={`${sessionStats.totalHours}hr`} />
                 <StatCard icon={DollarSign} label="Remainder Due" value={formatCents(sessionStats.remainderOutstanding)} />
               </div>
+
+              {cancelledBookings.length > 0 && (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <StatCard icon={Calendar} label="Cancelled Sessions" value={String(cancelledBookings.length)} />
+                  <StatCard icon={DollarSign} label="Deposits Kept (Card)" value={formatCents(cancelledBookings.reduce((s, b) => s + (b.actual_deposit_paid || 0), 0))} />
+                  <StatCard icon={DollarSign} label="Total Kept from Cancelled" value={formatCents(cancelledBookings.reduce((s, b) => s + Math.max(b.actual_deposit_paid || 0, b.deposit_amount || 0), 0))} accent />
+                </div>
+              )}
 
               {/* Monthly breakdown */}
               {sessionsByMonth.length > 0 && (

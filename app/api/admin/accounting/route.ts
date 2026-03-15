@@ -23,6 +23,18 @@ export async function GET(request: NextRequest) {
 
   const { data: bookings } = await bookingsQuery;
 
+  // Fetch cancelled bookings with deposits (kept revenue)
+  let cancelledQuery = supabase
+    .from('bookings')
+    .select('id, customer_name, start_time, total_amount, deposit_amount, actual_deposit_paid, status, created_at')
+    .eq('status', 'cancelled')
+    .order('created_at', { ascending: false });
+
+  if (from) cancelledQuery = cancelledQuery.gte('start_time', from);
+  if (to) cancelledQuery = cancelledQuery.lte('start_time', `${to}T23:59:59`);
+
+  const { data: cancelledBookings } = await cancelledQuery;
+
   // Fetch all beat purchases (with optional date range)
   let purchasesQuery = supabase
     .from('beat_purchases')
@@ -47,6 +59,7 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     bookings: bookings || [],
+    cancelledBookings: cancelledBookings || [],
     beatPurchases: beatPurchases || [],
     mediaSales: mediaSales || [],
   });
