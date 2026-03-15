@@ -1,14 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { Users, Calendar, Link as LinkIcon, DollarSign } from 'lucide-react';
+import { Users, Calendar, Link as LinkIcon, DollarSign, FileAudio } from 'lucide-react';
 import type { SessionUser } from '@/lib/auth';
 import ClientLibrary from './ClientLibrary';
 import EngineerSessions from './EngineerSessions';
 import CreateInvite from './CreateInvite';
 import EngineerAccounting from './EngineerAccounting';
+import EngineerFiles from './EngineerFiles';
 
-type Tab = 'sessions' | 'library' | 'invite' | 'accounting';
+type Tab = 'sessions' | 'library' | 'files' | 'invite' | 'accounting';
 
 export default function EngineerDashboard({ user }: { user: SessionUser }) {
   const [tab, setTab] = useState<Tab>('sessions');
@@ -16,6 +17,7 @@ export default function EngineerDashboard({ user }: { user: SessionUser }) {
   const tabs: { key: Tab; label: string; icon: typeof Users }[] = [
     { key: 'sessions', label: 'My Sessions', icon: Calendar },
     { key: 'library', label: 'Client Library', icon: Users },
+    { key: 'files', label: 'Files', icon: FileAudio },
     { key: 'invite', label: 'Invite to Session', icon: LinkIcon },
     { key: 'accounting', label: 'Accounting', icon: DollarSign },
   ];
@@ -46,6 +48,7 @@ export default function EngineerDashboard({ user }: { user: SessionUser }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {tab === 'sessions' && <EngineerSessions userEmail={user.email} />}
           {tab === 'library' && <ClientLibrary />}
+          {tab === 'files' && <EngineerFiles />}
           {tab === 'invite' && <CreateInvite />}
           {tab === 'accounting' && <EngineerAccounting />}
         </div>

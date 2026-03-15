@@ -1,0 +1,131 @@
+import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
+import Link from 'next/link';
+import { FileAudio, Download, ArrowLeft } from 'lucide-react';
+import { getSessionUser } from '@/lib/auth';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
+import DashboardNav from '@/components/layout/DashboardNav';
+
+export const metadata: Metadata = { title: 'My Files' };
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export default async function FilesPage() {
+  const user = await getSessionUser();
+  if (!user) redirect('/login');
+
+  const supabase = await createClient();
+
+  // Fetch ALL deliverables for this user (no limit)
+  const { data: deliverables } = await supabase
+    .from('deliverables')
+    .select('id, file_name, display_name, file_path, file_type, file_size, uploaded_by_name, description, created_at')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false });
+
+  // Generate signed download URLs
+  const serviceClient = createServiceClient();
+  const filesWithUrls = await Promise.all(
+    (deliverables || []).map(async (file) => {
+      if (file.file_path) {
+        const { data } = await serviceClient.storage
+          .from('client-audio-files')
+          .createSignedUrl(file.file_path, 3600);
+        return { ...file, downloadUrl: data?.signedUrl || null };
+      }
+      return { ...file, downloadUrl: null };
+    })
+  );
+
+  // Group files by date
+  const filesByDate: Record<string, typeof filesWithUrls> = {};
+  filesWithUrls.forEach(file => {
+    const dateKey = new Date(file.created_at).toLocaleDateString('en-US', {
+      month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC',
+    });
+    if (!filesByDate[dateKey]) filesByDate[dateKey] = [];
+    filesByDate[dateKey].push(file);
+  });
+
+  return (
+    <>
+      <DashboardNav
+        role={user.role}
+        displayName={user.profile?.display_name}
+        email={user.email}
+        profileSlug={user.profile?.public_profile_slug}
+      />
+
+      <section className="bg-white text-black py-8 sm:py-12">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h2 className="text-heading-lg flex items-center gap-3">
+                <FileAudio className="w-7 h-7 text-accent" />
+                MY FILES
+              </h2>
+              <p className="font-mono text-xs text-black/40 mt-2">
+                All files from your sessions. Download links expire after 1 hour — refresh the page for new links.
+              </p>
+            </div>
+            <Link href="/dashboard" className="font-mono text-xs text-accent hover:underline inline-flex items-center gap-1 no-underline">
+              <ArrowLeft className="w-3 h-3" /> Dashboard
+            </Link>
+          </div>
+
+          {filesWithUrls.length === 0 ? (
+            <div className="border-2 border-black/10 p-12 text-center">
+              <FileAudio className="w-10 h-10 text-black/10 mx-auto mb-4" />
+              <p className="font-mono text-sm text-black/50 mb-2">No files yet</p>
+              <p className="font-mono text-xs text-black/30">Files from your recording sessions will appear here for download.</p>
+            </div>
+          ) : (
+            <div className="space-y-8">
+              {Object.entries(filesByDate).map(([date, files]) => (
+                <div key={date}>
+                  <h3 className="font-mono text-xs text-black/40 uppercase tracking-wider mb-3 border-b border-black/10 pb-2">
+                    {date} — {files.length} file{files.length > 1 ? 's' : ''}
+                  </h3>
+                  <div className="space-y-2">
+                    {files.map(file => (
+                      <div key={file.id} className="border-2 border-black/10 p-4 hover:border-black/30 transition-colors flex items-center justify-between gap-4">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-mono text-sm font-bold truncate">
+                            {file.display_name || file.file_name}
+                          </p>
+                          <div className="font-mono text-xs text-black/40 mt-1 flex items-center gap-3 flex-wrap">
+                            <span>by {file.uploaded_by_name}</span>
+                            <span className="uppercase">{file.file_type?.split('/')[1] || 'file'}</span>
+                            {file.file_size > 0 && <span>{formatFileSize(file.file_size)}</span>}
+                          </div>
+                          {file.description && (
+                            <p className="font-mono text-[10px] text-black/30 mt-1">{file.description}</p>
+                          )}
+                        </div>
+                        {file.downloadUrl ? (
+                          <a
+                            href={file.downloadUrl}
+                            download={file.file_name}
+                            className="bg-accent text-black font-mono text-xs font-bold uppercase tracking-wider px-4 py-2.5 hover:bg-accent/90 transition-colors inline-flex items-center gap-2 flex-shrink-0 no-underline"
+                          >
+                            <Download className="w-4 h-4" /> Download
+                          </a>
+                        ) : (
+                          <span className="font-mono text-xs text-black/30">Unavailable</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+    </>
+  );
+}

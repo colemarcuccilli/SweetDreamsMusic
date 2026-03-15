@@ -132,10 +132,17 @@ export default async function DashboardPage() {
 
             {/* Files / Deliverables */}
             <div>
-              <h2 className="text-heading-md mb-6 flex items-center gap-3">
-                <FileAudio className="w-6 h-6 text-accent" />
-                YOUR FILES
-              </h2>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-heading-md flex items-center gap-3">
+                  <FileAudio className="w-6 h-6 text-accent" />
+                  YOUR FILES
+                </h2>
+                {filesWithUrls.length > 0 && (
+                  <Link href="/dashboard/files" className="font-mono text-xs text-accent hover:underline no-underline">
+                    View All &rarr;
+                  </Link>
+                )}
+              </div>
 
               {filesWithUrls.length === 0 ? (
                 <div className="border-2 border-black/10 p-8 text-center">
