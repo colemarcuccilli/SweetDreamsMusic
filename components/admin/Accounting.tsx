@@ -91,6 +91,7 @@ const LICENSE_LABELS: Record<string, string> = {
 export default function Accounting() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [beatPurchases, setBeatPurchases] = useState<BeatPurchase[]>([]);
+  const [mediaSales, setMediaSales] = useState<{ amount: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>('overview');
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth');
@@ -122,6 +123,7 @@ export default function Accounting() {
     const data = await res.json();
     setBookings(data.bookings || []);
     setBeatPurchases(data.beatPurchases || []);
+    setMediaSales(data.mediaSales || []);
     setLoading(false);
   }
 
@@ -336,10 +338,10 @@ export default function Accounting() {
             <div className="space-y-8">
               {/* Top-level stats */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard icon={DollarSign} label="Total Revenue" value={formatCents(sessionStats.completedRevenue + beatStats.totalRevenue)} accent />
+                <StatCard icon={DollarSign} label="Total Revenue" value={formatCents(sessionStats.completedRevenue + beatStats.totalRevenue + mediaSales.reduce((s, m) => s + m.amount, 0))} accent />
                 <StatCard icon={Calendar} label="Session Revenue" value={formatCents(sessionStats.completedRevenue)} />
                 <StatCard icon={Music} label="Beat Sales" value={formatCents(beatStats.totalRevenue)} />
-                <StatCard icon={TrendingUp} label="Deposits Collected" value={formatCents(sessionStats.depositsCollected)} />
+                <StatCard icon={TrendingUp} label="Media Sales" value={formatCents(mediaSales.reduce((s, m) => s + m.amount, 0))} />
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

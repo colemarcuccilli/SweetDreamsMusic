@@ -45,11 +45,11 @@ export async function GET(request: NextRequest) {
 
   const { data: bookings } = await bookingsQuery;
 
-  // Fetch media sales this engineer brought in
+  // Fetch media sales this engineer sold (check both sold_by and engineer_name for backward compat)
   let mediaSalesQuery = supabase
     .from('media_sales')
     .select('*')
-    .in('engineer_name', [...matchNames])
+    .or(`sold_by.in.(${[...matchNames].map(n => `"${n}"`).join(',')}),engineer_name.in.(${[...matchNames].map(n => `"${n}"`).join(',')})`)
     .order('created_at', { ascending: false });
 
   if (from) mediaSalesQuery = mediaSalesQuery.gte('created_at', from);

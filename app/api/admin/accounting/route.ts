@@ -34,8 +34,20 @@ export async function GET(request: NextRequest) {
 
   const { data: beatPurchases } = await purchasesQuery;
 
+  // Fetch media sales (with optional date range)
+  let mediaSalesQuery = supabase
+    .from('media_sales')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (from) mediaSalesQuery = mediaSalesQuery.gte('created_at', from);
+  if (to) mediaSalesQuery = mediaSalesQuery.lte('created_at', `${to}T23:59:59`);
+
+  const { data: mediaSales } = await mediaSalesQuery;
+
   return NextResponse.json({
     bookings: bookings || [],
     beatPurchases: beatPurchases || [],
+    mediaSales: mediaSales || [],
   });
 }

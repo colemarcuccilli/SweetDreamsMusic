@@ -1,15 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { Calendar, Music, Users, DollarSign, Clock } from 'lucide-react';
+import { Calendar, Music, Users, DollarSign, Clock, Video } from 'lucide-react';
 import type { SessionUser } from '@/lib/auth';
 import BookingManager from './BookingManager';
 import BeatManager from './BeatManager';
 import UserManager from './UserManager';
 import Accounting from './Accounting';
 import StudioBlocks from './StudioBlocks';
+import MediaSales from './MediaSales';
 
-type Tab = 'accounting' | 'bookings' | 'blocks' | 'beats' | 'users';
+type Tab = 'accounting' | 'bookings' | 'media' | 'blocks' | 'beats' | 'users';
 
 export default function AdminDashboard({ user }: { user: SessionUser }) {
   const [tab, setTab] = useState<Tab>('accounting');
@@ -17,6 +18,7 @@ export default function AdminDashboard({ user }: { user: SessionUser }) {
   const tabs: { key: Tab; label: string; icon: typeof Calendar }[] = [
     { key: 'accounting', label: 'Accounting', icon: DollarSign },
     { key: 'bookings', label: 'Bookings', icon: Calendar },
+    { key: 'media', label: 'Media Sales', icon: Video },
     { key: 'blocks', label: 'Block Off', icon: Clock },
     { key: 'beats', label: 'Beat Store', icon: Music },
     { key: 'users', label: 'Users', icon: Users },
@@ -48,6 +50,7 @@ export default function AdminDashboard({ user }: { user: SessionUser }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {tab === 'accounting' && <Accounting />}
           {tab === 'bookings' && <BookingManager />}
+          {tab === 'media' && <MediaSales />}
           {tab === 'blocks' && <StudioBlocks />}
           {tab === 'beats' && <BeatManager />}
           {tab === 'users' && <UserManager />}
