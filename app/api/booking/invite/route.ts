@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
         total_amount: totalAmount,
         deposit_amount: depositAmount,
         remainder_amount: totalAmount - depositAmount,
-        status: 'pending',
+        status: 'pending_deposit',
         admin_notes: `Invite created by ${user.email}. Token: ${inviteToken}. ${customPrice ? `Custom price: $${(customPrice / 100).toFixed(2)}. ` : ''}${notes || ''}`,
       })
       .select('id')
