@@ -3,7 +3,7 @@ import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { SITE_URL, ENGINEERS } from '@/lib/constants';
 import { parseTimeSlot } from '@/lib/utils';
 import { verifyEngineerAccess } from '@/lib/admin-auth';
-import { sendBookingConfirmation } from '@/lib/email';
+import { sendSessionInvite } from '@/lib/email';
 
 // Engineer creates a session and generates an invite link
 export async function POST(request: NextRequest) {
@@ -72,29 +72,31 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: `Failed to create booking: ${error.message}` }, { status: 500 });
       }
 
-      // Send confirmation email if client email provided
+      const inviteUrl = `${SITE_URL}/book/invite/${inviteToken}?booking=${booking.id}`;
+
+      // Send invite email if client email provided
       if (clientEmail) {
         try {
           const startDate = new Date(`${date}T${startTime}:00+00:00`);
           const dateStr = startDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
           const timeStr = startDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
 
-          await sendBookingConfirmation(clientEmail, {
+          await sendSessionInvite(clientEmail, {
             customerName: clientName || 'Client',
+            engineerName: engineerConfig?.displayName || engineerName || 'Your engineer',
             date: dateStr,
             startTime: timeStr,
             duration,
             room,
             total: totalAmount,
             deposit: 0,
+            inviteUrl,
+            isCash: true,
           });
         } catch (emailErr) {
-          console.error('Failed to send confirmation email:', emailErr);
-          // Don't fail the invite if email fails
+          console.error('Failed to send invite email:', emailErr);
         }
       }
-
-      const inviteUrl = `${SITE_URL}/book/invite/${inviteToken}?booking=${booking.id}`;
 
       return NextResponse.json({ inviteUrl, bookingId: booking.id });
     }
@@ -125,6 +127,30 @@ export async function POST(request: NextRequest) {
     }
 
     const inviteUrl = `${SITE_URL}/book/invite/${inviteToken}?booking=${booking.id}`;
+
+    // Send invite email with payment link if client email provided
+    if (clientEmail) {
+      try {
+        const startDate = new Date(`${date}T${startTime}:00+00:00`);
+        const dateStr = startDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
+        const timeStr = startDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
+
+        await sendSessionInvite(clientEmail, {
+          customerName: clientName || 'Client',
+          engineerName: engineerConfig?.displayName || engineerName || 'Your engineer',
+          date: dateStr,
+          startTime: timeStr,
+          duration,
+          room,
+          total: totalAmount,
+          deposit: depositAmount,
+          inviteUrl,
+          isCash: false,
+        });
+      } catch (emailErr) {
+        console.error('Failed to send invite email:', emailErr);
+      }
+    }
 
     return NextResponse.json({ inviteUrl, bookingId: booking.id });
   } catch (error) {

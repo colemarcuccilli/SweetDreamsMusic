@@ -151,9 +151,11 @@ export default function CreateInvite() {
             <h3 className="text-heading-sm">INVITE CREATED</h3>
           </div>
           <p className="font-mono text-xs text-black/60 mb-4">
-            {paymentMethod === 'cash'
-              ? 'Send this link to the client. They\'ll confirm the session. Payment is collected at the studio.'
-              : 'Send this link to the client. They\'ll sign in and pay the deposit online.'}
+            {clientEmail
+              ? `An invite has been emailed to ${clientEmail}. You can also share the link below.`
+              : paymentMethod === 'cash'
+                ? 'Send this link to the client. They\'ll confirm the session. Payment is collected at the studio.'
+                : 'Send this link to the client. They\'ll sign in and pay the deposit online.'}
           </p>
           <div className="flex gap-2">
             <input

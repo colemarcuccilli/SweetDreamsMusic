@@ -261,6 +261,44 @@ export async function sendPaymentLink(to: string, details: {
   } catch (e) { console.error('Email error (payment link):', e); }
 }
 
+export async function sendSessionInvite(to: string, details: {
+  customerName: string; engineerName: string; date: string; startTime: string;
+  duration: number; room: string; total: number; deposit: number;
+  inviteUrl: string; isCash: boolean;
+}) {
+  try {
+    const roomLabel = ROOM_LABELS[details.room as Room] || details.room;
+    const subject = details.isCash
+      ? 'Session Scheduled — Sweet Dreams Music'
+      : 'You\'re Invited to a Session — Sweet Dreams Music';
+
+    await resend.emails.send({
+      from: FROM, to, subject,
+      html: wrap(`
+        ${h1(details.isCash ? 'Session Scheduled' : 'Session Invite')}
+        ${p(`Hey ${details.customerName}, ${details.engineerName} has ${details.isCash ? 'booked a session for you' : 'invited you to a session'} at Sweet Dreams Music!`)}
+        ${detailTable(`
+          ${detail('Date', details.date)}
+          ${detail('Time', details.startTime)}
+          ${detail('Duration', `${details.duration} hour${details.duration > 1 ? 's' : ''}`)}
+          ${detail('Studio', roomLabel)}
+          ${detail('Total', formatMoney(details.total))}
+          ${details.isCash
+            ? detail('Payment', 'Cash — pay at the studio')
+            : detail('Deposit Due', formatMoney(details.deposit))
+          }
+        `)}
+        ${details.isCash
+          ? p('Your session is confirmed. See you at the studio!')
+          : p('Click the button below to pay your deposit and confirm your session.')
+        }
+        ${btn(details.isCash ? 'VIEW SESSION' : 'PAY DEPOSIT & CONFIRM', details.inviteUrl)}
+        ${p('<span style="color:#666;font-size:11px">If you have any questions, reply to this email.</span>')}
+      `),
+    });
+  } catch (e) { console.error('Email error (session invite):', e); }
+}
+
 export async function sendContactForm(details: {
   name: string; email: string; subject: string; message: string;
 }) {
