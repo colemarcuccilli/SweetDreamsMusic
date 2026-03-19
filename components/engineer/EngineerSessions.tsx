@@ -72,13 +72,30 @@ export default function EngineerSessions({ userEmail }: { userEmail: string }) {
 
   if (loading) return <p className="font-mono text-sm text-black/40">Loading sessions...</p>;
 
+  const pendingInvites = mySessions.filter((b) =>
+    b.status === 'pending_deposit' && b.engineer_name
+  );
   const myActive = mySessions.filter((b) =>
-    ['confirmed', 'pending'].includes(b.status) && b.engineer_name
+    ['confirmed', 'pending', 'approved'].includes(b.status) && b.engineer_name
   );
   const myCompleted = mySessions.filter((b) => b.status === 'completed');
 
   return (
     <div className="space-y-10">
+      {/* Pending Invites */}
+      {pendingInvites.length > 0 && (
+        <div>
+          <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">
+            Pending Invites ({pendingInvites.length})
+          </h3>
+          <div className="space-y-3">
+            {pendingInvites.map((b) => (
+              <PendingInviteCard key={b.id} booking={b} onUpdate={loadData} />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Available Sessions (Unclaimed) */}
       <div>
         <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">
@@ -134,6 +151,131 @@ export default function EngineerSessions({ userEmail }: { userEmail: string }) {
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function PendingInviteCard({ booking, onUpdate }: { booking: Booking; onUpdate: () => void }) {
+  const [resending, setResending] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+
+  const date = new Date(booking.start_time);
+
+  // Extract invite URL from admin_notes if stored there
+  const tokenMatch = booking.admin_notes?.match(/Token: ([a-f0-9-]+)/);
+  const inviteToken = tokenMatch?.[1];
+  const inviteUrl = inviteToken
+    ? `https://sweetdreamsmusic.com/book/invite/${inviteToken}?booking=${booking.id}`
+    : null;
+
+  async function resendInvite() {
+    if (!booking.customer_email) {
+      alert('No email on file for this client');
+      return;
+    }
+    setResending(true);
+    try {
+      const res = await fetch('/api/booking/resend-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId: booking.id }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert(`Invite resent to ${booking.customer_email}`);
+      } else {
+        alert(data.error || 'Failed to resend');
+      }
+    } catch {
+      alert('Network error');
+    } finally {
+      setResending(false);
+    }
+  }
+
+  function copyLink() {
+    if (!inviteUrl) return;
+    navigator.clipboard.writeText(inviteUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function cancelInvite() {
+    if (!confirm(`Cancel invite for ${booking.customer_name}?`)) return;
+    setCancelling(true);
+    try {
+      const res = await fetch('/api/booking/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId: booking.id, status: 'cancelled' }),
+      });
+      if (res.ok) onUpdate();
+      else alert('Failed to cancel');
+    } catch {
+      alert('Network error');
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  return (
+    <div className="border-2 border-amber-300/50 bg-amber-50/30 p-4 sm:p-5">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <p className="font-mono text-sm font-bold">{booking.customer_name}</p>
+            <span className="font-mono text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 px-2 py-0.5">
+              Awaiting Payment
+            </span>
+          </div>
+          {booking.customer_email && (
+            <p className="font-mono text-xs text-black/50">{booking.customer_email}</p>
+          )}
+          <p className="font-mono text-xs text-black/40 mt-1">
+            {date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })}
+            {' · '}
+            {date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' })}
+            {' · '}
+            {booking.duration}hr
+            {booking.room && ` · ${booking.room === 'studio_a' ? 'Studio A' : 'Studio B'}`}
+          </p>
+          <p className="font-mono text-[10px] text-black/30 mt-1">
+            Created {new Date(booking.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            {' · '}Deposit: {formatCents(booking.deposit_amount)} of {formatCents(booking.total_amount)}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="font-mono text-sm font-semibold">{formatCents(booking.total_amount)}</p>
+        </div>
+      </div>
+
+      <div className="mt-3 pt-3 border-t border-amber-200/50 flex flex-wrap gap-2">
+        {booking.customer_email && (
+          <button
+            onClick={resendInvite}
+            disabled={resending}
+            className="font-mono text-xs font-bold uppercase tracking-wider bg-accent text-black px-4 py-2 hover:bg-accent/90 disabled:opacity-50 transition-colors"
+          >
+            {resending ? 'Sending...' : 'Resend Invite'}
+          </button>
+        )}
+        {inviteUrl && (
+          <button
+            onClick={copyLink}
+            className="font-mono text-xs font-bold uppercase tracking-wider border-2 border-black/20 text-black/60 px-4 py-2 hover:bg-black/5 transition-colors"
+          >
+            {copied ? 'Copied!' : 'Copy Link'}
+          </button>
+        )}
+        <button
+          onClick={cancelInvite}
+          disabled={cancelling}
+          className="font-mono text-xs font-bold uppercase tracking-wider border-2 border-red-300 text-red-500 px-4 py-2 hover:bg-red-50 disabled:opacity-50 transition-colors"
+        >
+          {cancelling ? 'Cancelling...' : 'Cancel'}
+        </button>
       </div>
     </div>
   );
