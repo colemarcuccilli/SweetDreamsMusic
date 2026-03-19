@@ -1,0 +1,224 @@
+import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
+import Link from 'next/link';
+import { createClient } from '@/lib/supabase/server';
+import { formatCents } from '@/lib/utils';
+import { BEAT_LICENSES, SITE_URL } from '@/lib/constants';
+import BeatDetailClient from '@/components/beats/BeatDetailClient';
+
+interface Props {
+  params: Promise<{ id: string }>;
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = await params;
+  const supabase = await createClient();
+  const { data: beat } = await supabase
+    .from('beats')
+    .select('title, producer, genre')
+    .eq('id', id)
+    .single();
+
+  if (!beat) return { title: 'Beat Not Found' };
+
+  return {
+    title: `${beat.title} by ${beat.producer}`,
+    description: `Buy "${beat.title}" by ${beat.producer}. ${beat.genre || 'Beat'} available for lease or exclusive purchase on Sweet Dreams Music.`,
+    alternates: { canonical: `${SITE_URL}/beats/${id}` },
+  };
+}
+
+export default async function BeatDetailPage({ params }: Props) {
+  const { id } = await params;
+  const supabase = await createClient();
+
+  const { data: beat, error } = await supabase
+    .from('beats')
+    .select('*, profiles!producer_id(id, display_name, producer_name, public_profile_slug, profile_picture_url, bio)')
+    .eq('id', id)
+    .single();
+
+  if (error || !beat) notFound();
+
+  const producer = beat.profiles;
+  const producerName = producer?.producer_name || producer?.display_name || beat.producer;
+
+  return (
+    <>
+      {/* Hero section */}
+      <section className="bg-black text-white py-16 sm:py-24">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col lg:flex-row gap-12">
+            {/* Left: Beat info + player */}
+            <div className="flex-1">
+              <Link href="/beats" className="font-mono text-xs text-white/40 hover:text-accent uppercase tracking-wider no-underline mb-4 block">
+                &larr; Back to beats
+              </Link>
+              <h1 className="text-display-md mb-3">{beat.title}</h1>
+              <p className="font-mono text-white/50 text-lg mb-6">
+                by{' '}
+                {producer?.public_profile_slug ? (
+                  <Link href={`/u/${producer.public_profile_slug}`} className="text-accent hover:underline no-underline">
+                    {producerName}
+                  </Link>
+                ) : (
+                  producerName
+                )}
+              </p>
+
+              {/* Tags */}
+              <div className="flex flex-wrap gap-2 mb-8">
+                {beat.genre && (
+                  <span className="font-mono text-xs text-white/50 border border-white/20 px-3 py-1">
+                    {beat.genre}
+                  </span>
+                )}
+                {beat.bpm && (
+                  <span className="font-mono text-xs text-white/50 border border-white/20 px-3 py-1">
+                    {beat.bpm} BPM
+                  </span>
+                )}
+                {beat.musical_key && (
+                  <span className="font-mono text-xs text-white/50 border border-white/20 px-3 py-1">
+                    {beat.musical_key}
+                  </span>
+                )}
+                {beat.tags?.map((tag: string) => (
+                  <span key={tag} className="font-mono text-xs text-white/30 border border-white/10 px-3 py-1">
+                    {tag}
+                  </span>
+                ))}
+              </div>
+
+              {/* Player */}
+              <BeatDetailClient beat={{
+                id: beat.id,
+                title: beat.title,
+                producer: producerName,
+                producerSlug: producer?.public_profile_slug || undefined,
+                previewUrl: beat.preview_url,
+                genre: beat.genre,
+                bpm: beat.bpm,
+                musicalKey: beat.musical_key,
+              }} />
+
+              {beat.lease_count > 0 && (
+                <p className="font-mono text-[10px] text-white/30 mt-4">
+                  {beat.lease_count} lease{beat.lease_count !== 1 ? 's' : ''} sold
+                </p>
+              )}
+            </div>
+
+            {/* Right: License pricing table */}
+            <div className="lg:w-96 flex-shrink-0">
+              <h2 className="font-mono text-xs text-white/40 uppercase tracking-wider mb-4">Choose a License</h2>
+              <div className="space-y-3">
+                {beat.mp3_lease_price && (
+                  <LicenseOption
+                    beatId={beat.id}
+                    type="mp3_lease"
+                    name={BEAT_LICENSES.mp3_lease.name}
+                    description={BEAT_LICENSES.mp3_lease.description}
+                    delivery={BEAT_LICENSES.mp3_lease.deliveryFormat}
+                    price={beat.mp3_lease_price}
+                  />
+                )}
+                {beat.trackout_lease_price && (
+                  <LicenseOption
+                    beatId={beat.id}
+                    type="trackout_lease"
+                    name={BEAT_LICENSES.trackout_lease.name}
+                    description={BEAT_LICENSES.trackout_lease.description}
+                    delivery={BEAT_LICENSES.trackout_lease.deliveryFormat}
+                    price={beat.trackout_lease_price}
+                  />
+                )}
+                {beat.exclusive_price && beat.has_exclusive && (
+                  <LicenseOption
+                    beatId={beat.id}
+                    type="exclusive"
+                    name={BEAT_LICENSES.exclusive.name}
+                    description={BEAT_LICENSES.exclusive.description}
+                    delivery={BEAT_LICENSES.exclusive.deliveryFormat}
+                    price={beat.exclusive_price}
+                    isExclusive
+                  />
+                )}
+              </div>
+
+              <Link
+                href={`/beats/${beat.id}/write`}
+                className="mt-6 w-full border border-white/20 text-white font-mono text-sm font-bold uppercase tracking-wider px-6 py-3 hover:border-accent hover:text-accent transition-colors no-underline flex items-center justify-center"
+              >
+                Write to This Beat
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
+
+function LicenseOption({
+  beatId,
+  type,
+  name,
+  description,
+  delivery,
+  price,
+  isExclusive,
+}: {
+  beatId: string;
+  type: string;
+  name: string;
+  description: string;
+  delivery: string;
+  price: number;
+  isExclusive?: boolean;
+}) {
+  return (
+    <div className={`border p-5 ${isExclusive ? 'border-accent' : 'border-white/10'} hover:border-accent/50 transition-colors`}>
+      <div className="flex items-start justify-between mb-2">
+        <div>
+          <h3 className="font-mono text-sm font-bold">{name}</h3>
+          <p className="font-mono text-[10px] text-white/40 mt-1">{description}</p>
+        </div>
+        <span className={`font-mono text-lg font-bold flex-shrink-0 ml-4 ${isExclusive ? 'text-accent' : 'text-white'}`}>
+          {formatCents(price)}
+        </span>
+      </div>
+      <p className="font-mono text-[10px] text-white/30 mb-3">Delivery: {delivery}</p>
+      <BuyButton beatId={beatId} licenseType={type} isExclusive={isExclusive} />
+    </div>
+  );
+}
+
+function BuyButton({ beatId, licenseType, isExclusive }: { beatId: string; licenseType: string; isExclusive?: boolean }) {
+  return (
+    <form action={`/api/beats/checkout`} method="POST">
+      <input type="hidden" name="beatId" value={beatId} />
+      <input type="hidden" name="licenseType" value={licenseType} />
+      <button
+        type="submit"
+        className={`w-full font-mono text-xs font-bold uppercase tracking-wider py-2.5 transition-colors ${
+          isExclusive
+            ? 'bg-accent text-black hover:bg-accent/90'
+            : 'bg-white text-black hover:bg-white/90'
+        }`}
+        onClick={async (e) => {
+          e.preventDefault();
+          const res = await fetch('/api/beats/checkout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ beatId, licenseType }),
+          });
+          const data = await res.json();
+          if (data.url) window.location.href = data.url;
+        }}
+      >
+        Buy {isExclusive ? 'Exclusive' : 'License'}
+      </button>
+    </form>
+  );
+}

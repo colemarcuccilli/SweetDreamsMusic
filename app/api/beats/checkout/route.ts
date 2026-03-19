@@ -43,6 +43,7 @@ export async function POST(request: NextRequest) {
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       mode: 'payment',
+      automatic_tax: { enabled: true },
       line_items: [
         {
           price_data: {
@@ -50,6 +51,7 @@ export async function POST(request: NextRequest) {
             product_data: {
               name: `${beat.title} — ${license.name}`,
               description: `${license.description} | Delivery: ${license.deliveryFormat}`,
+              tax_code: 'txcd_10202000', // Digital goods - audio
             },
             unit_amount: price,
           },
@@ -64,6 +66,7 @@ export async function POST(request: NextRequest) {
         beat_id: beatId,
         beat_title: beat.title,
         producer: beat.producer,
+        producer_id: beat.producer_id || '',
         license_type: licenseType,
         buyer_id: user?.id || '',
         buyer_email: user?.email || '',

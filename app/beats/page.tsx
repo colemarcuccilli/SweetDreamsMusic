@@ -1,15 +1,24 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Music, Play, ShoppingCart } from 'lucide-react';
 import { SITE_URL, BEAT_LICENSES } from '@/lib/constants';
+import { createClient } from '@/lib/supabase/server';
+import BeatStoreClient from '@/components/beats/BeatStoreClient';
 
 export const metadata: Metadata = {
   title: 'Beat Store',
-  description: 'Browse and buy beats from Sweet Dreams Music producers. MP3 leases, WAV leases, unlimited licenses, and exclusive rights available.',
+  description: 'Browse and buy beats from Sweet Dreams Music producers. MP3 leases, trackout leases, and exclusive rights available.',
   alternates: { canonical: `${SITE_URL}/beats` },
 };
 
-export default function BeatsPage() {
+export default async function BeatsPage() {
+  const supabase = await createClient();
+
+  const { data: beats } = await supabase
+    .from('beats')
+    .select('id, title, producer, producer_id, genre, bpm, musical_key, tags, preview_url, mp3_lease_price, trackout_lease_price, exclusive_price, has_exclusive, lease_count, status, created_at, profiles!producer_id(display_name, producer_name, public_profile_slug)')
+    .eq('status', 'active')
+    .order('created_at', { ascending: false });
+
   return (
     <>
       {/* Hero */}
@@ -26,29 +35,22 @@ export default function BeatsPage() {
         </div>
       </section>
 
-      {/* Coming Soon / Beat Grid - White */}
-      <section className="bg-white text-black py-20 sm:py-28">
+      {/* Beat Grid */}
+      <section className="bg-white text-black py-12 sm:py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* TODO: Replace with actual beat grid from Supabase */}
-          <div className="border-2 border-black/10 p-12 sm:p-16 text-center">
-            <Music className="w-16 h-16 text-accent mx-auto mb-6" strokeWidth={1} />
-            <h2 className="text-heading-xl mb-4">COMING SOON</h2>
-            <p className="font-mono text-black/60 text-body-sm max-w-xl mx-auto mb-8">
-              Our beat store is being stocked with fire. Sign up to get notified when new beats drop.
-            </p>
-            <Link href="/login"
-              className="bg-black text-white font-mono text-base font-bold tracking-wider uppercase px-8 py-4 hover:bg-black/80 transition-colors no-underline inline-flex items-center justify-center">
-              CREATE AN ACCOUNT
-            </Link>
-          </div>
+          <BeatStoreClient initialBeats={(beats || []).map((b) => ({
+            ...b,
+            // Supabase returns joined relations as arrays; normalize to single object
+            profiles: Array.isArray(b.profiles) ? b.profiles[0] || null : b.profiles,
+          }))} />
         </div>
       </section>
 
-      {/* License Types - Black */}
+      {/* License Types */}
       <section className="bg-black text-white py-20 sm:py-28">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-heading-xl mb-12">LICENSE TYPES</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             {Object.entries(BEAT_LICENSES).map(([key, license]) => (
               <div key={key} className="border border-white/10 p-6 sm:p-8 hover:border-accent/50 transition-colors">
                 <h3 className="text-heading-sm mb-3">{license.name}</h3>
@@ -63,17 +65,31 @@ export default function BeatsPage() {
         </div>
       </section>
 
-      {/* CTA */}
+      {/* CTAs */}
       <section className="bg-white text-black py-20 sm:py-28">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-display-md mb-6">WANT CUSTOM PRODUCTION?</h2>
-          <p className="font-mono text-black/70 text-body-md max-w-2xl mx-auto mb-10">
-            Book a session with one of our producers and get a beat made specifically for you.
-          </p>
-          <Link href="/book"
-            className="bg-black text-white font-mono text-base font-bold tracking-wider uppercase px-8 py-4 hover:bg-black/80 transition-colors no-underline inline-flex items-center justify-center">
-            BOOK A PRODUCTION SESSION
-          </Link>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div>
+              <h2 className="text-heading-lg mb-4">WANT CUSTOM PRODUCTION?</h2>
+              <p className="font-mono text-black/70 text-body-sm mb-6">
+                Book a session with one of our producers and get a beat made specifically for you.
+              </p>
+              <Link href="/book"
+                className="bg-black text-white font-mono text-sm font-bold tracking-wider uppercase px-6 py-3 hover:bg-black/80 transition-colors no-underline inline-flex items-center justify-center">
+                BOOK A SESSION
+              </Link>
+            </div>
+            <div>
+              <h2 className="text-heading-lg mb-4">ARE YOU A PRODUCER?</h2>
+              <p className="font-mono text-black/70 text-body-sm mb-6">
+                Sell your beats on Sweet Dreams Music. You keep 60% of every sale.
+              </p>
+              <Link href="/sell-beats"
+                className="border-2 border-black text-black font-mono text-sm font-bold tracking-wider uppercase px-6 py-3 hover:bg-black hover:text-white transition-colors no-underline inline-flex items-center justify-center">
+                APPLY TO SELL
+              </Link>
+            </div>
+          </div>
         </div>
       </section>
     </>

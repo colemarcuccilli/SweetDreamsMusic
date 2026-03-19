@@ -27,3 +27,12 @@ export async function verifyEngineerAccess(supabase: any): Promise<boolean> {
   const { data: profile } = await supabase.from('profiles').select('role').eq('user_id', user.id).single();
   return profile?.role === 'engineer';
 }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function verifyProducerAccess(supabase: any): Promise<{ isProducer: boolean; profileId: string | null }> {
+  const { data: { user }, error } = await supabase.auth.getUser();
+  if (error || !user) return { isProducer: false, profileId: null };
+  if (!user.id) return { isProducer: false, profileId: null };
+  const { data: profile } = await supabase.from('profiles').select('id, is_producer').eq('user_id', user.id).single();
+  return { isProducer: profile?.is_producer === true, profileId: profile?.id ?? null };
+}

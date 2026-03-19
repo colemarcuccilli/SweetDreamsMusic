@@ -2,23 +2,25 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Shield, Wrench, User } from 'lucide-react';
+import { LayoutDashboard, Shield, Wrench, User, Music } from 'lucide-react';
 import type { UserRole } from '@/lib/constants';
 import SignOutButton from '@/components/auth/SignOutButton';
 
 interface DashboardNavProps {
   role: UserRole;
+  isProducer?: boolean;
   displayName?: string;
   email: string;
   profileSlug?: string;
 }
 
-export default function DashboardNav({ role, displayName, email, profileSlug }: DashboardNavProps) {
+export default function DashboardNav({ role, isProducer, displayName, email, profileSlug }: DashboardNavProps) {
   const pathname = usePathname();
 
   const tabs = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
     { href: '/engineer', label: 'Engineer', icon: Wrench, show: role === 'engineer' || role === 'admin' },
+    { href: '/producer', label: 'Producer', icon: Music, show: isProducer === true },
     { href: '/admin', label: 'Admin', icon: Shield, show: role === 'admin' },
   ].filter((t) => t.show);
 

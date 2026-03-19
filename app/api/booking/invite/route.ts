@@ -1,22 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { SITE_URL, ENGINEERS } from '@/lib/constants';
-import { getUserRole, parseTimeSlot } from '@/lib/utils';
+import { parseTimeSlot } from '@/lib/utils';
+import { verifyEngineerAccess } from '@/lib/admin-auth';
 import { sendBookingConfirmation } from '@/lib/email';
 
 // Engineer creates a session and generates an invite link
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const hasAccess = await verifyEngineerAccess(supabase);
 
-    if (!user?.email) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    if (!hasAccess) {
+      return NextResponse.json({ error: 'Engineers and admins only' }, { status: 403 });
     }
 
-    const role = getUserRole(user.email);
-    if (role !== 'engineer' && role !== 'admin') {
-      return NextResponse.json({ error: 'Engineers and admins only' }, { status: 403 });
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user?.email) {
+      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
     const body = await request.json();
@@ -31,6 +32,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
+    // Use service client for DB operations (bypasses RLS — auth already verified above)
+    const serviceClient = createServiceClient();
+
     // Auto-assign engineer from the creating user
     const engineerConfig = ENGINEERS.find(e => e.email.toLowerCase() === user.email!.toLowerCase());
     const engineerName = engineerConfig?.name || null;
@@ -43,7 +47,7 @@ export async function POST(request: NextRequest) {
 
     if (paymentMethod === 'cash') {
       // Cash booking — create confirmed immediately, no Stripe needed
-      const { data: booking, error } = await supabase
+      const { data: booking, error } = await serviceClient
         .from('bookings')
         .insert({
           customer_name: clientName || 'Cash Client',
@@ -58,48 +62,45 @@ export async function POST(request: NextRequest) {
           remainder_amount: totalAmount,
           actual_deposit_paid: 0,
           status: 'confirmed',
-          admin_notes: `Cash session created by ${user.email}. ${customPrice ? `Custom price: $${(customPrice / 100).toFixed(2)}. ` : ''}${notes || ''}`,
+          admin_notes: `Cash session created by ${user.email}. Token: ${inviteToken}. ${customPrice ? `Custom price: $${(customPrice / 100).toFixed(2)}. ` : ''}${notes || ''}`,
         })
         .select('id')
         .single();
 
       if (error) {
-        console.error('Failed to create cash booking:', error);
-        return NextResponse.json({ error: 'Failed to create booking' }, { status: 500 });
+        console.error('Failed to create cash booking:', JSON.stringify(error));
+        return NextResponse.json({ error: `Failed to create booking: ${error.message}` }, { status: 500 });
       }
 
       // Send confirmation email if client email provided
       if (clientEmail) {
-        const startDate = new Date(`${date}T${startTime}:00+00:00`);
-        const dateStr = startDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
-        const timeStr = startDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
+        try {
+          const startDate = new Date(`${date}T${startTime}:00+00:00`);
+          const dateStr = startDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
+          const timeStr = startDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
 
-        await sendBookingConfirmation(clientEmail, {
-          customerName: clientName || 'Client',
-          date: dateStr,
-          startTime: timeStr,
-          duration,
-          room,
-          total: totalAmount,
-          deposit: 0,
-        });
+          await sendBookingConfirmation(clientEmail, {
+            customerName: clientName || 'Client',
+            date: dateStr,
+            startTime: timeStr,
+            duration,
+            room,
+            total: totalAmount,
+            deposit: 0,
+          });
+        } catch (emailErr) {
+          console.error('Failed to send confirmation email:', emailErr);
+          // Don't fail the invite if email fails
+        }
       }
 
-      // No engineer claim emails — the creating engineer is already assigned
-
-      // Return a shareable link even for cash bookings
       const inviteUrl = `${SITE_URL}/book/invite/${inviteToken}?booking=${booking.id}`;
-
-      // Store token in admin_notes for lookup
-      await supabase.from('bookings').update({
-        admin_notes: `Cash session created by ${user.email}. Token: ${inviteToken}. ${customPrice ? `Custom price: $${(customPrice / 100).toFixed(2)}. ` : ''}${notes || ''}`,
-      }).eq('id', booking.id);
 
       return NextResponse.json({ inviteUrl, bookingId: booking.id });
     }
 
     // Online payment — create pending booking, client pays deposit via invite link
-    const { data: booking, error } = await supabase
+    const { data: booking, error } = await serviceClient
       .from('bookings')
       .insert({
         customer_name: clientName || (clientEmail ? `Invited: ${clientEmail}` : 'Pending Invite'),
@@ -119,8 +120,8 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
-      console.error('Failed to create invite booking:', error);
-      return NextResponse.json({ error: 'Failed to create invite' }, { status: 500 });
+      console.error('Failed to create invite booking:', JSON.stringify(error));
+      return NextResponse.json({ error: `Failed to create invite: ${error.message}` }, { status: 500 });
     }
 
     const inviteUrl = `${SITE_URL}/book/invite/${inviteToken}?booking=${booking.id}`;

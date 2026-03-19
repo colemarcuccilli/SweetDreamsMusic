@@ -15,6 +15,7 @@ export default async function EngineerPage() {
     <>
       <DashboardNav
         role={user.role}
+        isProducer={user.is_producer}
         displayName={user.profile?.display_name}
         email={user.email}
         profileSlug={user.profile?.public_profile_slug}

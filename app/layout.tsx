@@ -5,6 +5,8 @@ import { Analytics } from '@vercel/analytics/next';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import JsonLd from '@/components/seo/JsonLd';
+import { AudioPlayerProvider } from '@/components/audio/AudioPlayerContext';
+import AudioPlayerBar from '@/components/audio/AudioPlayerBar';
 import { SEO, SITE_URL, GEO, BRAND } from '@/lib/constants';
 import './globals.css';
 
@@ -94,9 +96,12 @@ export default function RootLayout({
         <JsonLd />
       </head>
       <body className={ibmPlexMono.className}>
-        <Header />
-        <main className="min-h-screen pt-16 sm:pt-20">{children}</main>
-        <Footer />
+        <AudioPlayerProvider>
+          <Header />
+          <main className="min-h-screen pt-16 sm:pt-20 pb-20">{children}</main>
+          <Footer />
+          <AudioPlayerBar />
+        </AudioPlayerProvider>
         <Analytics />
       </body>
     </html>

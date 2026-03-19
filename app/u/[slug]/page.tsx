@@ -86,11 +86,24 @@ export default async function PublicProfilePage({ params }: Props) {
     .eq('is_public', true)
     .order('display_order', { ascending: true });
 
+  // Fetch producer beats if user is a producer
+  let producerBeats: { id: string; title: string; genre: string | null; bpm: number | null; musical_key: string | null; preview_url: string | null; mp3_lease_price: number | null; trackout_lease_price: number | null; exclusive_price: number | null; has_exclusive: boolean; lease_count: number }[] = [];
+  if (profile.is_producer) {
+    const { data: beats } = await supabase
+      .from('beats')
+      .select('id, title, genre, bpm, musical_key, preview_url, mp3_lease_price, trackout_lease_price, exclusive_price, has_exclusive, lease_count')
+      .eq('producer_id', profile.id)
+      .eq('status', 'active')
+      .order('created_at', { ascending: false });
+    producerBeats = beats || [];
+  }
+
   const hasShowcase = showcaseItems && showcaseItems.length > 0;
   const hasProjects = projects && projects.length > 0;
+  const hasBeats = producerBeats.length > 0;
   const socialLinks = (profile.social_links || {}) as Record<string, string>;
   const hasSocialLinks = Object.values(socialLinks).some(Boolean);
-  const isEmpty = !hasShowcase && !hasProjects && !profile.bio;
+  const isEmpty = !hasShowcase && !hasProjects && !hasBeats && !profile.bio;
 
   return (
     <>
@@ -309,6 +322,46 @@ export default async function PublicProfilePage({ params }: Props) {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Producer Beats */}
+      {hasBeats && (
+        <section className="bg-white text-black py-16 sm:py-24">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h2 className="text-heading-xl mb-8">BEATS</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {producerBeats.map((beat) => (
+                <Link
+                  key={beat.id}
+                  href={`/beats/${beat.id}`}
+                  className="border-2 border-black/10 p-5 hover:border-accent transition-colors no-underline"
+                >
+                  <p className="font-mono text-sm font-bold">{beat.title}</p>
+                  <p className="font-mono text-xs text-black/50 mt-1">
+                    {beat.genre}{beat.bpm ? ` · ${beat.bpm} BPM` : ''}{beat.musical_key ? ` · ${beat.musical_key}` : ''}
+                  </p>
+                  <div className="flex gap-3 mt-2">
+                    {beat.mp3_lease_price && (
+                      <span className="font-mono text-[10px] text-black/40">
+                        MP3 ${(beat.mp3_lease_price / 100).toFixed(2)}
+                      </span>
+                    )}
+                    {beat.trackout_lease_price && (
+                      <span className="font-mono text-[10px] text-black/40">
+                        Trackout ${(beat.trackout_lease_price / 100).toFixed(2)}
+                      </span>
+                    )}
+                    {beat.exclusive_price && beat.has_exclusive && (
+                      <span className="font-mono text-[10px] text-accent font-bold">
+                        Exclusive ${(beat.exclusive_price / 100).toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+                </Link>
+              ))}
             </div>
           </div>
         </section>

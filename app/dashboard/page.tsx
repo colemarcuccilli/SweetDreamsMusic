@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { Calendar, Music, FileAudio, Download } from 'lucide-react';
+import { Calendar, Music, FileAudio, Download, Heart, PenLine } from 'lucide-react';
 import { getSessionUser } from '@/lib/auth';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { formatCents } from '@/lib/utils';
@@ -33,6 +33,22 @@ export default async function DashboardPage() {
     .order('created_at', { ascending: false })
     .limit(10);
 
+  // Fetch saved beats
+  const { data: savedBeats } = await supabase
+    .from('user_saved_beats')
+    .select('beat_id, beats(id, title, producer, genre, bpm, musical_key, preview_url)')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(6);
+
+  // Fetch user lyrics
+  const { data: userLyrics } = await supabase
+    .from('user_lyrics')
+    .select('beat_id, updated_at, beats(id, title, producer)')
+    .eq('user_id', user.id)
+    .order('updated_at', { ascending: false })
+    .limit(6);
+
   // Generate signed download URLs using service client (bypasses storage RLS)
   const serviceClient = createServiceClient();
   const filesWithUrls = await Promise.all(
@@ -51,6 +67,7 @@ export default async function DashboardPage() {
     <>
       <DashboardNav
         role={user.role}
+        isProducer={user.is_producer}
         displayName={user.profile?.display_name}
         email={user.email}
         profileSlug={user.profile?.public_profile_slug}
@@ -186,6 +203,67 @@ export default async function DashboardPage() {
             </div>
 
           </div>
+
+          {/* Saved Beats */}
+          {savedBeats && savedBeats.length > 0 && (
+            <div className="mt-12">
+              <h2 className="text-heading-md mb-6 flex items-center gap-3">
+                <Heart className="w-6 h-6 text-accent" />
+                SAVED BEATS
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {savedBeats.map((saved) => {
+                  const beat = Array.isArray(saved.beats) ? saved.beats[0] : saved.beats;
+                  if (!beat) return null;
+                  return (
+                    <Link
+                      key={saved.beat_id}
+                      href={`/beats/${beat.id}`}
+                      className="border-2 border-black/10 p-4 hover:border-accent transition-colors no-underline"
+                    >
+                      <p className="font-mono text-sm font-bold truncate">{beat.title}</p>
+                      <p className="font-mono text-xs text-black/50 mt-1">
+                        {beat.producer}
+                        {beat.bpm && ` · ${beat.bpm} BPM`}
+                        {beat.genre && ` · ${beat.genre}`}
+                      </p>
+                    </Link>
+                  );
+                })}
+              </div>
+              <Link href="/beats" className="font-mono text-xs text-accent hover:underline no-underline mt-3 inline-block">
+                Browse more beats &rarr;
+              </Link>
+            </div>
+          )}
+
+          {/* My Lyrics */}
+          {userLyrics && userLyrics.length > 0 && (
+            <div className="mt-12">
+              <h2 className="text-heading-md mb-6 flex items-center gap-3">
+                <PenLine className="w-6 h-6 text-accent" />
+                MY LYRICS
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {userLyrics.map((lyric) => {
+                  const beat = Array.isArray(lyric.beats) ? lyric.beats[0] : lyric.beats;
+                  if (!beat) return null;
+                  return (
+                    <Link
+                      key={lyric.beat_id}
+                      href={`/beats/${beat.id}/write`}
+                      className="border-2 border-black/10 p-4 hover:border-accent transition-colors no-underline"
+                    >
+                      <p className="font-mono text-sm font-bold truncate">{beat.title}</p>
+                      <p className="font-mono text-xs text-black/50 mt-1">
+                        {beat.producer} · Last edited {new Date(lyric.updated_at).toLocaleDateString()}
+                      </p>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </section>
     </>

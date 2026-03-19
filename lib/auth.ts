@@ -6,6 +6,8 @@ export type SessionUser = {
   id: string;
   email: string;
   role: UserRole;
+  is_producer: boolean;
+  producer_name: string | null;
   profile: {
     id: string;
     display_name: string;
@@ -23,7 +25,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   // Fetch profile including role
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('id, display_name, public_profile_slug, profile_picture_url, role')
+    .select('id, display_name, public_profile_slug, profile_picture_url, role, is_producer, producer_name')
     .eq('user_id', user.id)
     .single();
 
@@ -37,6 +39,8 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     id: user.id,
     email: user.email,
     role,
+    is_producer: profile?.is_producer ?? false,
+    producer_name: profile?.producer_name ?? null,
     profile,
   };
 }

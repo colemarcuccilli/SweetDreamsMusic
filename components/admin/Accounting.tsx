@@ -84,6 +84,7 @@ function getDateRange(preset: DatePreset, selectedMonth?: string): { from: strin
 const LICENSE_LABELS: Record<string, string> = {
   mp3_lease: 'MP3 Lease',
   wav_lease: 'WAV Lease',
+  trackout_lease: 'Trackout Lease',
   unlimited: 'Unlimited',
   exclusive: 'Exclusive',
 };

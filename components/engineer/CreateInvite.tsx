@@ -1,9 +1,17 @@
 'use client';
 
-import { useState } from 'react';
-import { Copy, Check, Link as LinkIcon } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { Copy, Check, Link as LinkIcon, Search, UserPlus, X } from 'lucide-react';
 import { ROOMS, ROOM_LABELS, ROOM_RATES, ROOM_RATES_SINGLE, PRICING, type Room } from '@/lib/constants';
 import { formatCents, formatTime, calculateSessionTotal, parseTimeSlot } from '@/lib/utils';
+
+interface Client {
+  id: string;
+  user_id: string;
+  display_name: string;
+  email: string | null;
+  profile_picture_url: string | null;
+}
 
 export default function CreateInvite() {
   const [date, setDate] = useState('');
@@ -18,6 +26,65 @@ export default function CreateInvite() {
   const [creating, setCreating] = useState(false);
   const [inviteUrl, setInviteUrl] = useState('');
   const [copied, setCopied] = useState(false);
+
+  // Client picker state
+  const [clients, setClients] = useState<Client[]>([]);
+  const [clientSearch, setClientSearch] = useState('');
+  const [showClientPicker, setShowClientPicker] = useState(false);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [manualEntry, setManualEntry] = useState(false);
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  // Fetch client library
+  useEffect(() => {
+    fetch('/api/admin/library/clients')
+      .then((r) => r.json())
+      .then((d) => setClients(d.clients || []))
+      .catch(() => {});
+  }, []);
+
+  // Close picker on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setShowClientPicker(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const filteredClients = useMemo(() => {
+    if (!clientSearch.trim()) return clients.slice(0, 10);
+    const q = clientSearch.toLowerCase();
+    return clients.filter((c) =>
+      c.display_name?.toLowerCase().includes(q) ||
+      c.email?.toLowerCase().includes(q)
+    ).slice(0, 10);
+  }, [clients, clientSearch]);
+
+  function selectClient(client: Client) {
+    setSelectedClient(client);
+    setClientName(client.display_name || '');
+    setClientEmail(client.email || '');
+    setShowClientPicker(false);
+    setClientSearch('');
+    setManualEntry(false);
+  }
+
+  function clearClient() {
+    setSelectedClient(null);
+    setClientName('');
+    setClientEmail('');
+    setManualEntry(false);
+  }
+
+  function switchToManual() {
+    setSelectedClient(null);
+    setManualEntry(true);
+    setShowClientPicker(false);
+    setClientSearch('');
+  }
 
   const startHour = parseTimeSlot(startTime);
   const pricing = calculateSessionTotal(room, duration, startHour, false);
@@ -104,7 +171,7 @@ export default function CreateInvite() {
             </button>
           </div>
           <button
-            onClick={() => { setInviteUrl(''); setDate(''); setClientEmail(''); setClientName(''); setNotes(''); setCustomPrice(''); }}
+            onClick={() => { setInviteUrl(''); setDate(''); clearClient(); setNotes(''); setCustomPrice(''); }}
             className="font-mono text-xs text-accent hover:underline mt-4"
           >
             Create another invite
@@ -143,19 +210,109 @@ export default function CreateInvite() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block font-mono text-xs font-semibold uppercase tracking-wider mb-1">Client Name</label>
-          <input type="text" value={clientName} onChange={(e) => setClientName(e.target.value)}
-            className="w-full border-2 border-black/20 px-4 py-3 font-mono text-sm focus:border-accent focus:outline-none"
-            placeholder="Client name" />
-        </div>
-        <div>
-          <label className="block font-mono text-xs font-semibold uppercase tracking-wider mb-1">Client Email</label>
-          <input type="email" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)}
-            className="w-full border-2 border-black/20 px-4 py-3 font-mono text-sm focus:border-accent focus:outline-none"
-            placeholder="client@email.com" />
-        </div>
+      {/* Client Selection */}
+      <div>
+        <label className="block font-mono text-xs font-semibold uppercase tracking-wider mb-2">Client</label>
+
+        {/* Selected client display */}
+        {selectedClient && !manualEntry ? (
+          <div className="border-2 border-accent p-3 flex items-center gap-3">
+            <div className="w-8 h-8 bg-black/5 flex items-center justify-center flex-shrink-0 overflow-hidden">
+              {selectedClient.profile_picture_url ? (
+                <img src={selectedClient.profile_picture_url} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <span className="font-heading text-sm text-black/20">{selectedClient.display_name?.[0]}</span>
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-mono text-sm font-semibold truncate">{selectedClient.display_name}</p>
+              {selectedClient.email && (
+                <p className="font-mono text-[10px] text-black/40 truncate">{selectedClient.email}</p>
+              )}
+            </div>
+            <button onClick={clearClient} className="text-black/30 hover:text-red-500 p-1 flex-shrink-0">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        ) : manualEntry ? (
+          /* Manual email/name entry */
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-mono text-[10px] text-black/40 uppercase tracking-wider mb-1">Name</label>
+                <input type="text" value={clientName} onChange={(e) => setClientName(e.target.value)}
+                  className="w-full border-2 border-black/20 px-3 py-2.5 font-mono text-sm focus:border-accent focus:outline-none"
+                  placeholder="Client name" />
+              </div>
+              <div>
+                <label className="block font-mono text-[10px] text-black/40 uppercase tracking-wider mb-1">Email</label>
+                <input type="email" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)}
+                  className="w-full border-2 border-black/20 px-3 py-2.5 font-mono text-sm focus:border-accent focus:outline-none"
+                  placeholder="client@email.com" />
+              </div>
+            </div>
+            <button onClick={clearClient} className="font-mono text-[10px] text-accent hover:underline">
+              &larr; Search from library instead
+            </button>
+          </div>
+        ) : (
+          /* Client search picker */
+          <div className="relative" ref={pickerRef}>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-black/30" />
+              <input
+                type="text"
+                value={clientSearch}
+                onChange={(e) => { setClientSearch(e.target.value); setShowClientPicker(true); }}
+                onFocus={() => setShowClientPicker(true)}
+                className="w-full border-2 border-black/20 pl-9 pr-4 py-3 font-mono text-sm focus:border-accent focus:outline-none"
+                placeholder="Search clients by name or email..."
+              />
+            </div>
+
+            {/* Dropdown */}
+            {showClientPicker && (
+              <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border-2 border-black/20 max-h-64 overflow-y-auto shadow-lg">
+                {filteredClients.length > 0 ? (
+                  filteredClients.map((client) => (
+                    <button
+                      key={client.id}
+                      onClick={() => selectClient(client)}
+                      className="w-full p-3 flex items-center gap-3 hover:bg-accent/10 transition-colors text-left border-b border-black/5 last:border-0"
+                    >
+                      <div className="w-7 h-7 bg-black/5 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                        {client.profile_picture_url ? (
+                          <img src={client.profile_picture_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <span className="font-heading text-xs text-black/20">{client.display_name?.[0]}</span>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-mono text-xs font-semibold truncate">{client.display_name}</p>
+                        {client.email && (
+                          <p className="font-mono text-[10px] text-black/40 truncate">{client.email}</p>
+                        )}
+                      </div>
+                    </button>
+                  ))
+                ) : (
+                  <div className="p-3 text-center">
+                    <p className="font-mono text-xs text-black/40">No clients found</p>
+                  </div>
+                )}
+
+                {/* Manual entry option */}
+                <button
+                  onClick={switchToManual}
+                  className="w-full p-3 flex items-center gap-2 hover:bg-accent/10 transition-colors text-left border-t border-black/10"
+                >
+                  <UserPlus className="w-4 h-4 text-accent" />
+                  <span className="font-mono text-xs text-accent font-bold">Enter email manually</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div>

@@ -121,25 +121,28 @@ export const BEAT_LICENSES = {
     name: 'MP3 Lease',
     description: 'MP3 download. Non-exclusive license for streaming and personal projects.',
     deliveryFormat: 'MP3 (320kbps)',
+    defaultPrice: 2999, // $29.99
   },
-  wav_lease: {
-    name: 'WAV Lease',
-    description: 'WAV + MP3 download. Non-exclusive license for distribution and streaming.',
-    deliveryFormat: 'WAV + MP3',
-  },
-  unlimited: {
-    name: 'Unlimited License',
-    description: 'WAV + Stems. Unlimited streams, sales, and performances. Non-exclusive.',
-    deliveryFormat: 'WAV + Stems + MP3',
+  trackout_lease: {
+    name: 'Trackout Lease',
+    description: 'Stems/trackouts + MP3. Non-exclusive license for mixing, distribution, and streaming.',
+    deliveryFormat: 'Stems + MP3',
+    defaultPrice: 7499, // $74.99
   },
   exclusive: {
     name: 'Exclusive Rights',
     description: 'Full ownership. Beat removed from store. All rights transferred.',
-    deliveryFormat: 'WAV + Stems + MP3 + Trackout',
+    deliveryFormat: 'WAV + Stems + Trackout + MP3',
+    defaultPrice: 40000, // $400.00
   },
 } as const;
 
 export type BeatLicenseType = keyof typeof BEAT_LICENSES;
+
+// Beat store commission rates
+export const PRODUCER_COMMISSION = 0.60; // 60% to producer
+export const PLATFORM_COMMISSION = 0.40; // 40% to platform
+export const EXCLUSIVE_PRICE_FLOOR = 40000; // $400 minimum exclusive price in cents
 
 export const NAV_LINKS = [
   { href: '/', label: 'Home' },
