@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceClient } from '@/lib/supabase/server';
 import { sendSessionReminder, sendSessionReminderToStaff } from '@/lib/email';
-import { ENGINEERS, SUPER_ADMINS } from '@/lib/constants';
+import { ENGINEERS, SUPER_ADMINS, TIMEZONE } from '@/lib/constants';
 
 export const maxDuration = 30;
 
 // Vercel Cron — runs every 15 minutes
 // Finds confirmed sessions starting in the next 45-75 minutes and sends reminders
+//
+// IMPORTANT: Session times are stored as LOCAL Fort Wayne time in UTC columns.
+// e.g., a 10:30 PM session is stored as T22:30:00 regardless of timezone.
+// We must compare against Fort Wayne local time, NOT UTC.
 export async function GET(request: NextRequest) {
   // Verify cron secret to prevent unauthorized access
   const authHeader = request.headers.get('authorization');
@@ -15,19 +19,29 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = createServiceClient();
-  const now = new Date();
 
-  // Window: 45 to 75 minutes from now (to account for 15-min cron interval)
-  const windowStart = new Date(now.getTime() + 45 * 60 * 1000);
-  const windowEnd = new Date(now.getTime() + 75 * 60 * 1000);
+  // Get current Fort Wayne time as a comparable value
+  // Since DB stores local FW time in UTC columns, we need to compare
+  // using FW local time, not UTC
+  const nowFW = new Date(new Date().toLocaleString('en-US', { timeZone: TIMEZONE }));
+
+  // Window: 45 to 75 minutes from now in Fort Wayne time
+  const windowStart = new Date(nowFW.getTime() + 45 * 60 * 1000);
+  const windowEnd = new Date(nowFW.getTime() + 75 * 60 * 1000);
+
+  // Format as ISO strings for DB comparison (these will match the stored local times)
+  const windowStartISO = windowStart.toISOString();
+  const windowEndISO = windowEnd.toISOString();
+
+  console.log(`[CRON] Session reminder check — FW time: ${nowFW.toISOString()}, window: ${windowStartISO} to ${windowEndISO}`);
 
   const { data: bookings, error } = await supabase
     .from('bookings')
     .select('id, customer_name, customer_email, artist_name, start_time, duration, room, engineer_name, created_by_email, status')
     .eq('status', 'confirmed')
     .eq('reminder_sent', false)
-    .gte('start_time', windowStart.toISOString())
-    .lte('start_time', windowEnd.toISOString());
+    .gte('start_time', windowStartISO)
+    .lte('start_time', windowEndISO);
 
   if (error) {
     console.error('[CRON] Failed to fetch bookings:', error);
@@ -50,10 +64,15 @@ export async function GET(request: NextRequest) {
         hour: 'numeric', minute: '2-digit', timeZone: 'UTC',
       });
 
-      // 1. Send reminder to client (if they have an email)
-      if (booking.customer_email) {
+      // Resolve actual client name — invites may store 'Pending Invite' as fallback
+      const displayName = (booking.customer_name && !booking.customer_name.includes('Pending') && !booking.customer_name.includes('Invited:'))
+        ? booking.customer_name
+        : booking.artist_name || booking.customer_email || 'Client';
+
+      // 1. Send reminder to client (if they have an email and it's not empty)
+      if (booking.customer_email && booking.customer_email.trim()) {
         await sendSessionReminder(booking.customer_email, {
-          customerName: booking.customer_name || 'Client',
+          customerName: displayName,
           artistName: booking.artist_name || null,
           date: dateStr,
           startTime: timeStr,
@@ -79,8 +98,8 @@ export async function GET(request: NextRequest) {
       }
 
       await sendSessionReminderToStaff([...staffEmails], {
-        customerName: booking.customer_name || 'Client',
-        customerEmail: booking.customer_email || 'N/A',
+        customerName: displayName,
+        customerEmail: booking.customer_email?.trim() || 'Not provided',
         artistName: booking.artist_name || null,
         date: dateStr,
         startTime: timeStr,

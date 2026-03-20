@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { formatCents } from '@/lib/utils';
+import { ENGINEERS } from '@/lib/constants';
 
 interface Booking {
   id: string;
@@ -405,6 +406,8 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
   const [cashAmount, setCashAmount] = useState('');
   const [cashNote, setCashNote] = useState('');
   const [notifying, setNotifying] = useState(false);
+  const [showChangeEngineer, setShowChangeEngineer] = useState(false);
+  const [selectedEngineer, setSelectedEngineer] = useState(booking.engineer_name || '');
 
   const date = new Date(booking.start_time);
   const remainder = booking.remainder_amount || 0;
@@ -773,6 +776,12 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
             Reschedule
           </button>
           <button
+            onClick={() => { setShowChangeEngineer(!showChangeEngineer); setSelectedEngineer(booking.engineer_name || ''); }}
+            className="font-mono text-xs font-bold uppercase tracking-wider border-2 border-black/20 text-black/60 px-4 py-2 hover:bg-black/5 transition-colors"
+          >
+            Change Engineer
+          </button>
+          <button
             onClick={() => resendEmail('confirmation')}
             disabled={notifying}
             className="font-mono text-xs font-bold uppercase tracking-wider border-2 border-black/20 text-black/60 px-4 py-2 hover:bg-black/5 disabled:opacity-50 transition-colors"
@@ -900,6 +909,42 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
               className="font-mono text-xs font-bold uppercase tracking-wider bg-[#F4C430] text-black px-4 py-2 hover:bg-[#F4C430]/80 disabled:opacity-50 transition-colors"
             >
               {actionLoading === 'reschedule' ? 'Saving...' : 'Confirm'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Change Engineer form */}
+      {showChangeEngineer && (
+        <div className="mt-3 p-3 bg-black/5 border border-black/10 space-y-2">
+          <p className="font-mono text-xs font-semibold uppercase tracking-wider">Change Engineer</p>
+          <p className="font-mono text-[10px] text-black/50">
+            Current: <span className="font-bold">{booking.engineer_name || 'Unassigned'}</span>
+          </p>
+          <div className="flex flex-wrap gap-2 items-end">
+            <div>
+              <label className="font-mono text-[10px] text-black/40 block">Engineer</label>
+              <select
+                value={selectedEngineer}
+                onChange={(e) => setSelectedEngineer(e.target.value)}
+                className="font-mono text-xs border border-black/20 px-2 py-1.5 min-w-[160px]"
+              >
+                <option value="">Unassigned</option>
+                {ENGINEERS.map((eng) => (
+                  <option key={eng.name} value={eng.name}>{eng.displayName} ({eng.name})</option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={() => {
+                if (!confirm(`Change engineer to ${selectedEngineer || 'Unassigned'}?`)) return;
+                updateBooking({ engineerName: selectedEngineer }, 'change engineer');
+                setShowChangeEngineer(false);
+              }}
+              disabled={actionLoading === 'change engineer'}
+              className="font-mono text-xs font-bold uppercase tracking-wider bg-[#F4C430] text-black px-4 py-2 hover:bg-[#F4C430]/80 disabled:opacity-50 transition-colors"
+            >
+              {actionLoading === 'change engineer' ? 'Saving...' : 'Confirm'}
             </button>
           </div>
         </div>

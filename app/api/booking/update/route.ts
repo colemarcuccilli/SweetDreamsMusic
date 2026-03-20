@@ -10,10 +10,10 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-  const { bookingId, status, startTime, duration, notes } = await request.json();
+  const { bookingId, status, startTime, duration, notes, engineerName, customerName, customerEmail, artistName, room } = await request.json();
   if (!bookingId) return NextResponse.json({ error: 'bookingId required' }, { status: 400 });
 
-  // Build update object — engineers can update status, time, duration, and notes
+  // Build update object — engineers can update status, time, duration, notes, engineer, and client info
   const updates: Record<string, unknown> = {};
 
   if (status && ['completed', 'cancelled'].includes(status)) {
@@ -30,6 +30,28 @@ export async function POST(request: NextRequest) {
 
   if (notes !== undefined) {
     updates.admin_notes = notes;
+  }
+
+  // Allow changing engineer assignment
+  if (engineerName !== undefined) {
+    updates.engineer_name = engineerName || null;
+    if (engineerName) {
+      updates.claimed_at = new Date().toISOString();
+    }
+  }
+
+  // Allow updating client info
+  if (customerName !== undefined) {
+    updates.customer_name = customerName;
+  }
+  if (customerEmail !== undefined) {
+    updates.customer_email = customerEmail;
+  }
+  if (artistName !== undefined) {
+    updates.artist_name = artistName;
+  }
+  if (room !== undefined) {
+    updates.room = room;
   }
 
   if (Object.keys(updates).length === 0) {
