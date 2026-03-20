@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { calculateLevel } from '@/lib/xp-system';
 import { ACHIEVEMENTS } from '@/lib/achievements';
+import { ENGINEERS } from '@/lib/constants';
 
 export async function POST() {
   const supabase = await createClient();
@@ -10,9 +11,18 @@ export async function POST() {
 
   const service = createServiceClient();
 
+  // Determine if this user is an engineer (by email match)
+  const isEngineer = ENGINEERS.some(
+    (e) => e.email.toLowerCase() === user.email?.toLowerCase()
+  );
+  const engineerConfig = ENGINEERS.find(
+    (e) => e.email.toLowerCase() === user.email?.toLowerCase()
+  );
+
   // Query all relevant data in parallel
   const [
     sessionsResult,
+    engineerSessionsResult,
     projectsResult,
     completedProjectsResult,
     goalsResult,
@@ -23,12 +33,23 @@ export async function POST() {
     sessionNotesResult,
     existingAchievementsResult,
   ] = await Promise.all([
-    // Completed bookings (sessions) where customer_email = user.email
+    // Completed bookings as CLIENT (customer_email = user.email)
+    // IMPORTANT: Exclude sessions where this user is the ENGINEER, not the client
+    // We filter out bookings where engineer_name matches this user's engineer name
     service
       .from('bookings')
-      .select('id', { count: 'exact', head: true })
+      .select('id, engineer_name', { count: 'exact', head: false })
       .eq('customer_email', user.email!)
       .eq('status', 'completed'),
+
+    // Completed bookings as ENGINEER (for engineer-specific achievements)
+    isEngineer && engineerConfig
+      ? service
+          .from('bookings')
+          .select('id', { count: 'exact', head: true })
+          .eq('engineer_name', engineerConfig.name)
+          .eq('status', 'completed')
+      : Promise.resolve({ count: 0, data: null, error: null }),
 
     // Total artist_projects
     supabase
@@ -73,7 +94,7 @@ export async function POST() {
     // Profile data
     supabase
       .from('profiles')
-      .select('total_xp, artist_level, daily_streak, display_name, genre, career_stage, profile_picture_url')
+      .select('total_xp, artist_level, daily_streak, display_name, genre, career_stage, profile_picture_url, role')
       .eq('id', user.id)
       .single(),
 
@@ -90,7 +111,16 @@ export async function POST() {
       .eq('user_id', user.id),
   ]);
 
-  const completedSessions = sessionsResult.count || 0;
+  // Filter out sessions where the user was the engineer, not the client
+  // This prevents engineers from getting "First Session" when they engineer a session
+  const clientSessions = isEngineer && engineerConfig
+    ? (sessionsResult.data || []).filter(
+        (b: { engineer_name: string | null }) => b.engineer_name !== engineerConfig.name
+      )
+    : (sessionsResult.data || []);
+  const completedSessions = clientSessions.length;
+  const engineerSessions = (engineerSessionsResult as { count: number | null }).count || 0;
+
   const totalProjects = projectsResult.count || 0;
   const completedProjects = completedProjectsResult.count || 0;
   const totalGoals = goalsResult.count || 0;
@@ -130,12 +160,23 @@ export async function POST() {
   const artistLevel = profile?.artist_level || 0;
   const dailyStreak = profile?.daily_streak || 0;
 
-  // Achievement conditions map
+  // Achievement conditions map — artist achievements (session-based ones only count CLIENT sessions)
   const conditions: Record<string, boolean> = {
+    // Artist session achievements (excludes sessions where user was the engineer)
     first_session: completedSessions >= 1,
     five_sessions: completedSessions >= 5,
     ten_sessions: completedSessions >= 10,
     twenty_five_sessions: completedSessions >= 25,
+
+    // Engineer-specific achievements (only for engineers)
+    ...(isEngineer ? {
+      eng_first_session: engineerSessions >= 1,
+      eng_five_sessions: engineerSessions >= 5,
+      eng_ten_sessions: engineerSessions >= 10,
+      eng_twenty_five_sessions: engineerSessions >= 25,
+      eng_fifty_sessions: engineerSessions >= 50,
+    } : {}),
+
     first_project: totalProjects >= 1,
     first_release: completedProjects >= 1,
     five_releases: completedProjects >= 5,

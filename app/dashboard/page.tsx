@@ -7,6 +7,7 @@ import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { formatCents } from '@/lib/utils';
 import DashboardNav from '@/components/layout/DashboardNav';
 import RescheduleButton from '@/components/dashboard/RescheduleButton';
+import XPWidget from '@/components/dashboard/XPWidget';
 
 export const metadata: Metadata = {
   title: 'Dashboard',
@@ -74,24 +75,29 @@ export default async function DashboardPage() {
         profileSlug={user.profile?.public_profile_slug}
       />
 
-      {/* Quick Actions */}
+      {/* Quick Actions + XP Widget */}
       <section className="bg-white text-black py-8 border-b-2 border-black/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-wrap gap-3">
-            <Link
-              href="/book"
-              className="bg-accent text-black font-mono text-sm font-bold uppercase tracking-wider px-5 py-3 hover:bg-accent/90 transition-colors no-underline inline-flex items-center gap-2"
-            >
-              <Calendar className="w-4 h-4" />
-              Book a Session
-            </Link>
-            <Link
-              href="/beats"
-              className="border-2 border-black text-black font-mono text-sm font-bold uppercase tracking-wider px-5 py-3 hover:bg-black hover:text-white transition-colors no-underline inline-flex items-center gap-2"
-            >
-              <Music className="w-4 h-4" />
-              Browse Beats
-            </Link>
+          <div className="flex flex-col sm:flex-row gap-4 sm:items-start">
+            <div className="flex flex-wrap gap-3">
+              <Link
+                href="/book"
+                className="bg-accent text-black font-mono text-sm font-bold uppercase tracking-wider px-5 py-3 hover:bg-accent/90 transition-colors no-underline inline-flex items-center gap-2"
+              >
+                <Calendar className="w-4 h-4" />
+                Book a Session
+              </Link>
+              <Link
+                href="/beats"
+                className="border-2 border-black text-black font-mono text-sm font-bold uppercase tracking-wider px-5 py-3 hover:bg-black hover:text-white transition-colors no-underline inline-flex items-center gap-2"
+              >
+                <Music className="w-4 h-4" />
+                Browse Beats
+              </Link>
+            </div>
+            <div className="sm:ml-auto sm:w-80">
+              <XPWidget />
+            </div>
           </div>
         </div>
       </section>

@@ -32,12 +32,17 @@ export default function AuthForm() {
         if (error) throw error;
         setMessage('Check your email for a password reset link.');
       } else if (mode === 'signup') {
+        const params = new URLSearchParams(window.location.search);
+        const redirect = params.get('redirect');
+        const callbackUrl = redirect
+          ? `${window.location.origin}/api/auth/callback?next=${encodeURIComponent(redirect)}`
+          : `${window.location.origin}/api/auth/callback`;
         const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             data: { display_name: displayName },
-            emailRedirectTo: `${window.location.origin}/api/auth/callback`,
+            emailRedirectTo: callbackUrl,
           },
         });
         if (error) throw error;

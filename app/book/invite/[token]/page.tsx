@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { useParams, useSearchParams } from 'next/navigation';
-import { Calendar, Clock, Music, DollarSign, CheckCircle, Loader2 } from 'lucide-react';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
+import { Calendar, Clock, Music, DollarSign, CheckCircle, Loader2, LogIn } from 'lucide-react';
 import { ROOM_LABELS, type Room } from '@/lib/constants';
 import { formatCents } from '@/lib/utils';
+import { createBrowserClient } from '@supabase/ssr';
 
 type BookingData = {
   id: string;
@@ -24,6 +25,7 @@ type BookingData = {
 export default function InvitePage() {
   const params = useParams();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const token = params.token as string;
   const bookingId = searchParams.get('booking');
   const justPaid = searchParams.get('paid') === '1';
@@ -34,6 +36,18 @@ export default function InvitePage() {
   const [paying, setPaying] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [waitingForConfirmation, setWaitingForConfirmation] = useState(false);
+  const [authedUser, setAuthedUser] = useState<{ email: string } | null | undefined>(undefined); // undefined = loading
+
+  // Check auth state
+  useEffect(() => {
+    const supabase = createBrowserClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setAuthedUser(user ? { email: user.email || '' } : null);
+    });
+  }, []);
 
   const loadBooking = useCallback(async () => {
     if (!bookingId || !token) {
@@ -275,17 +289,50 @@ export default function InvitePage() {
             </div>
           </div>
 
-          <button
-            onClick={handlePayDeposit}
-            disabled={paying}
-            className="w-full bg-accent text-black font-mono text-base font-bold uppercase tracking-wider py-4 hover:bg-accent/90 transition-colors disabled:opacity-50"
-          >
-            {paying ? 'REDIRECTING TO PAYMENT...' : `PAY ${formatCents(booking.deposit_amount)} DEPOSIT`}
-          </button>
+          {/* Require login/signup before paying */}
+          {authedUser === undefined ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="w-5 h-5 animate-spin text-black/30" />
+            </div>
+          ) : authedUser === null ? (
+            <div className="space-y-3">
+              <div className="border-2 border-accent/30 bg-accent/5 p-4 text-center">
+                <LogIn className="w-6 h-6 mx-auto mb-2 text-accent" />
+                <p className="font-mono text-sm font-bold mb-1">Account Required</p>
+                <p className="font-mono text-[11px] text-black/60 mb-3">
+                  Sign in or create a free account to confirm your session.
+                </p>
+                <div className="flex gap-2 justify-center">
+                  <a
+                    href={`/login?redirect=${encodeURIComponent(`/book/invite/${token}?booking=${bookingId}`)}`}
+                    className="bg-black text-white font-mono text-xs font-bold uppercase tracking-wider px-5 py-2.5 hover:bg-black/80 transition-colors inline-block no-underline"
+                  >
+                    Sign In
+                  </a>
+                  <a
+                    href={`/signup?redirect=${encodeURIComponent(`/book/invite/${token}?booking=${bookingId}`)}`}
+                    className="bg-accent text-black font-mono text-xs font-bold uppercase tracking-wider px-5 py-2.5 hover:bg-accent/90 transition-colors inline-block no-underline"
+                  >
+                    Create Account
+                  </a>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={handlePayDeposit}
+                disabled={paying}
+                className="w-full bg-accent text-black font-mono text-base font-bold uppercase tracking-wider py-4 hover:bg-accent/90 transition-colors disabled:opacity-50"
+              >
+                {paying ? 'REDIRECTING TO PAYMENT...' : `PAY ${formatCents(booking.deposit_amount)} DEPOSIT`}
+              </button>
 
-          <p className="font-mono text-[10px] text-black/40 text-center mt-3">
-            Secure payment powered by Stripe. Your card will be saved for the remainder charge.
-          </p>
+              <p className="font-mono text-[10px] text-black/40 text-center mt-3">
+                Signed in as {authedUser.email}. Secure payment powered by Stripe.
+              </p>
+            </>
+          )}
         </div>
       </div>
     </div>

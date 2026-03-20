@@ -9,7 +9,7 @@ export interface AchievementDef {
   icon: string;
   xp: number;       // XP awarded on unlock
   tier: 'bronze' | 'silver' | 'gold' | 'diamond';
-  category: 'sessions' | 'projects' | 'metrics' | 'goals' | 'engagement' | 'milestones';
+  category: 'sessions' | 'projects' | 'metrics' | 'goals' | 'engagement' | 'milestones' | 'engineer';
 }
 
 export const ACHIEVEMENTS: Record<string, AchievementDef> = {
@@ -89,6 +89,33 @@ export const ACHIEVEMENTS: Record<string, AchievementDef> = {
     title: 'Unstoppable',
     description: 'Completed 5 goals',
     icon: 'Trophy', xp: 300, tier: 'gold', category: 'goals',
+  },
+
+  // === Engineer ===
+  eng_first_session: {
+    title: 'First Mix',
+    description: 'Engineered your first session',
+    icon: 'Wrench', xp: 100, tier: 'bronze', category: 'engineer',
+  },
+  eng_five_sessions: {
+    title: 'Board Operator',
+    description: 'Engineered 5 sessions',
+    icon: 'Sliders', xp: 150, tier: 'silver', category: 'engineer',
+  },
+  eng_ten_sessions: {
+    title: 'Mix Master',
+    description: 'Engineered 10 sessions',
+    icon: 'Headphones', xp: 200, tier: 'gold', category: 'engineer',
+  },
+  eng_twenty_five_sessions: {
+    title: 'Studio Veteran',
+    description: 'Engineered 25 sessions',
+    icon: 'Award', xp: 500, tier: 'diamond', category: 'engineer',
+  },
+  eng_fifty_sessions: {
+    title: 'Legendary Engineer',
+    description: 'Engineered 50 sessions',
+    icon: 'Crown', xp: 1000, tier: 'diamond', category: 'engineer',
   },
 
   // === Engagement ===

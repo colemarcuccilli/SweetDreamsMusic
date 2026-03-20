@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
-import { createServiceClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { PRICING, SITE_URL, ROOM_LABELS, type Room } from '@/lib/constants';
 
 // Client pays deposit for an invited booking via Stripe Checkout
@@ -10,6 +10,13 @@ export async function POST(request: NextRequest) {
 
     if (!bookingId || !token) {
       return NextResponse.json({ error: 'Missing bookingId or token' }, { status: 400 });
+    }
+
+    // Require authenticated user — sessions need a real account
+    const authClient = await createClient();
+    const { data: { user: authUser } } = await authClient.auth.getUser();
+    if (!authUser) {
+      return NextResponse.json({ error: 'You must be signed in to pay for a session.' }, { status: 401 });
     }
 
     const supabase = createServiceClient();
@@ -44,8 +51,27 @@ export async function POST(request: NextRequest) {
     const dateStr = startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
     const timeStr = startDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
 
-    // Find or create Stripe customer
-    const email = booking.customer_email;
+    // Link booking to the authenticated user's real account info
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('display_name, email')
+      .eq('id', authUser.id)
+      .single();
+
+    const realName = profile?.display_name || authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'Client';
+    const realEmail = authUser.email || booking.customer_email;
+
+    // Update booking with real account info (replaces "Pending Invite" / "Invited: ...")
+    await supabase
+      .from('bookings')
+      .update({
+        customer_name: realName,
+        customer_email: realEmail,
+      })
+      .eq('id', bookingId);
+
+    // Find or create Stripe customer — use the authenticated user's email
+    const email = realEmail;
     let customerId: string | undefined;
     if (email) {
       const customers = await stripe.customers.list({ email, limit: 1 });
