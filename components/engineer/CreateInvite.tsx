@@ -20,6 +20,7 @@ export default function CreateInvite() {
   const [room, setRoom] = useState<Room>('studio_a');
   const [clientEmail, setClientEmail] = useState('');
   const [clientName, setClientName] = useState('');
+  const [artistName, setArtistName] = useState('');
   const [notes, setNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'online' | 'cash'>('online');
   const [customPrice, setCustomPrice] = useState('');
@@ -117,6 +118,7 @@ export default function CreateInvite() {
           depositAmount: paymentMethod === 'cash' ? 0 : finalDeposit,
           clientEmail,
           clientName,
+          artistName,
           notes,
           paymentMethod,
           customPrice: useCustomPrice ? customPriceCents : null,
@@ -173,7 +175,7 @@ export default function CreateInvite() {
             </button>
           </div>
           <button
-            onClick={() => { setInviteUrl(''); setDate(''); clearClient(); setNotes(''); setCustomPrice(''); }}
+            onClick={() => { setInviteUrl(''); setDate(''); clearClient(); setArtistName(''); setNotes(''); setCustomPrice(''); }}
             className="font-mono text-xs text-accent hover:underline mt-4"
           >
             Create another invite
@@ -210,6 +212,14 @@ export default function CreateInvite() {
             Cash at Studio
           </button>
         </div>
+      </div>
+
+      {/* Artist Name */}
+      <div>
+        <label className="block font-mono text-xs font-semibold uppercase tracking-wider mb-1">Artist / Stage Name</label>
+        <input type="text" value={artistName} onChange={(e) => setArtistName(e.target.value)}
+          className="w-full border-2 border-black/20 px-4 py-3 font-mono text-sm focus:border-accent focus:outline-none"
+          placeholder="Stage name (optional)" />
       </div>
 
       {/* Client Selection */}

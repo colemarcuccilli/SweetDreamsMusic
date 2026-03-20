@@ -6,6 +6,7 @@ import { getSessionUser } from '@/lib/auth';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { formatCents } from '@/lib/utils';
 import DashboardNav from '@/components/layout/DashboardNav';
+import RescheduleButton from '@/components/dashboard/RescheduleButton';
 
 export const metadata: Metadata = {
   title: 'Dashboard',
@@ -20,7 +21,7 @@ export default async function DashboardPage() {
   // Fetch user's bookings
   const { data: bookings } = await supabase
     .from('bookings')
-    .select('id, start_time, end_time, duration, total_amount, status, created_at')
+    .select('id, start_time, end_time, duration, total_amount, status, created_at, engineer_name, requested_engineer, reschedule_requested, room')
     .eq('customer_email', user.email)
     .order('created_at', { ascending: false })
     .limit(10);
@@ -127,20 +128,41 @@ export default async function DashboardPage() {
                             {new Date(booking.start_time).toLocaleDateString('en-US', {
                               weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC'
                             })}
+                            {' · '}
+                            {new Date(booking.start_time).toLocaleTimeString('en-US', {
+                              hour: 'numeric', minute: '2-digit', timeZone: 'UTC'
+                            })}
                           </p>
                           <p className="font-mono text-xs text-black/50 mt-1">
                             {booking.duration} hour{booking.duration > 1 ? 's' : ''} — {formatCents(booking.total_amount)}
+                            {booking.room && ` · ${booking.room === 'studio_a' ? 'Studio A' : 'Studio B'}`}
                           </p>
+                          {booking.engineer_name && (
+                            <p className="font-mono text-xs text-black/60 mt-1">
+                              Engineer: <span className="font-semibold">{booking.engineer_name}</span>
+                            </p>
+                          )}
+                          {booking.reschedule_requested && (
+                            <p className="font-mono text-[10px] text-amber-600 font-semibold mt-1">
+                              Reschedule requested — we&apos;ll be in touch
+                            </p>
+                          )}
                         </div>
-                        <span className={`font-mono text-xs font-bold uppercase tracking-wider px-2 py-1 ${
-                          booking.status === 'completed' ? 'bg-green-100 text-green-700' :
-                          booking.status === 'confirmed' ? 'bg-accent/20 text-accent' :
-                          booking.status === 'cancelled' ? 'bg-red-100 text-red-600' :
-                          'bg-black/5 text-black/50'
-                        }`}>
-                          {booking.status}
-                        </span>
+                        <div className="text-right">
+                          <span className={`font-mono text-xs font-bold uppercase tracking-wider px-2 py-1 ${
+                            booking.status === 'completed' ? 'bg-green-100 text-green-700' :
+                            booking.status === 'confirmed' ? 'bg-accent/20 text-accent' :
+                            booking.status === 'cancelled' ? 'bg-red-100 text-red-600' :
+                            'bg-black/5 text-black/50'
+                          }`}>
+                            {booking.status}
+                          </span>
+                        </div>
                       </div>
+                      {/* Reschedule request for confirmed sessions with an engineer assigned that isn't the requested one */}
+                      {booking.status === 'confirmed' && booking.engineer_name && !booking.reschedule_requested && (
+                        <RescheduleButton bookingId={booking.id} />
+                      )}
                     </div>
                   ))}
                 </div>

@@ -99,7 +99,6 @@ async function createPaymentLink(
   try {
     const session = await stripe.checkout.sessions.create({
       customer: booking.stripe_customer_id,
-      payment_method_types: ['card'],
       mode: 'payment',
       line_items: [
         {

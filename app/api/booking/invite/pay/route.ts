@@ -29,9 +29,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid invite token' }, { status: 403 });
     }
 
-    // Must be pending
-    if (booking.status !== 'pending') {
-      return NextResponse.json({ error: 'This booking has already been paid or cancelled' }, { status: 400 });
+    // If already confirmed, tell the client — don't show an error
+    if (booking.status === 'confirmed') {
+      return NextResponse.json({ alreadyConfirmed: true, message: 'Session already confirmed' });
+    }
+
+    // Must be pending (invites use 'pending_deposit' status)
+    if (booking.status !== 'pending' && booking.status !== 'pending_deposit') {
+      return NextResponse.json({ error: 'This booking has been cancelled. Please contact the studio for a new invite.' }, { status: 400 });
     }
 
     const roomLabel = ROOM_LABELS[booking.room as Room] || booking.room;
@@ -56,9 +61,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Create Stripe Checkout Session for the deposit
+    // NOTE: setup_future_usage is card-only. Cash App Pay, Venmo, etc. do NOT support
+    // saving for future charges. Setting it at the payment_intent_data level breaks
+    // non-card payment methods (checkout never completes, webhook never fires).
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
-      payment_method_types: ['card'],
       mode: 'payment',
       line_items: [
         {
@@ -73,8 +80,10 @@ export async function POST(request: NextRequest) {
           quantity: 1,
         },
       ],
-      payment_intent_data: {
-        setup_future_usage: 'off_session',
+      payment_method_options: {
+        card: {
+          setup_future_usage: 'off_session',
+        },
       },
       success_url: `${SITE_URL}/book/invite/${token}?booking=${bookingId}&paid=1`,
       cancel_url: `${SITE_URL}/book/invite/${token}?booking=${bookingId}`,

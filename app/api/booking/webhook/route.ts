@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
 import { createServiceClient } from '@/lib/supabase/server';
-import { sendBookingConfirmation, sendAdminBookingAlert, sendEngineerNewBookingAlert } from '@/lib/email';
+import { sendBookingConfirmation, sendAdminBookingAlert, sendEngineerNewBookingAlert, sendEngineerPriorityAlert } from '@/lib/email';
 import { ENGINEERS, type Room } from '@/lib/constants';
+import { calculatePriorityExpiry, getPriorityHoursLabel, calculateRescheduleDeadline } from '@/lib/priority';
 import type Stripe from 'stripe';
 
 export async function POST(request: NextRequest) {
@@ -33,6 +34,10 @@ export async function POST(request: NextRequest) {
         const startDateTime = `${meta.session_date}T${meta.start_time}:00`;
         const endDateTime = `${meta.session_date}T${meta.end_time}:00`;
 
+        // Calculate dynamic priority window: until 12 hours before session (min 2 hours from now)
+        const priorityExpiry = meta.engineer ? calculatePriorityExpiry(startDateTime) : null;
+        const rescheduleDeadline = calculateRescheduleDeadline(startDateTime);
+
         const { data: newBooking } = await supabase.from('bookings').insert({
           customer_name: meta.customer_name,
           customer_email: meta.customer_email,
@@ -54,6 +59,8 @@ export async function POST(request: NextRequest) {
           stripe_checkout_session_id: session.id,
           stripe_payment_intent_id: session.payment_intent as string,
           status: 'confirmed',
+          priority_expires_at: priorityExpiry,
+          reschedule_deadline: rescheduleDeadline,
           admin_notes: meta.notes || null,
         }).select().single();
 
@@ -87,25 +94,40 @@ export async function POST(request: NextRequest) {
           total: parseInt(meta.total_amount),
         });
 
-        // Notify engineers who can work in this studio
+        // Notify engineers — priority to requested engineer, or all engineers for this studio
         const room = meta.room as string;
-        const engineerEmails = ENGINEERS
-          .filter((e) => e.studios.includes(room as Room))
-          .map((e) => e.email);
-
-        console.log('[WEBHOOK] Sending engineer alerts to:', engineerEmails, 'for room:', room);
-
-        if (engineerEmails.length > 0) {
-          await sendEngineerNewBookingAlert(engineerEmails, {
-            id: newBooking?.id || '',
-            customerName: meta.customer_name,
-            date: dateStr,
-            startTime: timeStr,
-            duration,
-            room: meta.room,
-          });
+        if (meta.engineer && priorityExpiry) {
+          // Requested engineer gets priority — only notify them
+          const requestedEng = ENGINEERS.find(
+            (e) => e.name === meta.engineer || e.displayName === meta.engineer
+          );
+          if (requestedEng) {
+            const priorityLabel = getPriorityHoursLabel(priorityExpiry);
+            await sendEngineerPriorityAlert(requestedEng.email, {
+              id: newBooking?.id || '',
+              customerName: meta.customer_name,
+              date: dateStr,
+              startTime: timeStr,
+              duration,
+              room: meta.room,
+              priorityHours: priorityLabel,
+            });
+          }
         } else {
-          console.warn('[WEBHOOK] No engineers found for room:', room);
+          // No preference — notify all engineers for this studio
+          const engineerEmails = ENGINEERS
+            .filter((e) => e.studios.includes(room as Room))
+            .map((e) => e.email);
+          if (engineerEmails.length > 0) {
+            await sendEngineerNewBookingAlert(engineerEmails, {
+              id: newBooking?.id || '',
+              customerName: meta.customer_name,
+              date: dateStr,
+              startTime: timeStr,
+              duration,
+              room: meta.room,
+            });
+          }
         }
       } else if (meta.type === 'invite_deposit') {
         // Invite booking — deposit paid, confirm the existing pending booking
@@ -155,21 +177,51 @@ export async function POST(request: NextRequest) {
             total: existingBooking.total_amount,
           });
 
-          // Notify engineers
-          const room = existingBooking.room as string;
-          const engineerEmails = ENGINEERS
-            .filter((e) => e.studios.includes(room as Room))
-            .map((e) => e.email);
+          // Set dynamic priority window and reschedule deadline
+          const invitePriorityExpiry = existingBooking.requested_engineer
+            ? calculatePriorityExpiry(existingBooking.start_time)
+            : null;
+          const inviteRescheduleDeadline = calculateRescheduleDeadline(existingBooking.start_time);
 
-          if (engineerEmails.length > 0) {
-            await sendEngineerNewBookingAlert(engineerEmails, {
-              id: bookingId,
-              customerName: existingBooking.customer_name,
-              date: dateStr,
-              startTime: timeStr,
-              duration: existingBooking.duration,
-              room: existingBooking.room || '',
-            });
+          await supabase.from('bookings').update({
+            priority_expires_at: invitePriorityExpiry,
+            reschedule_deadline: inviteRescheduleDeadline,
+          }).eq('id', bookingId);
+
+          // Notify engineers — priority to requested engineer, or all engineers for this studio
+          const room = existingBooking.room as string;
+          if (existingBooking.requested_engineer && invitePriorityExpiry) {
+            // Requested engineer gets priority — only notify them
+            const requestedEng = ENGINEERS.find(
+              (e) => e.name === existingBooking.requested_engineer || e.displayName === existingBooking.requested_engineer
+            );
+            if (requestedEng) {
+              const priorityLabel = getPriorityHoursLabel(invitePriorityExpiry);
+              await sendEngineerPriorityAlert(requestedEng.email, {
+                id: bookingId,
+                customerName: existingBooking.customer_name,
+                date: dateStr,
+                startTime: timeStr,
+                duration: existingBooking.duration,
+                room: existingBooking.room || '',
+                priorityHours: priorityLabel,
+              });
+            }
+          } else {
+            // No preference — notify all engineers for this studio
+            const engineerEmails = ENGINEERS
+              .filter((e) => e.studios.includes(room as Room))
+              .map((e) => e.email);
+            if (engineerEmails.length > 0) {
+              await sendEngineerNewBookingAlert(engineerEmails, {
+                id: bookingId,
+                customerName: existingBooking.customer_name,
+                date: dateStr,
+                startTime: timeStr,
+                duration: existingBooking.duration,
+                room: existingBooking.room || '',
+              });
+            }
           }
         }
       } else if (meta.type === 'booking_remainder') {
@@ -209,6 +261,205 @@ export async function POST(request: NextRequest) {
             exclusive_sold_at: new Date().toISOString(),
           }).eq('id', meta.beat_id);
         }
+      }
+      break;
+    }
+
+    // Cash App Pay, bank transfers, and other async payment methods fire this event
+    // instead of (or in addition to) checkout.session.completed. We handle it identically.
+    case 'checkout.session.async_payment_succeeded': {
+      const asyncSession = event.data.object as Stripe.Checkout.Session;
+      const asyncMeta = asyncSession.metadata || {};
+
+      // Only process if we haven't already (check if booking exists)
+      if (asyncMeta.type === 'booking_deposit') {
+        const { data: existing } = await supabase
+          .from('bookings')
+          .select('id')
+          .eq('stripe_checkout_session_id', asyncSession.id)
+          .single();
+
+        if (!existing) {
+          // Same logic as checkout.session.completed for booking_deposit
+          const startDateTime = `${asyncMeta.session_date}T${asyncMeta.start_time}:00`;
+          const endDateTime = `${asyncMeta.session_date}T${asyncMeta.end_time}:00`;
+          const priorityExpiry = asyncMeta.engineer ? calculatePriorityExpiry(startDateTime) : null;
+          const rescheduleDeadline = calculateRescheduleDeadline(startDateTime);
+
+          const { data: newBooking } = await supabase.from('bookings').insert({
+            customer_name: asyncMeta.customer_name,
+            customer_email: asyncMeta.customer_email,
+            customer_phone: asyncMeta.customer_phone || null,
+            start_time: startDateTime,
+            end_time: endDateTime,
+            duration: parseInt(asyncMeta.duration_hours),
+            room: asyncMeta.room,
+            engineer_name: null,
+            requested_engineer: asyncMeta.engineer || null,
+            total_amount: parseInt(asyncMeta.total_amount),
+            deposit_amount: parseInt(asyncMeta.deposit_amount),
+            remainder_amount: parseInt(asyncMeta.remainder_amount),
+            actual_deposit_paid: asyncSession.amount_total,
+            night_fees_amount: parseInt(asyncMeta.night_fees || '0'),
+            same_day_fee: asyncMeta.same_day === 'true',
+            same_day_fee_amount: parseInt(asyncMeta.same_day_fee || '0'),
+            stripe_customer_id: asyncSession.customer as string,
+            stripe_checkout_session_id: asyncSession.id,
+            stripe_payment_intent_id: asyncSession.payment_intent as string,
+            status: 'confirmed',
+            priority_expires_at: priorityExpiry,
+            reschedule_deadline: rescheduleDeadline,
+            admin_notes: asyncMeta.notes || null,
+          }).select().single();
+
+          // Send all emails
+          const startDate = new Date(startDateTime);
+          const dateStr = startDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
+          const timeStr = startDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
+          const duration = parseInt(asyncMeta.duration_hours);
+
+          await sendBookingConfirmation(asyncMeta.customer_email, {
+            customerName: asyncMeta.customer_name, date: dateStr, startTime: timeStr,
+            duration, room: asyncMeta.room, total: parseInt(asyncMeta.total_amount),
+            deposit: asyncSession.amount_total || parseInt(asyncMeta.deposit_amount),
+          });
+
+          await sendAdminBookingAlert({
+            id: newBooking?.id || '', customerName: asyncMeta.customer_name,
+            customerEmail: asyncMeta.customer_email, date: dateStr, startTime: timeStr,
+            duration, room: asyncMeta.room, total: parseInt(asyncMeta.total_amount),
+          });
+
+          const room = asyncMeta.room as string;
+          if (asyncMeta.engineer && priorityExpiry) {
+            const requestedEng = ENGINEERS.find(
+              (e) => e.name === asyncMeta.engineer || e.displayName === asyncMeta.engineer
+            );
+            if (requestedEng) {
+              const priorityLabel = getPriorityHoursLabel(priorityExpiry);
+              await sendEngineerPriorityAlert(requestedEng.email, {
+                id: newBooking?.id || '', customerName: asyncMeta.customer_name,
+                date: dateStr, startTime: timeStr, duration, room: asyncMeta.room,
+                priorityHours: priorityLabel,
+              });
+            }
+          } else {
+            const engineerEmails = ENGINEERS
+              .filter((e) => e.studios.includes(room as Room))
+              .map((e) => e.email);
+            if (engineerEmails.length > 0) {
+              await sendEngineerNewBookingAlert(engineerEmails, {
+                id: newBooking?.id || '', customerName: asyncMeta.customer_name,
+                date: dateStr, startTime: timeStr, duration, room: asyncMeta.room,
+              });
+            }
+          }
+        }
+      } else if (asyncMeta.type === 'invite_deposit') {
+        // Check if already confirmed
+        const bookingId = asyncMeta.booking_id;
+        const { data: existingBooking } = await supabase
+          .from('bookings')
+          .select('*')
+          .eq('id', bookingId)
+          .single();
+
+        if (existingBooking && existingBooking.status !== 'confirmed') {
+          await supabase.from('bookings').update({
+            status: 'confirmed',
+            actual_deposit_paid: asyncSession.amount_total,
+            stripe_customer_id: asyncSession.customer as string,
+            stripe_checkout_session_id: asyncSession.id,
+            stripe_payment_intent_id: asyncSession.payment_intent as string,
+            updated_at: new Date().toISOString(),
+          }).eq('id', bookingId);
+
+          const startDate = new Date(existingBooking.start_time);
+          const dateStr = startDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
+          const timeStr = startDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
+
+          if (existingBooking.customer_email) {
+            await sendBookingConfirmation(existingBooking.customer_email, {
+              customerName: existingBooking.customer_name, date: dateStr, startTime: timeStr,
+              duration: existingBooking.duration, room: existingBooking.room || '',
+              total: existingBooking.total_amount,
+              deposit: asyncSession.amount_total || existingBooking.deposit_amount,
+            });
+          }
+
+          await sendAdminBookingAlert({
+            id: bookingId, customerName: existingBooking.customer_name,
+            customerEmail: existingBooking.customer_email || '', date: dateStr, startTime: timeStr,
+            duration: existingBooking.duration, room: existingBooking.room || '',
+            total: existingBooking.total_amount,
+          });
+
+          // Engineer notifications
+          const invitePriorityExpiry = existingBooking.requested_engineer
+            ? calculatePriorityExpiry(existingBooking.start_time) : null;
+          const inviteRescheduleDeadline = calculateRescheduleDeadline(existingBooking.start_time);
+
+          await supabase.from('bookings').update({
+            priority_expires_at: invitePriorityExpiry,
+            reschedule_deadline: inviteRescheduleDeadline,
+          }).eq('id', bookingId);
+
+          const room = existingBooking.room as string;
+          if (existingBooking.requested_engineer && invitePriorityExpiry) {
+            const requestedEng = ENGINEERS.find(
+              (e) => e.name === existingBooking.requested_engineer || e.displayName === existingBooking.requested_engineer
+            );
+            if (requestedEng) {
+              const priorityLabel = getPriorityHoursLabel(invitePriorityExpiry);
+              await sendEngineerPriorityAlert(requestedEng.email, {
+                id: bookingId, customerName: existingBooking.customer_name,
+                date: dateStr, startTime: timeStr, duration: existingBooking.duration,
+                room: existingBooking.room || '', priorityHours: priorityLabel,
+              });
+            }
+          } else {
+            const engineerEmails = ENGINEERS
+              .filter((e) => e.studios.includes(room as Room))
+              .map((e) => e.email);
+            if (engineerEmails.length > 0) {
+              await sendEngineerNewBookingAlert(engineerEmails, {
+                id: bookingId, customerName: existingBooking.customer_name,
+                date: dateStr, startTime: timeStr, duration: existingBooking.duration,
+                room: existingBooking.room || '',
+              });
+            }
+          }
+        }
+      } else if (asyncMeta.type === 'booking_remainder') {
+        const bookingId = asyncMeta.booking_id;
+        const chargeAmount = parseInt(asyncMeta.charge_amount || '0') || (asyncSession.amount_total || 0);
+        const { data: remainderBooking } = await supabase
+          .from('bookings')
+          .select('remainder_amount')
+          .eq('id', bookingId)
+          .single();
+
+        if (remainderBooking) {
+          await supabase.from('bookings').update({
+            remainder_amount: Math.max(0, remainderBooking.remainder_amount - chargeAmount),
+            updated_at: new Date().toISOString(),
+          }).eq('id', bookingId);
+        }
+      }
+      break;
+    }
+
+    // Handle failed async payments (Cash App declined, etc.)
+    case 'checkout.session.async_payment_failed': {
+      const failedSession = event.data.object as Stripe.Checkout.Session;
+      const failedMeta = failedSession.metadata || {};
+      console.error('Async payment failed:', failedSession.id, failedMeta);
+      // If this was an invite, mark it back to pending
+      if (failedMeta.type === 'invite_deposit' && failedMeta.booking_id) {
+        await supabase.from('bookings').update({
+          status: 'pending_deposit',
+          updated_at: new Date().toISOString(),
+        }).eq('id', failedMeta.booking_id);
       }
       break;
     }

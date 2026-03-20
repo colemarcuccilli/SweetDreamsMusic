@@ -9,7 +9,7 @@ export async function GET() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('display_name, bio, profile_picture_url, cover_photo_url, social_links, public_profile_slug')
+    .select('display_name, bio, profile_picture_url, cover_photo_url, social_links, public_profile_slug, career_stage, genre')
     .eq('user_id', user.id)
     .single();
 
@@ -23,7 +23,7 @@ export async function PUT(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   const body = await request.json();
-  const { display_name, bio, social_links } = body;
+  const { display_name, bio, social_links, career_stage, genre } = body;
 
   if (!display_name?.trim()) {
     return NextResponse.json({ error: 'Display name is required' }, { status: 400 });
@@ -35,6 +35,8 @@ export async function PUT(request: NextRequest) {
       display_name: display_name.trim(),
       bio: bio?.trim() || null,
       social_links: social_links || {},
+      career_stage: career_stage || null,
+      genre: genre?.trim() || null,
       updated_at: new Date().toISOString(),
     })
     .eq('user_id', user.id)

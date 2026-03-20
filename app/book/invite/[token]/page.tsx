@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { Calendar, Clock, Music, DollarSign, CheckCircle, Loader2 } from 'lucide-react';
 import { ROOM_LABELS, type Room } from '@/lib/constants';
@@ -10,6 +10,7 @@ type BookingData = {
   id: string;
   customer_name: string;
   customer_email: string;
+  artist_name: string | null;
   start_time: string;
   duration: number;
   room: string;
@@ -18,7 +19,6 @@ type BookingData = {
   remainder_amount: number;
   status: string;
   engineer_name: string | null;
-  admin_notes: string | null;
 };
 
 export default function InvitePage() {
@@ -26,46 +26,77 @@ export default function InvitePage() {
   const searchParams = useSearchParams();
   const token = params.token as string;
   const bookingId = searchParams.get('booking');
+  const justPaid = searchParams.get('paid') === '1';
 
   const [booking, setBooking] = useState<BookingData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [paying, setPaying] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  const [waitingForConfirmation, setWaitingForConfirmation] = useState(false);
 
-  useEffect(() => {
-    async function loadBooking() {
-      if (!bookingId || !token) {
-        setError('Invalid invite link.');
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const res = await fetch(`/api/booking/invite/lookup?booking=${bookingId}&token=${token}`);
-        const data = await res.json();
-
-        if (!res.ok) {
-          setError(data.error || 'Invalid or expired invite.');
-          setLoading(false);
-          return;
-        }
-
-        setBooking(data.booking);
-
-        // If already confirmed (cash booking), show confirmation
-        if (data.booking.status === 'confirmed') {
-          setConfirmed(true);
-        }
-      } catch {
-        setError('Failed to load invite.');
-      } finally {
-        setLoading(false);
-      }
+  const loadBooking = useCallback(async () => {
+    if (!bookingId || !token) {
+      setError('Invalid invite link.');
+      setLoading(false);
+      return null;
     }
 
-    loadBooking();
+    try {
+      const res = await fetch(`/api/booking/invite/lookup?booking=${bookingId}&token=${token}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || 'Invalid or expired invite.');
+        setLoading(false);
+        return null;
+      }
+
+      setBooking(data.booking);
+
+      if (data.booking.status === 'confirmed') {
+        setConfirmed(true);
+        setWaitingForConfirmation(false);
+        return 'confirmed';
+      }
+
+      return data.booking.status;
+    } catch {
+      setError('Failed to load invite.');
+      return null;
+    } finally {
+      setLoading(false);
+    }
   }, [bookingId, token]);
+
+  useEffect(() => {
+    loadBooking();
+  }, [loadBooking]);
+
+  // If client just returned from Stripe payment, poll until booking is confirmed
+  useEffect(() => {
+    if (!justPaid || confirmed) return;
+
+    setWaitingForConfirmation(true);
+    let attempts = 0;
+    const maxAttempts = 20; // 20 attempts × 2s = 40s max
+
+    const interval = setInterval(async () => {
+      attempts++;
+      const status = await loadBooking();
+
+      if (status === 'confirmed' || attempts >= maxAttempts) {
+        clearInterval(interval);
+        if (attempts >= maxAttempts && status !== 'confirmed') {
+          // Webhook may be delayed — show success anyway since Stripe confirmed payment
+          setConfirmed(true);
+          setWaitingForConfirmation(false);
+        }
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [justPaid, confirmed, loadBooking]);
 
   async function handlePayDeposit() {
     if (!booking) return;
@@ -81,6 +112,10 @@ export default function InvitePage() {
       const data = await res.json();
       if (data.url) {
         window.location.href = data.url;
+      } else if (data.alreadyConfirmed) {
+        // Booking was already paid — just show confirmation
+        setConfirmed(true);
+        setPaying(false);
       } else {
         alert(data.error || 'Failed to start payment');
         setPaying(false);
@@ -127,6 +162,23 @@ export default function InvitePage() {
   });
   const roomLabel = ROOM_LABELS[booking.room as Room] || booking.room;
   const isCash = booking.deposit_amount === 0;
+
+  // Show processing state while waiting for Stripe webhook
+  if (waitingForConfirmation) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center px-4">
+        <div className="max-w-lg w-full">
+          <div className="border-2 border-accent p-8 text-center">
+            <Loader2 className="w-10 h-10 animate-spin text-accent mx-auto mb-4" />
+            <h1 className="text-heading-sm mb-2">CONFIRMING YOUR SESSION</h1>
+            <p className="font-mono text-sm text-black/60">
+              Payment received! Confirming your booking...
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (confirmed) {
     return (

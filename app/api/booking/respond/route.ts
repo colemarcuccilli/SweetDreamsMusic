@@ -1,0 +1,201 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@/lib/supabase/server';
+import { createServiceClient } from '@/lib/supabase/server';
+import { verifyEngineerAccess } from '@/lib/admin-auth';
+import {
+  sendEngineerAssigned,
+  sendEngineerClaimConfirmation,
+  sendEngineerPassNotification,
+  sendPriorityExpiredToClient,
+} from '@/lib/email';
+import { ENGINEERS, type Room } from '@/lib/constants';
+
+export async function POST(request: NextRequest) {
+  const supabase = await createClient();
+  const hasAccess = await verifyEngineerAccess(supabase);
+  if (!hasAccess) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+
+  const { bookingId, action } = await request.json();
+  if (!bookingId || !action) {
+    return NextResponse.json({ error: 'bookingId and action required' }, { status: 400 });
+  }
+
+  if (!['accept', 'pass'].includes(action)) {
+    return NextResponse.json({ error: 'action must be "accept" or "pass"' }, { status: 400 });
+  }
+
+  // Get engineer profile
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('display_name')
+    .eq('user_id', user.id)
+    .single();
+
+  const engineerName = profile?.display_name || user.email || 'Engineer';
+  const engineerConfig = ENGINEERS.find(
+    (e) => e.name === engineerName || e.displayName === engineerName
+  );
+
+  // Get the booking
+  const serviceClient = createServiceClient();
+  const { data: booking } = await serviceClient
+    .from('bookings')
+    .select('*')
+    .eq('id', bookingId)
+    .single();
+
+  if (!booking) {
+    return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
+  }
+
+  if (booking.engineer_name) {
+    return NextResponse.json({ error: 'Session already claimed' }, { status: 409 });
+  }
+
+  // Check this engineer is the requested one (for priority window actions)
+  const isRequestedEngineer =
+    engineerName === booking.requested_engineer ||
+    engineerConfig?.name === booking.requested_engineer ||
+    engineerConfig?.displayName === booking.requested_engineer;
+
+  // Format dates for emails
+  const startDate = new Date(booking.start_time);
+  const dateStr = startDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
+  const timeStr = startDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
+
+  // ---- ACCEPT ----
+  if (action === 'accept') {
+    // During priority window, only the requested engineer can accept
+    if (booking.requested_engineer && booking.priority_expires_at) {
+      const isInPriorityWindow = new Date(booking.priority_expires_at) > new Date();
+      if (isInPriorityWindow && !isRequestedEngineer) {
+        return NextResponse.json(
+          { error: `This session was requested for ${booking.requested_engineer}. They have priority until their window expires.` },
+          { status: 403 }
+        );
+      }
+    }
+
+    // Verify studio access
+    if (engineerConfig && booking.room && !engineerConfig.studios.includes(booking.room as Room)) {
+      const studioLabel = booking.room === 'studio_a' ? 'Studio A' : 'Studio B';
+      return NextResponse.json({ error: `You are not assigned to ${studioLabel}` }, { status: 403 });
+    }
+
+    // Claim the session (atomic — only if still unclaimed)
+    const { data: updated, error } = await serviceClient
+      .from('bookings')
+      .update({
+        engineer_name: engineerName,
+        claimed_at: new Date().toISOString(),
+      })
+      .eq('id', bookingId)
+      .is('engineer_name', null)
+      .select()
+      .single();
+
+    if (error || !updated) {
+      return NextResponse.json({ error: 'Session already claimed by another engineer' }, { status: 409 });
+    }
+
+    // Determine if this engineer is NOT who the client requested
+    const isNonRequestedClaim = booking.requested_engineer &&
+      !isRequestedEngineer &&
+      booking.customer_email;
+
+    if (isNonRequestedClaim) {
+      // Import and send the non-requested engineer email
+      const { sendEngineerAssignedNonRequested } = await import('@/lib/email');
+      const rescheduleDeadlineStr = booking.reschedule_deadline
+        ? new Date(booking.reschedule_deadline).toLocaleString('en-US', {
+            weekday: 'short', month: 'short', day: 'numeric',
+            hour: 'numeric', minute: '2-digit', timeZone: 'UTC',
+          })
+        : '8 hours before your session';
+
+      await sendEngineerAssignedNonRequested(booking.customer_email, {
+        customerName: booking.customer_name,
+        requestedEngineer: booking.requested_engineer,
+        assignedEngineer: engineerName,
+        date: dateStr,
+        startTime: timeStr,
+        rescheduleDeadline: rescheduleDeadlineStr,
+      });
+    } else if (booking.customer_email) {
+      // Standard: send "your engineer is confirmed" email
+      await sendEngineerAssigned(booking.customer_email, {
+        customerName: booking.customer_name,
+        engineerName,
+        date: dateStr,
+        startTime: timeStr,
+      });
+    }
+
+    // Send confirmation to the engineer
+    const engineerEmail = engineerConfig?.email || user.email;
+    if (engineerEmail) {
+      await sendEngineerClaimConfirmation(engineerEmail, {
+        engineerName,
+        customerName: booking.customer_name,
+        date: dateStr,
+        startTime: timeStr,
+        duration: booking.duration,
+        room: booking.room || '',
+        total: booking.total_amount,
+        remainder: booking.remainder_amount || 0,
+      });
+    }
+
+    return NextResponse.json({ success: true, action: 'accepted', booking: updated });
+  }
+
+  // ---- PASS ----
+  if (action === 'pass') {
+    if (!isRequestedEngineer) {
+      return NextResponse.json({ error: 'Only the requested engineer can pass' }, { status: 403 });
+    }
+
+    // Mark as passed — immediately opens to all engineers
+    await serviceClient.from('bookings').update({
+      engineer_passed: true,
+      engineer_passed_at: new Date().toISOString(),
+      priority_expires_at: new Date().toISOString(), // Expire priority immediately
+      priority_notified: true, // Prevent the cron from re-processing
+    }).eq('id', bookingId);
+
+    // Notify the client
+    if (booking.customer_email && booking.requested_engineer) {
+      await sendPriorityExpiredToClient(booking.customer_email, {
+        customerName: booking.customer_name,
+        requestedEngineer: booking.requested_engineer,
+        date: dateStr,
+        startTime: timeStr,
+      });
+    }
+
+    // Notify all other engineers for this studio
+    const room = booking.room as string;
+    const otherEngineers = ENGINEERS
+      .filter((e) => e.studios.includes(room as Room))
+      .filter((e) => e.name !== booking.requested_engineer && e.displayName !== booking.requested_engineer)
+      .map((e) => e.email);
+
+    if (otherEngineers.length > 0) {
+      await sendEngineerPassNotification(otherEngineers, {
+        customerName: booking.customer_name,
+        date: dateStr,
+        startTime: timeStr,
+        duration: booking.duration,
+        room: booking.room || '',
+        passedEngineer: booking.requested_engineer || engineerName,
+      });
+    }
+
+    return NextResponse.json({ success: true, action: 'passed' });
+  }
+
+  return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+}

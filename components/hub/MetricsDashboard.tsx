@@ -1,0 +1,632 @@
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import { BarChart3, TrendingUp, TrendingDown, Save, Loader2, Link2, Unlink, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { METRIC_PLATFORMS, METRIC_FIELD_LABELS } from '@/lib/hub-constants';
+import { getPlatformLevel, getPlatformLevelTitle } from '@/lib/xp-system';
+import { SkeletonChart } from './LoadingSkeleton';
+import EmptyState from './EmptyState';
+
+interface Metric {
+  id: string;
+  platform: string;
+  metric_date: string;
+  followers: number | null;
+  streams: number | null;
+  engagement_rate: number | null;
+  monthly_listeners: number | null;
+  subscribers: number | null;
+  saves: number | null;
+  playlist_adds: number | null;
+  popularity_score: number | null;
+  plays: number | null;
+  shazams: number | null;
+  avg_likes: number | null;
+  avg_comments: number | null;
+  reels_views: number | null;
+  posts_count: number | null;
+  total_likes: number | null;
+  avg_views: number | null;
+  videos_count: number | null;
+  total_views: number | null;
+  watch_hours: number | null;
+  reposts: number | null;
+  comments: number | null;
+  impressions: number | null;
+  source: string | null;
+  [key: string]: string | number | null | undefined;
+}
+
+interface PlatformConnection {
+  id: string;
+  platform: string;
+  platform_id: string | null;
+  platform_url: string | null;
+  display_name: string | null;
+  profile_image_url: string | null;
+  auto_fetch_enabled: boolean;
+  last_fetched_at: string | null;
+  fetch_error: string | null;
+}
+
+export default function MetricsDashboard({ onXpEarned }: { onXpEarned?: () => void }) {
+  const [metrics, setMetrics] = useState<Metric[]>([]);
+  const [connections, setConnections] = useState<PlatformConnection[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [activePlatform, setActivePlatform] = useState<string>('all');
+
+  // Log form state
+  const [showLogForm, setShowLogForm] = useState(false);
+  const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]);
+  const [logEntries, setLogEntries] = useState<Record<string, Record<string, string>>>({});
+
+  // Connect form state
+  const [showConnectForm, setShowConnectForm] = useState<string | null>(null);
+  const [connectUrl, setConnectUrl] = useState('');
+  const [connecting, setConnecting] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
+  const [connectSuccess, setConnectSuccess] = useState<string | null>(null);
+
+  const loadData = useCallback(async () => {
+    const [metricsRes, connectionsRes] = await Promise.all([
+      fetch('/api/hub/metrics?days=90'),
+      fetch('/api/hub/connections'),
+    ]);
+    const metricsData = await metricsRes.json();
+    const connectionsData = await connectionsRes.json();
+    setMetrics(metricsData.metrics || []);
+    setConnections(connectionsData.connections || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  async function saveMetrics() {
+    setSaving(true);
+    const entries = Object.entries(logEntries)
+      .filter(([, fields]) => Object.values(fields).some((v) => v.trim()))
+      .map(([platform, fields]) => {
+        const entry: Record<string, unknown> = { platform, metric_date: logDate };
+        // Map all fields dynamically
+        for (const [key, val] of Object.entries(fields)) {
+          if (val.trim()) {
+            entry[key] = key === 'engagement_rate' || key === 'watch_hours'
+              ? parseFloat(val)
+              : parseInt(val);
+          }
+        }
+        return entry;
+      });
+
+    if (entries.length > 0) {
+      await fetch('/api/hub/metrics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entries }),
+      });
+
+      try {
+        await fetch('/api/hub/xp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'log_metrics' }),
+        });
+        onXpEarned?.();
+      } catch { /* XP award non-critical */ }
+
+      await loadData();
+    }
+    setSaving(false);
+    setShowLogForm(false);
+    setLogEntries({});
+  }
+
+  function updateLogEntry(platform: string, field: string, value: string) {
+    setLogEntries((prev) => ({
+      ...prev,
+      [platform]: { ...(prev[platform] || {}), [field]: value },
+    }));
+  }
+
+  async function connectPlatform(platform: string) {
+    setConnecting(true);
+    setConnectError(null);
+    setConnectSuccess(null);
+
+    const res = await fetch('/api/hub/connections', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ platform, url: connectUrl }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      setConnectError(data.error);
+    } else {
+      setConnectSuccess(data.verified ? `Connected as ${data.connection.display_name}` : 'Profile URL saved');
+      setConnectUrl('');
+      setShowConnectForm(null);
+      await loadData();
+    }
+    setConnecting(false);
+  }
+
+  async function disconnectPlatform(platform: string) {
+    await fetch(`/api/hub/connections?platform=${platform}`, { method: 'DELETE' });
+    await loadData();
+  }
+
+  // Get latest per platform for snapshot
+  const latestByPlatform: Record<string, Metric> = {};
+  const previousByPlatform: Record<string, Metric> = {};
+  for (const m of [...metrics].reverse()) {
+    if (!latestByPlatform[m.platform]) latestByPlatform[m.platform] = m;
+    else if (!previousByPlatform[m.platform]) previousByPlatform[m.platform] = m;
+  }
+
+  const connectionsByPlatform: Record<string, PlatformConnection> = {};
+  for (const c of connections) connectionsByPlatform[c.platform] = c;
+
+  // Filter metrics for chart
+  const chartMetrics = activePlatform === 'all' ? metrics : metrics.filter((m) => m.platform === activePlatform);
+
+  // Sparkline renderer
+  function renderSparkline(data: Metric[], field: string, color: string) {
+    const values = data.map((d) => (d[field] as number) || 0).filter((v) => v > 0);
+    if (values.length < 2) return null;
+    const max = Math.max(...values);
+    const min = Math.min(...values);
+    const range = max - min || 1;
+    const w = 200;
+    const h = 80;
+    const padY = 4;
+    const usableH = h - padY * 2;
+    const points = values.map((v, i) => `${(i / (values.length - 1)) * w},${padY + usableH - ((v - min) / range) * usableH}`).join(' ');
+    const gridLines = [0.25, 0.5, 0.75].map((pct) => padY + usableH * (1 - pct));
+
+    return (
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-20 transition-all duration-300">
+        {gridLines.map((y, i) => (
+          <line key={i} x1="0" y1={y} x2={w} y2={y} stroke="rgba(0,0,0,0.05)" strokeWidth="0.5" strokeDasharray="4 3" />
+        ))}
+        <line x1="0" y1={h - padY} x2={w} y2={h - padY} stroke="rgba(0,0,0,0.08)" strokeWidth="0.5" />
+        <polygon points={`0,${h - padY} ${points} ${w},${h - padY}`} fill={color} fillOpacity="0.08" />
+        <polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        {values.length > 0 && (
+          <circle cx={w} cy={padY + usableH - ((values[values.length - 1] - min) / range) * usableH} r="3" fill={color} />
+        )}
+      </svg>
+    );
+  }
+
+  function getDelta(current: number | null, previous: number | null): { text: string; value: number; positive: boolean } | null {
+    if (!current || !previous || previous === 0) return null;
+    const diff = current - previous;
+    const pct = Math.round((diff / previous) * 100);
+    return { text: `${pct > 0 ? '+' : ''}${pct}%`, value: diff, positive: pct >= 0 };
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-heading-md">METRICS</h2>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <SkeletonChart key={i} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-heading-md">METRICS</h2>
+        <div className="flex gap-2">
+          <button onClick={() => setShowLogForm(!showLogForm)}
+            className="bg-accent text-black font-mono text-xs font-bold uppercase tracking-wider px-4 py-2 hover:bg-accent/90 transition-colors inline-flex items-center gap-1">
+            {showLogForm ? 'Cancel' : 'Log This Week'}
+          </button>
+        </div>
+      </div>
+
+      {/* Success/error banners */}
+      {connectSuccess && (
+        <div className="flex items-center gap-2 bg-green-50 border border-green-200 px-4 py-3 mb-4 transition-all duration-300">
+          <CheckCircle className="w-4 h-4 text-green-600" />
+          <span className="font-mono text-xs text-green-800">{connectSuccess}</span>
+          <button onClick={() => setConnectSuccess(null)} className="ml-auto font-mono text-xs text-green-600 hover:text-green-800">✕</button>
+        </div>
+      )}
+
+      {/* Log form */}
+      {showLogForm && (
+        <div className="border-2 border-accent p-6 mb-8 space-y-4 transition-all duration-300">
+          <div className="flex items-center justify-between">
+            <h3 className="font-mono text-sm font-bold uppercase tracking-wider">Log Metrics</h3>
+            <input type="date" value={logDate} onChange={(e) => setLogDate(e.target.value)}
+              className="border border-black/20 px-2 py-1 font-mono text-xs focus:border-accent focus:outline-none" />
+          </div>
+          <div className="space-y-4">
+            {METRIC_PLATFORMS.map((platform) => (
+              <div key={platform.key} className="border border-black/10 p-3 transition-colors duration-200 hover:border-black/20">
+                <p className="font-mono text-xs font-bold uppercase tracking-wider mb-2" style={{ color: platform.color }}>
+                  {platform.icon} {platform.label}
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                  {platform.fields.map((field) => (
+                    <div key={field}>
+                      <label className="block font-mono text-[10px] text-black/40 uppercase tracking-wider">
+                        {METRIC_FIELD_LABELS[field] || field.replace(/_/g, ' ')}
+                      </label>
+                      <input
+                        type="number"
+                        step={field === 'engagement_rate' || field === 'watch_hours' ? '0.01' : '1'}
+                        value={logEntries[platform.key]?.[field] || ''}
+                        onChange={(e) => updateLogEntry(platform.key, field, e.target.value)}
+                        className="w-full border border-black/10 px-2 py-1.5 font-mono text-xs focus:border-accent focus:outline-none transition-colors"
+                        placeholder="0"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <button onClick={saveMetrics} disabled={saving}
+            className="bg-black text-white font-mono text-sm font-bold uppercase tracking-wider px-6 py-3 hover:bg-black/80 disabled:opacity-50 transition-colors inline-flex items-center gap-2">
+            {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : <><Save className="w-4 h-4" /> Save All</>}
+          </button>
+        </div>
+      )}
+
+      {/* Platform tabs */}
+      <div className="flex gap-0 border-b border-black/10 mb-6 overflow-x-auto">
+        <button onClick={() => setActivePlatform('all')}
+          className={`font-mono text-xs uppercase tracking-wider px-4 py-3 border-b-2 transition-all duration-200 flex-shrink-0 ${
+            activePlatform === 'all' ? 'border-accent text-black font-bold' : 'border-transparent text-black/40 hover:text-black/60'
+          }`}>All</button>
+        {METRIC_PLATFORMS.map((p) => (
+          <button key={p.key} onClick={() => setActivePlatform(p.key)}
+            className={`font-mono text-xs uppercase tracking-wider px-4 py-3 border-b-2 transition-all duration-200 flex-shrink-0 ${
+              activePlatform === p.key ? 'border-accent text-black font-bold' : 'border-transparent text-black/40 hover:text-black/60'
+            }`}>
+            <span className="mr-1">{p.icon}</span>{p.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Connected platforms status bar */}
+      {connections.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-6">
+          {connections.map((conn) => {
+            const plat = METRIC_PLATFORMS.find((p) => p.key === conn.platform);
+            return (
+              <div key={conn.id} className="inline-flex items-center gap-1.5 border border-black/10 px-3 py-1.5 transition-all duration-200 hover:border-black/20">
+                {conn.profile_image_url && (
+                  <img src={conn.profile_image_url} alt="" className="w-4 h-4 rounded-full" />
+                )}
+                <span className="font-mono text-[10px] uppercase tracking-wider" style={{ color: plat?.color }}>
+                  {plat?.label}
+                </span>
+                {conn.display_name && (
+                  <span className="font-mono text-[10px] text-black/50">{conn.display_name}</span>
+                )}
+                {conn.auto_fetch_enabled && (
+                  <RefreshCw className="w-3 h-3 text-green-500" />
+                )}
+                {conn.fetch_error && (
+                  <span title={conn.fetch_error || ''}><AlertCircle className="w-3 h-3 text-red-400" /></span>
+                )}
+                <button onClick={() => disconnectPlatform(conn.platform)}
+                  className="text-black/20 hover:text-red-500 transition-colors ml-1" title="Disconnect">
+                  <Unlink className="w-3 h-3" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Metrics snapshot cards */}
+      {metrics.length === 0 && connections.length === 0 ? (
+        <EmptyState
+          icon={BarChart3}
+          title="No metrics yet"
+          description="Start tracking your growth across platforms. Log your first week to see trends, or connect Spotify/YouTube for auto-tracking."
+          action={{ label: 'Log This Week', onClick: () => setShowLogForm(true) }}
+        />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {METRIC_PLATFORMS.map((platform) => {
+            const latest = latestByPlatform[platform.key];
+            const prev = previousByPlatform[platform.key];
+            const conn = connectionsByPlatform[platform.key];
+            const isAutoFetchable = platform.autoFetchable;
+
+            if (!latest) return (
+              <div key={platform.key} className="border-2 border-black/5 p-4 transition-all duration-300 hover:border-black/10">
+                <p className="font-mono text-[10px] uppercase tracking-wider mb-2" style={{ color: platform.color }}>
+                  {platform.icon} {platform.label}
+                </p>
+                <p className="font-mono text-xs text-black/20 mb-3">No data</p>
+
+                {/* Connect button for auto-fetchable platforms */}
+                {isAutoFetchable && !conn && (
+                  showConnectForm === platform.key ? (
+                    <div className="space-y-2">
+                      <input
+                        type="text"
+                        value={connectUrl}
+                        onChange={(e) => { setConnectUrl(e.target.value); setConnectError(null); }}
+                        placeholder={platform.key === 'spotify' ? 'Paste Spotify artist URL...' : 'Paste YouTube channel URL...'}
+                        className="w-full border border-black/10 px-2 py-1.5 font-mono text-[10px] focus:border-accent focus:outline-none transition-colors"
+                      />
+                      {connectError && (
+                        <p className="font-mono text-[10px] text-red-500">{connectError}</p>
+                      )}
+                      <div className="flex gap-1">
+                        <button onClick={() => connectPlatform(platform.key)} disabled={connecting || !connectUrl.trim()}
+                          className="bg-black text-white font-mono text-[10px] uppercase tracking-wider px-3 py-1.5 hover:bg-black/80 disabled:opacity-30 transition-colors inline-flex items-center gap-1">
+                          {connecting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Link2 className="w-3 h-3" />}
+                          Connect
+                        </button>
+                        <button onClick={() => { setShowConnectForm(null); setConnectUrl(''); setConnectError(null); }}
+                          className="font-mono text-[10px] text-black/40 px-2 py-1.5 hover:text-black transition-colors">
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => { setShowConnectForm(platform.key); setConnectUrl(''); setConnectError(null); }}
+                      className="font-mono text-[10px] uppercase tracking-wider text-accent hover:text-accent/80 transition-colors inline-flex items-center gap-1">
+                      <Link2 className="w-3 h-3" /> Auto-Connect
+                    </button>
+                  )
+                )}
+              </div>
+            );
+
+            const primaryField = platform.primaryField;
+            const mainValue = (latest[primaryField] as number) || latest.followers || 0;
+            const prevMainValue = prev ? ((prev[primaryField] as number) || prev.followers || 0) : 0;
+            const delta = getDelta(mainValue, prevMainValue);
+            const platformMetrics = metrics.filter((m) => m.platform === platform.key);
+
+            // Platform level
+            const platLevel = getPlatformLevel(mainValue);
+            const platLevelTitle = getPlatformLevelTitle(platLevel.level);
+
+            // Secondary fields with values
+            const secondaryFields = platform.fields
+              .filter((f) => f !== primaryField && latest[f] != null && (latest[f] as number) > 0)
+              .slice(0, 3);
+
+            return (
+              <div key={platform.key} className="border-2 border-black/10 p-4 transition-all duration-300 hover:border-black/20 hover:shadow-sm">
+                {/* Platform header */}
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-1.5">
+                    <span>{platform.icon}</span>
+                    <p className="font-mono text-[10px] uppercase tracking-wider" style={{ color: platform.color }}>{platform.label}</p>
+                    {conn?.auto_fetch_enabled && <span title="Auto-syncing"><RefreshCw className="w-2.5 h-2.5 text-green-500" /></span>}
+                  </div>
+                  <span className="font-mono text-[10px] text-black/30 uppercase tracking-wider">Lv {platLevel.level}</span>
+                </div>
+
+                {/* Connect button if auto-fetchable but not connected */}
+                {isAutoFetchable && !conn && (
+                  showConnectForm === platform.key ? (
+                    <div className="space-y-2 mb-3">
+                      <input
+                        type="text"
+                        value={connectUrl}
+                        onChange={(e) => { setConnectUrl(e.target.value); setConnectError(null); }}
+                        placeholder={platform.key === 'spotify' ? 'Spotify artist URL...' : 'YouTube channel URL...'}
+                        className="w-full border border-black/10 px-2 py-1.5 font-mono text-[10px] focus:border-accent focus:outline-none transition-colors"
+                      />
+                      {connectError && <p className="font-mono text-[10px] text-red-500">{connectError}</p>}
+                      <div className="flex gap-1">
+                        <button onClick={() => connectPlatform(platform.key)} disabled={connecting || !connectUrl.trim()}
+                          className="bg-black text-white font-mono text-[10px] uppercase tracking-wider px-2 py-1 hover:bg-black/80 disabled:opacity-30 transition-colors inline-flex items-center gap-1">
+                          {connecting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Link2 className="w-3 h-3" />}
+                          Connect
+                        </button>
+                        <button onClick={() => { setShowConnectForm(null); setConnectUrl(''); setConnectError(null); }}
+                          className="font-mono text-[10px] text-black/40 px-2 py-1 hover:text-black transition-colors">✕</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => { setShowConnectForm(platform.key); setConnectUrl(''); setConnectError(null); }}
+                      className="font-mono text-[10px] text-accent/70 hover:text-accent transition-colors inline-flex items-center gap-1 mb-2">
+                      <Link2 className="w-3 h-3" /> Connect for auto-sync
+                    </button>
+                  )
+                )}
+
+                {/* Main value */}
+                <p className="text-heading-sm">{mainValue.toLocaleString()}</p>
+                <p className="font-mono text-[10px] text-black/30 uppercase tracking-wider">
+                  {METRIC_FIELD_LABELS[primaryField] || primaryField.replace(/_/g, ' ')}
+                </p>
+
+                {/* Week-over-week delta */}
+                {delta && (
+                  <div className={`font-mono text-[10px] inline-flex items-center gap-0.5 mt-0.5 ${delta.positive ? 'text-green-600' : 'text-red-500'}`}>
+                    {delta.positive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                    <span>{delta.text}</span>
+                    <span className="text-black/30 ml-1">({delta.positive ? '+' : ''}{delta.value.toLocaleString()})</span>
+                  </div>
+                )}
+
+                {/* Secondary metrics */}
+                {secondaryFields.length > 0 && (
+                  <div className="mt-2 space-y-0.5">
+                    {secondaryFields.map((field) => {
+                      const val = latest[field] as number;
+                      const prevVal = prev ? (prev[field] as number) : null;
+                      const secDelta = getDelta(val, prevVal);
+                      return (
+                        <div key={field} className="flex items-center justify-between font-mono text-[10px]">
+                          <span className="text-black/40">{METRIC_FIELD_LABELS[field] || field.replace(/_/g, ' ')}</span>
+                          <div className="flex items-center gap-1">
+                            <span className="text-black/70">
+                              {field === 'engagement_rate' ? `${val}%` : val.toLocaleString()}
+                            </span>
+                            {secDelta && (
+                              <span className={secDelta.positive ? 'text-green-500' : 'text-red-400'}>{secDelta.text}</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Platform level progress bar */}
+                <div className="mt-3 mb-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-mono text-[10px] text-black/40 uppercase tracking-wider">{platLevelTitle}</span>
+                    {platLevel.nextThreshold && (
+                      <span className="font-mono text-[10px] text-black/25">{platLevel.progress}%</span>
+                    )}
+                  </div>
+                  <div className="w-full h-1.5 bg-black/5 overflow-hidden">
+                    <div
+                      className="h-full transition-all duration-700 ease-out"
+                      style={{ width: `${platLevel.progress}%`, backgroundColor: platform.color, opacity: 0.7 }}
+                    />
+                  </div>
+                  {platLevel.nextThreshold && (
+                    <p className="font-mono text-[10px] text-black/20 mt-0.5">
+                      {platLevel.nextThreshold.toLocaleString()} for Lv {platLevel.level + 1}
+                    </p>
+                  )}
+                </div>
+
+                {/* Sparkline chart */}
+                <div className="mt-2">
+                  {renderSparkline(platformMetrics, primaryField, platform.color)}
+                </div>
+
+                {/* Last updated + source */}
+                <div className="flex items-center justify-between mt-1">
+                  <p className="font-mono text-[10px] text-black/30">{latest.metric_date}</p>
+                  {latest.source && latest.source !== 'manual' && (
+                    <span className="font-mono text-[10px] text-green-500/60 uppercase">auto</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Expanded chart view when a specific platform is selected */}
+      {activePlatform !== 'all' && chartMetrics.length >= 2 && (() => {
+        const platform = METRIC_PLATFORMS.find((p) => p.key === activePlatform);
+        if (!platform) return null;
+        const latest = latestByPlatform[platform.key];
+        if (!latest) return null;
+
+        // Show expanded charts for all fields that have data
+        const fieldsWithData = platform.fields.filter((f) =>
+          chartMetrics.some((m) => (m[f] as number) > 0)
+        );
+
+        return (
+          <div className="mt-6 border-2 border-black/10 p-6 transition-all duration-300">
+            <h3 className="font-mono text-xs font-bold uppercase tracking-wider mb-4">
+              {platform.icon} {platform.label} — Detailed Charts
+            </h3>
+            <div className="space-y-6">
+              {fieldsWithData.map((field) => (
+                <div key={field}>
+                  <h4 className="font-mono text-[10px] uppercase tracking-wider text-black/40 mb-2">
+                    {METRIC_FIELD_LABELS[field] || field.replace(/_/g, ' ')}
+                  </h4>
+                  <div className="h-40">
+                    {renderExpandedChart(chartMetrics, field, platform.color)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+
+  // Expanded chart with axis labels and grid
+  function renderExpandedChart(data: Metric[], field: string, color: string) {
+    const entries = data.filter((d) => ((d[field] as number) || 0) > 0);
+    if (entries.length < 2) return <p className="font-mono text-xs text-black/30">Not enough data points</p>;
+
+    const values = entries.map((d) => (d[field] as number) || 0);
+    const dates = entries.map((d) => d.metric_date);
+    const max = Math.max(...values);
+    const min = Math.min(...values);
+    const range = max - min || 1;
+    const w = 400;
+    const h = 160;
+    const padL = 50;
+    const padR = 10;
+    const padT = 10;
+    const padB = 24;
+    const chartW = w - padL - padR;
+    const chartH = h - padT - padB;
+
+    const points = values.map((v, i) =>
+      `${padL + (i / (values.length - 1)) * chartW},${padT + chartH - ((v - min) / range) * chartH}`
+    ).join(' ');
+
+    const yTicks = [0, 0.25, 0.5, 0.75, 1].map((pct) => ({
+      y: padT + chartH * (1 - pct),
+      label: formatNumber(min + range * pct),
+    }));
+
+    const xLabels: { x: number; label: string }[] = [];
+    if (dates.length >= 2) {
+      xLabels.push({ x: padL, label: formatDate(dates[0]) });
+      if (dates.length >= 3) {
+        const mid = Math.floor(dates.length / 2);
+        xLabels.push({ x: padL + (mid / (dates.length - 1)) * chartW, label: formatDate(dates[mid]) });
+      }
+      xLabels.push({ x: padL + chartW, label: formatDate(dates[dates.length - 1]) });
+    }
+
+    return (
+      <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-full transition-all duration-300">
+        {yTicks.map((tick, i) => (
+          <g key={i}>
+            <line x1={padL} y1={tick.y} x2={w - padR} y2={tick.y} stroke="rgba(0,0,0,0.06)" strokeWidth="0.5" strokeDasharray="4 3" />
+            <text x={padL - 6} y={tick.y + 3} textAnchor="end" className="font-mono" fontSize="7" fill="rgba(0,0,0,0.3)">{tick.label}</text>
+          </g>
+        ))}
+        {xLabels.map((lbl, i) => (
+          <text key={i} x={lbl.x} y={h - 4} textAnchor={i === 0 ? 'start' : i === xLabels.length - 1 ? 'end' : 'middle'} className="font-mono" fontSize="7" fill="rgba(0,0,0,0.3)">{lbl.label}</text>
+        ))}
+        <polygon points={`${padL},${padT + chartH} ${points} ${padL + chartW},${padT + chartH}`} fill={color} fillOpacity="0.06" />
+        <polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        {values.map((v, i) => (
+          <circle key={i} cx={padL + (i / (values.length - 1)) * chartW} cy={padT + chartH - ((v - min) / range) * chartH} r="2.5" fill="white" stroke={color} strokeWidth="1.5" className="transition-all duration-200" />
+        ))}
+      </svg>
+    );
+  }
+}
+
+function formatNumber(n: number): string {
+  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
+  return Math.round(n).toString();
+}
+
+function formatDate(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}

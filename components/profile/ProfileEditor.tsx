@@ -10,6 +10,8 @@ interface Profile {
   cover_photo_url: string | null;
   social_links: Record<string, string>;
   public_profile_slug: string;
+  career_stage: string | null;
+  genre: string | null;
 }
 
 interface Project {
@@ -57,6 +59,8 @@ export default function ProfileEditor({ userId, profileSlug }: { userId: string;
   const [profilePicUrl, setProfilePicUrl] = useState('');
   const [coverPhotoUrl, setCoverPhotoUrl] = useState('');
   const [socialLinks, setSocialLinks] = useState<Record<string, string>>({});
+  const [careerStage, setCareerStage] = useState('');
+  const [genre, setGenre] = useState('');
 
   // Projects
   const [projects, setProjects] = useState<Project[]>([]);
@@ -73,6 +77,8 @@ export default function ProfileEditor({ userId, profileSlug }: { userId: string;
           setProfilePicUrl(p.profile_picture_url || '');
           setCoverPhotoUrl(p.cover_photo_url || '');
           setSocialLinks(p.social_links || {});
+          setCareerStage(p.career_stage || '');
+          setGenre(p.genre || '');
         }
       })
       .finally(() => setLoading(false));
@@ -104,6 +110,8 @@ export default function ProfileEditor({ userId, profileSlug }: { userId: string;
         display_name: displayName,
         bio,
         social_links: filteredLinks,
+        career_stage: careerStage || null,
+        genre: genre || null,
       }),
     });
 
@@ -287,6 +295,34 @@ export default function ProfileEditor({ userId, profileSlug }: { userId: string;
           className="w-full border-2 border-black/20 px-4 py-3 font-mono text-sm focus:border-accent focus:outline-none resize-vertical"
           placeholder="Tell people about yourself..."
         />
+      </div>
+
+      {/* Career Stage & Genre */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block font-mono text-xs font-semibold uppercase tracking-wider mb-1">Career Stage</label>
+          <select
+            value={careerStage}
+            onChange={(e) => setCareerStage(e.target.value)}
+            className="w-full border-2 border-black/20 px-4 py-3 font-mono text-sm focus:border-accent focus:outline-none bg-white"
+          >
+            <option value="">Select...</option>
+            <option value="emerging">Emerging — Just getting started</option>
+            <option value="developing">Developing — Building your foundation</option>
+            <option value="established">Established — Growing your audience</option>
+            <option value="professional">Professional — Full-time artist</option>
+          </select>
+        </div>
+        <div>
+          <label className="block font-mono text-xs font-semibold uppercase tracking-wider mb-1">Primary Genre</label>
+          <input
+            type="text"
+            value={genre}
+            onChange={(e) => setGenre(e.target.value)}
+            className="w-full border-2 border-black/20 px-4 py-3 font-mono text-sm focus:border-accent focus:outline-none"
+            placeholder="Hip-Hop, R&B, Pop, etc."
+          />
+        </div>
       </div>
 
       {/* Social Links */}

@@ -87,9 +87,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Create Stripe Checkout Session
+    // NOTE: We use automatic payment methods (Stripe Dashboard controls which are shown).
+    // setup_future_usage is set ONLY for card via payment_method_options, because
+    // Cash App Pay, Venmo, etc. do NOT support saving for future off-session charges.
+    // Previously this was set at the payment_intent_data level which caused Cash App Pay
+    // payments to silently fail (checkout never completed, webhook never fired).
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
-      payment_method_types: ['card'],
       mode: 'payment',
       line_items: [
         {
@@ -104,8 +108,10 @@ export async function POST(request: NextRequest) {
           quantity: 1,
         },
       ],
-      payment_intent_data: {
-        setup_future_usage: 'off_session',
+      payment_method_options: {
+        card: {
+          setup_future_usage: 'off_session',
+        },
       },
       success_url: `${SITE_URL}/book/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${SITE_URL}/book`,

@@ -92,6 +92,174 @@ export async function sendEngineerNewBookingAlert(engineerEmails: string[], book
   }
 }
 
+export async function sendEngineerPriorityAlert(to: string, details: {
+  id: string; customerName: string; date: string; startTime: string;
+  duration: number; room: string; priorityHours: number | string;
+}) {
+  try {
+    const roomLabel = ROOM_LABELS[details.room as Room] || details.room;
+    const windowLabel = typeof details.priorityHours === 'number'
+      ? `${details.priorityHours} hours`
+      : details.priorityHours;
+    await resend.emails.send({
+      from: FROM, to,
+      subject: 'You\'ve Been Requested — Accept or Pass',
+      html: wrap(`
+        ${h1('You\'ve Been Requested')}
+        ${p(`A client specifically requested you for their session. You have <strong>${windowLabel}</strong> to accept before it opens to other engineers.`)}
+        ${detailTable(`
+          ${detail('Client', details.customerName)}
+          ${detail('Date', details.date)}
+          ${detail('Time', details.startTime)}
+          ${detail('Duration', `${details.duration} hour${details.duration > 1 ? 's' : ''}`)}
+          ${detail('Studio', roomLabel)}
+          ${detail('Priority Window', windowLabel)}
+        `)}
+        ${btn('Accept or Pass', `${SITE_URL}/engineer`)}
+        ${p('Click <strong>Accept</strong> to lock in the session, or <strong>Pass</strong> to immediately open it to other engineers.')}
+        ${p('If you don\'t respond, the session will automatically open to others when the priority window expires.')}
+      `),
+    });
+  } catch (e) { console.error('Email error (priority alert):', e); }
+}
+
+export async function sendPriorityReminderToEngineer(to: string, details: {
+  customerName: string; date: string; startTime: string; room: string;
+  hoursRemaining: string;
+}) {
+  try {
+    const roomLabel = ROOM_LABELS[details.room as Room] || details.room;
+    await resend.emails.send({
+      from: FROM, to,
+      subject: `Priority Expiring Soon — ${details.customerName}'s Session`,
+      html: wrap(`
+        ${h1('Priority Expiring Soon')}
+        ${p(`You were requested for a session with ${details.customerName} and your priority expires in <strong>${details.hoursRemaining}</strong>.`)}
+        ${detailTable(`
+          ${detail('Client', details.customerName)}
+          ${detail('Date', details.date)}
+          ${detail('Time', details.startTime)}
+          ${detail('Studio', roomLabel)}
+        `)}
+        ${btn('Accept or Pass', `${SITE_URL}/engineer`)}
+        ${p('If you don\'t respond, the session will automatically open to all engineers.')}
+      `),
+    });
+  } catch (e) { console.error('Email error (priority reminder):', e); }
+}
+
+export async function sendEngineerAssignedNonRequested(to: string, details: {
+  customerName: string; requestedEngineer: string; assignedEngineer: string;
+  date: string; startTime: string; rescheduleDeadline: string;
+}) {
+  try {
+    await resend.emails.send({
+      from: FROM, to,
+      subject: 'Engineer Update — Sweet Dreams Music',
+      html: wrap(`
+        ${h1('Your Session Engineer')}
+        ${p(`Hey ${details.customerName},`)}
+        ${p(`Unfortunately, <strong>${details.requestedEngineer}</strong> was not available for your session. <strong>${details.assignedEngineer}</strong> has accepted your session and will be your engineer.`)}
+        ${detailTable(`
+          ${detail('Your Engineer', details.assignedEngineer)}
+          ${detail('Originally Requested', details.requestedEngineer)}
+          ${detail('Session Date', details.date)}
+          ${detail('Session Time', details.startTime)}
+        `)}
+        ${p('All of our engineers are professionals who will give you an amazing session.')}
+        <div style="margin-top:24px;padding:20px;background:#111;border-left:3px solid #F4C430">
+          ${p('If you\'d like to reschedule to try to get your preferred engineer, you can request a reschedule from your dashboard.')}
+          ${p(`<span style="color:#F4C430;font-size:12px;font-weight:700">Reschedule requests must be submitted by ${details.rescheduleDeadline} (8 hours before your session).</span>`)}
+          ${btn('Request Reschedule', `${SITE_URL}/dashboard`)}
+        </div>
+      `),
+    });
+  } catch (e) { console.error('Email error (non-requested engineer assigned):', e); }
+}
+
+export async function sendEngineerPassNotification(engineerEmails: string[], details: {
+  customerName: string; date: string; startTime: string;
+  duration: number; room: string; passedEngineer: string;
+}) {
+  const roomLabel = ROOM_LABELS[details.room as Room] || details.room;
+  const html = wrap(`
+    ${h1('Session Now Available')}
+    ${p(`${details.passedEngineer} passed on this session. It's now open — first to accept gets it.`)}
+    ${detailTable(`
+      ${detail('Client', details.customerName)}
+      ${detail('Date', details.date)}
+      ${detail('Time', details.startTime)}
+      ${detail('Duration', `${details.duration} hour${details.duration > 1 ? 's' : ''}`)}
+      ${detail('Studio', roomLabel)}
+    `)}
+    ${btn('Accept Session', `${SITE_URL}/engineer`)}
+  `);
+
+  for (const email of engineerEmails) {
+    try {
+      await resend.emails.send({
+        from: FROM, to: email, subject: `Session Available — ${details.customerName}`, html,
+      });
+    } catch (e) {
+      console.error(`Email error (pass notification to ${email}):`, e);
+    }
+  }
+}
+
+export async function sendPriorityExpiredToClient(to: string, details: {
+  customerName: string; requestedEngineer: string; date: string; startTime: string;
+}) {
+  try {
+    await resend.emails.send({
+      from: FROM, to,
+      subject: 'Engineer Update — Sweet Dreams Music',
+      html: wrap(`
+        ${h1('Engineer Update')}
+        ${p(`Hey ${details.customerName},`)}
+        ${p(`Unfortunately, ${details.requestedEngineer} is not available for your session on ${details.date} at ${details.startTime}. One of our other talented engineers will be reaching out to handle your session.`)}
+        ${p('If you\'d like to reschedule to wait for your preferred engineer, you can request a reschedule from your dashboard.')}
+        ${detailTable(`
+          ${detail('Requested Engineer', details.requestedEngineer)}
+          ${detail('Session Date', details.date)}
+          ${detail('Session Time', details.startTime)}
+        `)}
+        ${btn('View Dashboard', `${SITE_URL}/dashboard`)}
+        ${p('All of our engineers are professionals who will give you an amazing session. If you have any concerns, reach out to us.')}
+      `),
+    });
+  } catch (e) { console.error('Email error (priority expired):', e); }
+}
+
+export async function sendRescheduleRequestAlert(details: {
+  customerName: string; customerEmail: string; artistName?: string | null;
+  date: string; startTime: string; room: string;
+  reason: string; currentEngineer: string | null;
+}) {
+  try {
+    const roomLabel = ROOM_LABELS[details.room as Room] || details.room;
+    await resend.emails.send({
+      from: FROM, to: [...SUPER_ADMINS],
+      subject: `Reschedule Request — ${details.customerName}`,
+      html: wrap(`
+        ${h1('Reschedule Request')}
+        ${p(`${details.customerName} has requested to reschedule their session.`)}
+        ${detailTable(`
+          ${detail('Client', details.customerName)}
+          ${details.artistName ? detail('Artist Name', details.artistName) : ''}
+          ${detail('Email', details.customerEmail)}
+          ${detail('Current Date', details.date)}
+          ${detail('Current Time', details.startTime)}
+          ${detail('Studio', roomLabel)}
+          ${details.currentEngineer ? detail('Current Engineer', details.currentEngineer) : ''}
+          ${detail('Reason', details.reason)}
+        `)}
+        ${p('Please review this request and reach out to the client to coordinate.')}
+        ${btn('View Admin Dashboard', `${SITE_URL}/admin`)}
+      `),
+    });
+  } catch (e) { console.error('Email error (reschedule request):', e); }
+}
+
 export async function sendEngineerAssigned(to: string, details: {
   customerName: string; engineerName: string; date: string; startTime: string;
 }) {
@@ -166,7 +334,7 @@ export async function sendAdminBookingAlert(booking: {
 }
 
 export async function sendSessionReminder(to: string, details: {
-  customerName: string; date: string; startTime: string;
+  customerName: string; artistName?: string | null; date: string; startTime: string;
   room: string; engineerName: string | null;
 }) {
   try {
@@ -177,6 +345,7 @@ export async function sendSessionReminder(to: string, details: {
         ${h1('Session Reminder')}
         ${p(`Hey ${details.customerName}, your session starts in 1 hour!`)}
         ${detailTable(`
+          ${detail('Date', details.date)}
           ${detail('Time', details.startTime)}
           ${detail('Studio', roomLabel)}
           ${details.engineerName ? detail('Engineer', details.engineerName) : ''}
@@ -185,6 +354,43 @@ export async function sendSessionReminder(to: string, details: {
       `),
     });
   } catch (e) { console.error('Email error (session reminder):', e); }
+}
+
+export async function sendSessionReminderToStaff(emails: string[], details: {
+  customerName: string; customerEmail: string; artistName?: string | null;
+  date: string; startTime: string; duration: number;
+  room: string; engineerName: string;
+}) {
+  try {
+    const roomLabel = ROOM_LABELS[details.room as Room] || details.room;
+    const html = wrap(`
+      ${h1('Upcoming Session — 1 Hour')}
+      ${p('A session is starting in about 1 hour.')}
+      ${detailTable(`
+        ${detail('Name', details.customerName)}
+        ${details.artistName ? detail('Artist Name', details.artistName) : ''}
+        ${detail('Email', details.customerEmail)}
+        ${detail('Date', details.date)}
+        ${detail('Time', details.startTime)}
+        ${detail('Duration', `${details.duration} hour${details.duration > 1 ? 's' : ''}`)}
+        ${detail('Studio', roomLabel)}
+        ${detail('Engineer', details.engineerName)}
+      `)}
+      ${btn('View Dashboard', `${SITE_URL}/admin`)}
+    `);
+
+    for (const email of emails) {
+      try {
+        await resend.emails.send({
+          from: FROM, to: email,
+          subject: `Session in 1 Hour — ${details.customerName}${details.artistName ? ` (${details.artistName})` : ''}`,
+          html,
+        });
+      } catch (e) {
+        console.error(`Email error (staff reminder to ${email}):`, e);
+      }
+    }
+  } catch (e) { console.error('Email error (staff reminder):', e); }
 }
 
 export async function sendPasswordReset(to: string, resetLink: string) {

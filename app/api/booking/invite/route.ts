@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     const {
       date, startTime, duration, room,
       totalAmount, depositAmount,
-      clientEmail, clientName, notes,
+      clientEmail, clientName, artistName, notes,
       paymentMethod, customPrice,
     } = body;
 
@@ -52,11 +52,13 @@ export async function POST(request: NextRequest) {
         .insert({
           customer_name: clientName || 'Cash Client',
           customer_email: clientEmail || '',
+          artist_name: artistName || null,
           start_time: `${date}T${startTime}:00+00:00`,
           end_time: `${date}T${endTime}:00+00:00`,
           duration,
           room,
           engineer_name: engineerName,
+          created_by_email: user.email,
           total_amount: totalAmount,
           deposit_amount: 0,
           remainder_amount: totalAmount,
@@ -107,11 +109,13 @@ export async function POST(request: NextRequest) {
       .insert({
         customer_name: clientName || (clientEmail ? `Invited: ${clientEmail}` : 'Pending Invite'),
         customer_email: clientEmail || '',
+        artist_name: artistName || null,
         start_time: `${date}T${startTime}:00+00:00`,
         end_time: `${date}T${endTime}:00+00:00`,
         duration,
         room,
         engineer_name: engineerName,
+        created_by_email: user.email,
         total_amount: totalAmount,
         deposit_amount: depositAmount,
         remainder_amount: totalAmount - depositAmount,

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Shield, Wrench, User, Music } from 'lucide-react';
+import { LayoutDashboard, Shield, Wrench, User, Music, Rocket } from 'lucide-react';
 import type { UserRole } from '@/lib/constants';
 import SignOutButton from '@/components/auth/SignOutButton';
 
@@ -19,6 +19,7 @@ export default function DashboardNav({ role, isProducer, displayName, email, pro
 
   const tabs = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
+    { href: '/dashboard/hub', label: 'Artist Hub', icon: Rocket, show: true },
     { href: '/engineer', label: 'Engineer', icon: Wrench, show: role === 'engineer' || role === 'admin' },
     { href: '/producer', label: 'Producer', icon: Music, show: isProducer === true },
     { href: '/admin', label: 'Admin', icon: Shield, show: role === 'admin' },
@@ -49,7 +50,9 @@ export default function DashboardNav({ role, isProducer, displayName, email, pro
         {/* Tab navigation */}
         <div className="flex gap-0 overflow-x-auto border-t border-white/10">
           {tabs.map((t) => {
-            const isActive = pathname === t.href;
+            const isActive = t.href === '/dashboard'
+              ? pathname === '/dashboard'
+              : pathname.startsWith(t.href);
             return (
               <Link
                 key={t.href}

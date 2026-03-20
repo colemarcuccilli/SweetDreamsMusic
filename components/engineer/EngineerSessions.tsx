@@ -7,6 +7,7 @@ interface Booking {
   id: string;
   customer_name: string;
   customer_email?: string;
+  artist_name?: string | null;
   start_time: string;
   end_time: string;
   duration: number;
@@ -20,26 +21,45 @@ interface Booking {
   admin_notes: string | null;
   engineer_name?: string | null;
   requested_engineer?: string | null;
+  priority_expires_at?: string | null;
+  reschedule_requested?: boolean;
   stripe_customer_id?: string | null;
   stripe_payment_intent_id?: string | null;
+}
+
+interface StudioBooking {
+  id: string;
+  customer_name: string;
+  artist_name: string | null;
+  start_time: string;
+  end_time: string;
+  duration: number;
+  room: string | null;
+  engineer_name: string | null;
+  status: string;
 }
 
 export default function EngineerSessions({ userEmail }: { userEmail: string }) {
   const [mySessions, setMySessions] = useState<Booking[]>([]);
   const [unclaimed, setUnclaimed] = useState<Booking[]>([]);
+  const [allBookings, setAllBookings] = useState<StudioBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [claiming, setClaiming] = useState<string | null>(null);
+  const [showAllBookings, setShowAllBookings] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
-      const [myRes, unclaimedRes] = await Promise.all([
+      const [myRes, unclaimedRes, allRes] = await Promise.all([
         fetch('/api/engineer/accounting'),
         fetch('/api/booking/unclaimed'),
+        fetch('/api/booking/all'),
       ]);
       const myData = await myRes.json();
       const unclaimedData = await unclaimedRes.json();
+      const allData = await allRes.json();
       setMySessions(myData.bookings || []);
       setUnclaimed(unclaimedData.bookings || []);
+      setAllBookings(allData.bookings || []);
     } catch {
       // silent
     } finally {
@@ -49,18 +69,21 @@ export default function EngineerSessions({ userEmail }: { userEmail: string }) {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  async function claimSession(bookingId: string) {
+  async function respondToSession(bookingId: string, action: 'accept' | 'pass') {
     setClaiming(bookingId);
     try {
-      const res = await fetch('/api/booking/claim', {
+      const res = await fetch('/api/booking/respond', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookingId }),
+        body: JSON.stringify({ bookingId, action }),
       });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || 'Failed to claim session');
+        alert(data.error || `Failed to ${action} session`);
         return;
+      }
+      if (action === 'pass') {
+        alert('Session passed. Other engineers have been notified.');
       }
       await loadData();
     } catch {
@@ -68,6 +91,11 @@ export default function EngineerSessions({ userEmail }: { userEmail: string }) {
     } finally {
       setClaiming(null);
     }
+  }
+
+  // Legacy wrapper
+  async function claimSession(bookingId: string) {
+    return respondToSession(bookingId, 'accept');
   }
 
   if (loading) return <p className="font-mono text-sm text-black/40">Loading sessions...</p>;
@@ -82,6 +110,72 @@ export default function EngineerSessions({ userEmail }: { userEmail: string }) {
 
   return (
     <div className="space-y-10">
+      {/* All Studio Bookings — for availability reference */}
+      <div>
+        <button
+          onClick={() => setShowAllBookings(!showAllBookings)}
+          className="font-mono text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2 hover:text-accent transition-colors"
+        >
+          Studio Schedule ({allBookings.length} upcoming)
+          <span className="text-xs font-normal text-black/40">{showAllBookings ? '▲ Hide' : '▼ Show'}</span>
+        </button>
+        {showAllBookings && (
+          allBookings.length === 0 ? (
+            <p className="font-mono text-xs text-black/30 border border-black/10 p-6 text-center">
+              No upcoming bookings
+            </p>
+          ) : (
+            <div className="border-2 border-black/10 overflow-hidden">
+              <table className="w-full font-mono text-xs">
+                <thead>
+                  <tr className="bg-black/5 text-left">
+                    <th className="px-3 py-2 font-semibold uppercase tracking-wider">Date</th>
+                    <th className="px-3 py-2 font-semibold uppercase tracking-wider">Time</th>
+                    <th className="px-3 py-2 font-semibold uppercase tracking-wider">Client</th>
+                    <th className="px-3 py-2 font-semibold uppercase tracking-wider hidden sm:table-cell">Studio</th>
+                    <th className="px-3 py-2 font-semibold uppercase tracking-wider hidden sm:table-cell">Engineer</th>
+                    <th className="px-3 py-2 font-semibold uppercase tracking-wider">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allBookings.map((b) => {
+                    const d = new Date(b.start_time);
+                    return (
+                      <tr key={b.id} className="border-t border-black/5 hover:bg-accent/5 transition-colors">
+                        <td className="px-3 py-2">
+                          {d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })}
+                        </td>
+                        <td className="px-3 py-2">
+                          {d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' })}
+                          {' · '}{b.duration}hr
+                        </td>
+                        <td className="px-3 py-2">
+                          <span className="font-semibold">{b.customer_name}</span>
+                          {b.artist_name && <span className="text-black/40 ml-1">({b.artist_name})</span>}
+                        </td>
+                        <td className="px-3 py-2 hidden sm:table-cell">
+                          {b.room === 'studio_a' ? 'Studio A' : b.room === 'studio_b' ? 'Studio B' : b.room || '—'}
+                        </td>
+                        <td className="px-3 py-2 hidden sm:table-cell">{b.engineer_name || '—'}</td>
+                        <td className="px-3 py-2">
+                          <span className={`font-bold uppercase text-[10px] px-1.5 py-0.5 ${
+                            b.status === 'confirmed' ? 'bg-accent/20 text-amber-700' :
+                            b.status === 'pending_deposit' ? 'bg-blue-100 text-blue-700' :
+                            'bg-black/5 text-black/50'
+                          }`}>
+                            {b.status === 'pending_deposit' ? 'Pending' : b.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )
+        )}
+      </div>
+
       {/* Pending Invites */}
       {pendingInvites.length > 0 && (
         <div>
@@ -114,7 +208,9 @@ export default function EngineerSessions({ userEmail }: { userEmail: string }) {
                 onUpdate={loadData}
                 unclaimed
                 onClaim={() => claimSession(b.id)}
+                onPass={b.requested_engineer ? () => respondToSession(b.id, 'pass') : undefined}
                 claimLoading={claiming === b.id}
+                userEmail={userEmail}
               />
             ))}
           </div>
@@ -226,6 +322,9 @@ function PendingInviteCard({ booking, onUpdate }: { booking: Booking; onUpdate: 
         <div>
           <div className="flex items-center gap-2">
             <p className="font-mono text-sm font-bold">{booking.customer_name}</p>
+            {booking.artist_name && (
+              <span className="font-mono text-xs text-black/40">({booking.artist_name})</span>
+            )}
             <span className="font-mono text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 px-2 py-0.5">
               Awaiting Payment
             </span>
@@ -281,9 +380,10 @@ function PendingInviteCard({ booking, onUpdate }: { booking: Booking; onUpdate: 
   );
 }
 
-function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, claimLoading }: {
+function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass, claimLoading, userEmail }: {
   booking: Booking; onUpdate?: () => void; completed?: boolean;
-  unclaimed?: boolean; onClaim?: () => void; claimLoading?: boolean;
+  unclaimed?: boolean; onClaim?: () => void; onPass?: () => void;
+  claimLoading?: boolean; userEmail?: string;
 }) {
   const [charging, setCharging] = useState(false);
   const [chargeError, setChargeError] = useState('');
@@ -498,13 +598,33 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, claimLo
     <div className={`border-2 p-4 sm:p-5 ${unclaimed ? 'border-[#F4C430]/40 bg-[#F4C430]/5' : 'border-black/10'}`}>
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div>
-          <p className="font-mono text-sm font-bold">{booking.customer_name}</p>
+          <p className="font-mono text-sm font-bold">
+            {booking.customer_name}
+            {booking.artist_name && <span className="font-normal text-black/40 ml-1">({booking.artist_name})</span>}
+          </p>
           {booking.customer_email && (
             <p className="font-mono text-xs text-black/50">{booking.customer_email}</p>
           )}
           {booking.requested_engineer && (
-            <p className="font-mono text-[10px] text-amber-600 font-semibold mt-0.5">
-              Requested: {booking.requested_engineer}
+            <div className="flex items-center gap-2 mt-0.5">
+              <p className="font-mono text-[10px] text-amber-600 font-semibold">
+                Requested: {booking.requested_engineer}
+              </p>
+              {booking.priority_expires_at && new Date(booking.priority_expires_at) > new Date() && (
+                <span className="font-mono text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 px-2 py-0.5 animate-pulse">
+                  Priority Window Active
+                </span>
+              )}
+              {booking.priority_expires_at && new Date(booking.priority_expires_at) <= new Date() && (
+                <span className="font-mono text-[10px] uppercase tracking-wider bg-black/5 text-black/40 px-2 py-0.5">
+                  Priority Expired
+                </span>
+              )}
+            </div>
+          )}
+          {booking.reschedule_requested && (
+            <p className="font-mono text-[10px] text-red-500 font-semibold mt-0.5">
+              ⚠ Reschedule Requested
             </p>
           )}
           <p className="font-mono text-xs text-black/40 mt-1">
@@ -544,15 +664,62 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, claimLo
       {/* Action buttons */}
       {!completed && (
         <div className="mt-3 pt-3 border-t border-black/10 flex flex-wrap gap-2">
-          {unclaimed && onClaim && (
-            <button
-              onClick={onClaim}
-              disabled={claimLoading}
-              className="font-mono text-xs font-bold uppercase tracking-wider bg-[#F4C430] text-black px-5 py-2.5 hover:bg-[#F4C430]/80 disabled:opacity-50 transition-colors"
-            >
-              {claimLoading ? 'Claiming...' : 'Claim Session'}
-            </button>
-          )}
+          {unclaimed && onClaim && (() => {
+            const isInPriority = booking.requested_engineer && booking.priority_expires_at &&
+              new Date(booking.priority_expires_at) > new Date();
+            const isRequestedForMe = booking.requested_engineer && userEmail && (
+              booking.requested_engineer === userEmail ||
+              // Also match by display names from ENGINEERS constant
+              true // We'll rely on the API to enforce this
+            );
+
+            return (
+              <div className="flex items-center gap-2">
+                {/* Accept button — always shown */}
+                <button
+                  onClick={onClaim}
+                  disabled={claimLoading}
+                  className="font-mono text-xs font-bold uppercase tracking-wider bg-[#F4C430] text-black px-5 py-2.5 hover:bg-[#F4C430]/80 disabled:opacity-50 transition-colors"
+                >
+                  {claimLoading ? 'Accepting...' : (isInPriority && isRequestedForMe ? '✓ Accept Session' : 'Accept Session')}
+                </button>
+
+                {/* Pass button — only for the requested engineer during priority */}
+                {isInPriority && onPass && (
+                  <button
+                    onClick={() => {
+                      if (confirm(`Pass on ${booking.customer_name}'s session? It will immediately open to all engineers.`)) {
+                        onPass();
+                      }
+                    }}
+                    disabled={claimLoading}
+                    className="font-mono text-xs font-bold uppercase tracking-wider border-2 border-black/20 text-black/60 px-5 py-2.5 hover:bg-red-50 hover:border-red-200 hover:text-red-600 disabled:opacity-50 transition-colors"
+                  >
+                    Pass
+                  </button>
+                )}
+
+                {/* Priority info */}
+                {isInPriority && booking.requested_engineer && (
+                  <span className="font-mono text-[10px] text-black/40">
+                    Requested: <span className="font-bold text-accent">{booking.requested_engineer}</span>
+                    {booking.priority_expires_at && (
+                      <> · Priority until {new Date(booking.priority_expires_at).toLocaleString('en-US', {
+                        month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+                      })}</>
+                    )}
+                  </span>
+                )}
+
+                {/* Post-priority info */}
+                {!isInPriority && booking.requested_engineer && (
+                  <span className="font-mono text-[10px] text-red-500/70">
+                    {booking.requested_engineer} did not respond · Open to all
+                  </span>
+                )}
+              </div>
+            );
+          })()}
           {canCharge && (
             <div className="flex items-center gap-2">
               <button

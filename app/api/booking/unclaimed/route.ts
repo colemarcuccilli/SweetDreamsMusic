@@ -9,7 +9,7 @@ export async function GET() {
 
   const { data: bookings, error } = await supabase
     .from('bookings')
-    .select('id, customer_name, customer_email, start_time, end_time, duration, room, total_amount, deposit_amount, remainder_amount, actual_deposit_paid, status, created_at, admin_notes, requested_engineer')
+    .select('id, customer_name, customer_email, artist_name, start_time, end_time, duration, room, total_amount, deposit_amount, remainder_amount, actual_deposit_paid, status, created_at, admin_notes, requested_engineer, priority_expires_at, engineer_passed, reschedule_deadline')
     .is('engineer_name', null)
     .in('status', ['confirmed', 'pending'])
     .order('start_time', { ascending: true });

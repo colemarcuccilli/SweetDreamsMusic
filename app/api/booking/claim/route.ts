@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { verifyEngineerAccess } from '@/lib/admin-auth';
-import { sendEngineerAssigned, sendEngineerClaimConfirmation } from '@/lib/email';
-import { ENGINEERS } from '@/lib/constants';
+import { sendEngineerAssigned, sendEngineerAssignedNonRequested, sendEngineerClaimConfirmation } from '@/lib/email';
+import { ENGINEERS, type Room } from '@/lib/constants';
 
+// Legacy claim endpoint — now wraps the same logic as /respond accept
+// Kept for backward compatibility
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const hasAccess = await verifyEngineerAccess(supabase);
@@ -24,10 +26,10 @@ export async function POST(request: NextRequest) {
 
   const engineerName = profile?.display_name || user.email || 'Engineer';
 
-  // Check the booking's studio to enforce studio restrictions
+  // Check the booking
   const { data: booking } = await supabase
     .from('bookings')
-    .select('room')
+    .select('room, requested_engineer, priority_expires_at, customer_name, customer_email, reschedule_deadline')
     .eq('id', bookingId)
     .single();
 
@@ -35,11 +37,37 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
   }
 
-  // Verify this engineer can work in this studio
+  // Look up engineer config for studio + priority checks
   const engineerConfig = ENGINEERS.find(
     (e) => e.name === engineerName || e.displayName === engineerName
   );
-  if (engineerConfig && booking.room && !engineerConfig.studios.includes(booking.room)) {
+
+  // Check priority window
+  if (booking.requested_engineer && booking.priority_expires_at) {
+    const priorityExpiry = new Date(booking.priority_expires_at);
+    const isInPriorityWindow = priorityExpiry > new Date();
+
+    if (isInPriorityWindow) {
+      const isRequestedEngineer =
+        engineerName === booking.requested_engineer ||
+        engineerConfig?.name === booking.requested_engineer ||
+        engineerConfig?.displayName === booking.requested_engineer;
+
+      if (!isRequestedEngineer) {
+        const expiryStr = priorityExpiry.toLocaleString('en-US', {
+          weekday: 'short', month: 'short', day: 'numeric',
+          hour: 'numeric', minute: '2-digit', timeZone: 'UTC'
+        });
+        return NextResponse.json(
+          { error: `This session was requested for ${booking.requested_engineer}. They have priority until ${expiryStr}.` },
+          { status: 403 }
+        );
+      }
+    }
+  }
+
+  // Verify studio access
+  if (engineerConfig && booking.room && !engineerConfig.studios.includes(booking.room as Room)) {
     const studioLabel = booking.room === 'studio_a' ? 'Studio A' : 'Studio B';
     return NextResponse.json(
       { error: `You are not assigned to ${studioLabel}` },
@@ -64,12 +92,34 @@ export async function POST(request: NextRequest) {
   }
 
   const startDate = new Date(updated.start_time);
-  // Times are stored as local Fort Wayne hours in UTC — format as UTC to preserve the intended hour
   const dateStr = startDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
   const timeStr = startDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
 
-  // Notify the customer that an engineer has been assigned
-  if (updated.customer_email) {
+  // Determine if this is a non-requested engineer claiming
+  const isRequestedEngineer =
+    engineerName === booking.requested_engineer ||
+    engineerConfig?.name === booking.requested_engineer ||
+    engineerConfig?.displayName === booking.requested_engineer;
+
+  const isNonRequestedClaim = booking.requested_engineer && !isRequestedEngineer;
+
+  if (isNonRequestedClaim && updated.customer_email) {
+    const rescheduleDeadlineStr = booking.reschedule_deadline
+      ? new Date(booking.reschedule_deadline).toLocaleString('en-US', {
+          weekday: 'short', month: 'short', day: 'numeric',
+          hour: 'numeric', minute: '2-digit', timeZone: 'UTC',
+        })
+      : '8 hours before your session';
+
+    await sendEngineerAssignedNonRequested(updated.customer_email, {
+      customerName: updated.customer_name,
+      requestedEngineer: booking.requested_engineer!,
+      assignedEngineer: engineerName,
+      date: dateStr,
+      startTime: timeStr,
+      rescheduleDeadline: rescheduleDeadlineStr,
+    });
+  } else if (updated.customer_email) {
     await sendEngineerAssigned(updated.customer_email, {
       customerName: updated.customer_name,
       engineerName,
