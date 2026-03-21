@@ -14,7 +14,7 @@ const ENGINEER_PHOTOS: Record<string, string> = {
   'PRVRB': STUDIO_IMAGES.prvrbBoothGlowVert,
   'Iszac Griner': STUDIO_IMAGES.iszacVert,
   'Zion Tinsley': STUDIO_IMAGES.zStudioBVert,
-  'Jay': STUDIO_IMAGES.jayTopStudioBVert,
+  'Jay Val Leo': STUDIO_IMAGES.jayTopStudioBVert,
 };
 
 export default function EngineersPage() {
