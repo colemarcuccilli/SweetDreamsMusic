@@ -441,10 +441,10 @@ export default function CreateInvite() {
 
       <button
         onClick={handleCreate}
-        disabled={!date || creating}
+        disabled={!date || !clientName || !clientEmail || creating}
         className="w-full bg-accent text-black font-mono text-base font-bold uppercase tracking-wider py-4 hover:bg-accent/90 transition-colors disabled:opacity-50"
       >
-        {creating ? 'CREATING...' : 'CREATE INVITE LINK'}
+        {creating ? 'CREATING...' : !clientName || !clientEmail ? 'CLIENT REQUIRED' : 'CREATE INVITE LINK'}
       </button>
     </div>
   );

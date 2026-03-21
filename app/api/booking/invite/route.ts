@@ -32,6 +32,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
+    if (!clientName || !clientEmail) {
+      return NextResponse.json({ error: 'Client name and email are required. Select a client from the library or enter their info manually.' }, { status: 400 });
+    }
+
     // Use service client for DB operations (bypasses RLS — auth already verified above)
     const serviceClient = createServiceClient();
 
@@ -50,8 +54,8 @@ export async function POST(request: NextRequest) {
       const { data: booking, error } = await serviceClient
         .from('bookings')
         .insert({
-          customer_name: clientName || 'Cash Client',
-          customer_email: clientEmail || '',
+          customer_name: clientName,
+          customer_email: clientEmail,
           artist_name: artistName || null,
           start_time: `${date}T${startTime}:00+00:00`,
           end_time: `${date}T${endTime}:00+00:00`,
@@ -107,8 +111,8 @@ export async function POST(request: NextRequest) {
     const { data: booking, error } = await serviceClient
       .from('bookings')
       .insert({
-        customer_name: clientName || (clientEmail ? `Invited: ${clientEmail}` : 'Pending Invite'),
-        customer_email: clientEmail || '',
+        customer_name: clientName,
+        customer_email: clientEmail,
         artist_name: artistName || null,
         start_time: `${date}T${startTime}:00+00:00`,
         end_time: `${date}T${endTime}:00+00:00`,
