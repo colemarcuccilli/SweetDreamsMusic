@@ -5,6 +5,7 @@ import { FileAudio, Download, ArrowLeft } from 'lucide-react';
 import { getSessionUser } from '@/lib/auth';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import DashboardNav from '@/components/layout/DashboardNav';
+import FileShowcaseToggle from '@/components/dashboard/FileShowcaseToggle';
 
 export const metadata: Metadata = { title: 'My Files' };
 
@@ -19,6 +20,7 @@ export default async function FilesPage() {
   if (!user) redirect('/login');
 
   const supabase = await createClient();
+  const serviceClient = createServiceClient();
 
   // Fetch ALL deliverables for this user (no limit)
   const { data: deliverables } = await supabase
@@ -27,17 +29,26 @@ export default async function FilesPage() {
     .eq('user_id', user.id)
     .order('created_at', { ascending: false });
 
+  // Fetch showcase items to know which are public
+  const { data: showcaseItems } = await serviceClient
+    .from('profile_audio_showcase')
+    .select('deliverable_id, is_public')
+    .eq('user_id', user.id);
+
+  const publicDeliverableIds = new Set(
+    (showcaseItems || []).filter(s => s.is_public).map(s => s.deliverable_id)
+  );
+
   // Generate signed download URLs
-  const serviceClient = createServiceClient();
   const filesWithUrls = await Promise.all(
     (deliverables || []).map(async (file) => {
       if (file.file_path) {
         const { data } = await serviceClient.storage
           .from('client-audio-files')
           .createSignedUrl(file.file_path, 3600, { download: file.file_name || true });
-        return { ...file, downloadUrl: data?.signedUrl || null };
+        return { ...file, downloadUrl: data?.signedUrl || null, isPublic: publicDeliverableIds.has(file.id) };
       }
-      return { ...file, downloadUrl: null };
+      return { ...file, downloadUrl: null, isPublic: publicDeliverableIds.has(file.id) };
     })
   );
 
@@ -51,13 +62,15 @@ export default async function FilesPage() {
     filesByDate[dateKey].push(file);
   });
 
+  const profileSlug = user.profile?.public_profile_slug || undefined;
+
   return (
     <>
       <DashboardNav
         role={user.role}
         displayName={user.profile?.display_name}
         email={user.email}
-        profileSlug={user.profile?.public_profile_slug}
+        profileSlug={profileSlug}
       />
 
       <section className="bg-white text-black py-8 sm:py-12">
@@ -69,7 +82,7 @@ export default async function FilesPage() {
                 MY FILES
               </h2>
               <p className="font-mono text-xs text-black/40 mt-2">
-                All files from your sessions. Download links expire after 1 hour — refresh the page for new links.
+                All files from your sessions. Toggle the switch to share a track on your public profile.
               </p>
             </div>
             <Link href="/dashboard" className="font-mono text-xs text-accent hover:underline inline-flex items-center gap-1 no-underline">
@@ -92,30 +105,42 @@ export default async function FilesPage() {
                   </h3>
                   <div className="space-y-2">
                     {files.map(file => (
-                      <div key={file.id} className="border-2 border-black/10 p-4 hover:border-black/30 transition-colors flex items-center justify-between gap-4">
-                        <div className="min-w-0 flex-1">
-                          <p className="font-mono text-sm font-bold truncate">
-                            {file.display_name || file.file_name}
-                          </p>
-                          <div className="font-mono text-xs text-black/40 mt-1 flex items-center gap-3 flex-wrap">
-                            <span>by {file.uploaded_by_name}</span>
-                            <span className="uppercase">{file.file_type?.split('/')[1] || 'file'}</span>
-                            {file.file_size > 0 && <span>{formatFileSize(file.file_size)}</span>}
+                      <div key={file.id} className="border-2 border-black/10 p-4 hover:border-black/30 transition-colors">
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="min-w-0 flex-1">
+                            <p className="font-mono text-sm font-bold truncate">
+                              {file.display_name || file.file_name}
+                            </p>
+                            <div className="font-mono text-xs text-black/40 mt-1 flex items-center gap-3 flex-wrap">
+                              <span>by {file.uploaded_by_name}</span>
+                              <span className="uppercase">{file.file_type?.split('/')[1] || 'file'}</span>
+                              {file.file_size > 0 && <span>{formatFileSize(file.file_size)}</span>}
+                            </div>
+                            {file.description && (
+                              <p className="font-mono text-[10px] text-black/30 mt-1">{file.description}</p>
+                            )}
                           </div>
-                          {file.description && (
-                            <p className="font-mono text-[10px] text-black/30 mt-1">{file.description}</p>
+                          {file.downloadUrl ? (
+                            <a
+                              href={file.downloadUrl}
+                              download={file.file_name}
+                              className="bg-accent text-black font-mono text-xs font-bold uppercase tracking-wider px-4 py-2.5 hover:bg-accent/90 transition-colors inline-flex items-center gap-2 flex-shrink-0 no-underline"
+                            >
+                              <Download className="w-4 h-4" /> Download
+                            </a>
+                          ) : (
+                            <span className="font-mono text-xs text-black/30">Unavailable</span>
                           )}
                         </div>
-                        {file.downloadUrl ? (
-                          <a
-                            href={file.downloadUrl}
-                            download={file.file_name}
-                            className="bg-accent text-black font-mono text-xs font-bold uppercase tracking-wider px-4 py-2.5 hover:bg-accent/90 transition-colors inline-flex items-center gap-2 flex-shrink-0 no-underline"
-                          >
-                            <Download className="w-4 h-4" /> Download
-                          </a>
-                        ) : (
-                          <span className="font-mono text-xs text-black/30">Unavailable</span>
+                        {/* Public profile toggle */}
+                        {file.file_type?.startsWith('audio/') && (
+                          <div className="mt-3 pt-3 border-t border-black/5">
+                            <FileShowcaseToggle
+                              deliverableId={file.id}
+                              initialEnabled={file.isPublic}
+                              profileSlug={profileSlug}
+                            />
+                          </div>
                         )}
                       </div>
                     ))}

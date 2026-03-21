@@ -59,18 +59,18 @@ export default async function PublicProfilePage({ params }: Props) {
     .select(`
       id, custom_title, custom_description, display_order, is_public, is_released,
       spotify_link, apple_music_link, youtube_link, soundcloud_link, custom_links,
-      deliverable_id
+      deliverable_id, profile_audio_path
     `)
     .eq('user_id', profile.user_id)
     .eq('is_public', true)
     .order('display_order', { ascending: true });
 
-  let deliverables: Record<string, { file_name: string; display_name: string; file_path: string }> = {};
+  let deliverables: Record<string, { file_name: string; display_name: string; file_path: string; created_at: string }> = {};
   if (showcaseItems && showcaseItems.length > 0) {
     const deliverableIds = showcaseItems.map((item) => item.deliverable_id);
     const { data: deliverableData } = await supabase
       .from('deliverables')
-      .select('id, file_name, display_name, file_path')
+      .select('id, file_name, display_name, file_path, created_at')
       .in('id', deliverableIds);
 
     if (deliverableData) {
@@ -98,7 +98,12 @@ export default async function PublicProfilePage({ params }: Props) {
     producerBeats = beats || [];
   }
 
+  // Split into released vs unreleased
+  const releasedItems = (showcaseItems || []).filter(item => item.is_released);
+  const unreleasedItems = (showcaseItems || []).filter(item => !item.is_released);
   const hasShowcase = showcaseItems && showcaseItems.length > 0;
+  const hasReleased = releasedItems.length > 0;
+  const hasUnreleased = unreleasedItems.length > 0;
   const hasProjects = projects && projects.length > 0;
   const hasBeats = producerBeats.length > 0;
   const socialLinks = (profile.social_links || {}) as Record<string, string>;
@@ -193,13 +198,13 @@ export default async function PublicProfilePage({ params }: Props) {
         </section>
       )}
 
-      {/* Music Showcase */}
-      {hasShowcase && (
+      {/* Released Music */}
+      {hasReleased && (
         <section className="bg-white text-black py-16 sm:py-24">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
             <h2 className="text-heading-xl mb-8">MUSIC</h2>
             <div className="space-y-4">
-              {showcaseItems.map((item) => {
+              {releasedItems.map((item) => {
                 const deliverable = deliverables[item.deliverable_id];
                 const title = item.custom_title || deliverable?.display_name || deliverable?.file_name || 'Untitled';
 
@@ -212,7 +217,6 @@ export default async function PublicProfilePage({ params }: Props) {
                         <p className="font-mono text-xs text-black/50 mt-1">{item.custom_description}</p>
                       )}
                     </div>
-
                     <div className="flex flex-wrap gap-2">
                       {item.spotify_link && (
                         <a href={item.spotify_link} target="_blank" rel="noopener noreferrer"
@@ -239,14 +243,53 @@ export default async function PublicProfilePage({ params }: Props) {
                         </a>
                       )}
                     </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
 
-                    {deliverable?.file_path && !item.is_released && (
-                      <audio controls preload="none" className="w-full sm:w-auto sm:max-w-[200px]">
-                        <source
-                          src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/profile-audio/${deliverable.file_path}`}
-                          type="audio/mpeg"
-                        />
-                      </audio>
+      {/* Unreleased Music */}
+      {hasUnreleased && (
+        <section className={`${hasReleased ? 'bg-black/[0.02]' : 'bg-white'} text-black py-16 sm:py-24`}>
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h2 className="text-heading-xl mb-2">UNRELEASED</h2>
+            <p className="font-mono text-xs text-black/40 mb-8">Exclusive previews — recorded at Sweet Dreams Music</p>
+            <div className="space-y-4">
+              {unreleasedItems.map((item) => {
+                const deliverable = deliverables[item.deliverable_id];
+                const title = item.custom_title || deliverable?.display_name || deliverable?.file_name || 'Untitled';
+                const audioPath = item.profile_audio_path || deliverable?.file_path;
+                const recordedDate = deliverable?.created_at
+                  ? new Date(deliverable.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+                  : null;
+
+                return (
+                  <div key={item.id} className="border-2 border-black/20 p-5 sm:p-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                      <Music className="w-8 h-8 text-accent flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-mono text-sm font-bold truncate">{title}</h3>
+                        <div className="font-mono text-xs text-black/40 mt-1 flex items-center gap-3 flex-wrap">
+                          {recordedDate && <span>Recorded {recordedDate}</span>}
+                          <span className="text-[10px] uppercase tracking-wider bg-black/5 px-2 py-0.5 font-bold">Unreleased</span>
+                        </div>
+                        {item.custom_description && (
+                          <p className="font-mono text-xs text-black/50 mt-2">{item.custom_description}</p>
+                        )}
+                      </div>
+                    </div>
+                    {audioPath && (
+                      <div className="mt-4">
+                        <audio controls preload="none" className="w-full" style={{ height: '40px' }}>
+                          <source
+                            src={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/profile-audio/${audioPath}`}
+                            type="audio/mpeg"
+                          />
+                        </audio>
+                      </div>
                     )}
                   </div>
                 );

@@ -8,6 +8,7 @@ import { formatCents } from '@/lib/utils';
 import DashboardNav from '@/components/layout/DashboardNav';
 import RescheduleButton from '@/components/dashboard/RescheduleButton';
 import XPWidget from '@/components/dashboard/XPWidget';
+import FileShowcaseToggle from '@/components/dashboard/FileShowcaseToggle';
 
 export const metadata: Metadata = {
   title: 'Dashboard',
@@ -53,17 +54,30 @@ export default async function DashboardPage() {
 
   // Generate signed download URLs using service client (bypasses storage RLS)
   const serviceClient = createServiceClient();
+
+  // Fetch showcase items to know which files are public
+  const { data: showcaseItems } = await serviceClient
+    .from('profile_audio_showcase')
+    .select('deliverable_id, is_public')
+    .eq('user_id', user.id);
+
+  const publicDeliverableIds = new Set(
+    (showcaseItems || []).filter(s => s.is_public).map(s => s.deliverable_id)
+  );
+
   const filesWithUrls = await Promise.all(
     (deliverables || []).map(async (file) => {
       if (file.file_path) {
         const { data } = await serviceClient.storage
           .from('client-audio-files')
           .createSignedUrl(file.file_path, 3600, { download: file.file_name || true }); // 1 hour, force download
-        return { ...file, downloadUrl: data?.signedUrl || null };
+        return { ...file, downloadUrl: data?.signedUrl || null, isPublic: publicDeliverableIds.has(file.id) };
       }
-      return { ...file, downloadUrl: null };
+      return { ...file, downloadUrl: null, isPublic: publicDeliverableIds.has(file.id) };
     })
   );
+
+  const profileSlug = user.profile?.public_profile_slug || null;
 
   return (
     <>
@@ -234,6 +248,15 @@ export default async function DashboardPage() {
                           )}
                         </div>
                       </div>
+                      {file.file_type?.startsWith('audio/') && (
+                        <div className="mt-3 pt-3 border-t border-black/5">
+                          <FileShowcaseToggle
+                            deliverableId={file.id}
+                            initialEnabled={file.isPublic}
+                            profileSlug={profileSlug}
+                          />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
