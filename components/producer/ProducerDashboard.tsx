@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Music, DollarSign, ShoppingCart, TrendingUp, Plus, X, Upload, Trash2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Music, DollarSign, ShoppingCart, TrendingUp, Plus, X, Upload, Trash2, AlertCircle, CheckCircle, FileText } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
-import { PRODUCER_COMMISSION, PLATFORM_COMMISSION, BEAT_LICENSES } from '@/lib/constants';
+import { PRODUCER_COMMISSION, PLATFORM_COMMISSION, BEAT_LICENSES, BEAT_AGREEMENT_TEXT, BEAT_AGREEMENT_VERSION } from '@/lib/constants';
 
 interface Beat {
   id: string;
@@ -44,7 +44,7 @@ interface Earnings {
 
 type Tab = 'beats' | 'sales' | 'earnings';
 
-export default function ProducerDashboard() {
+export default function ProducerDashboard({ isAdmin = false }: { isAdmin?: boolean }) {
   const [tab, setTab] = useState<Tab>('beats');
   const [beats, setBeats] = useState<Beat[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -64,8 +64,10 @@ export default function ProducerDashboard() {
     });
   }, []);
 
-  const tabs: { key: Tab; label: string; icon: typeof Music }[] = [
-    { key: 'beats', label: 'My Beats', icon: Music },
+  const pendingCount = beats.filter((b) => b.status === 'pending_review').length;
+
+  const tabs: { key: Tab; label: string; icon: typeof Music; badge?: number }[] = [
+    { key: 'beats', label: 'My Beats', icon: Music, badge: pendingCount > 0 ? pendingCount : undefined },
     { key: 'sales', label: 'Sales', icon: ShoppingCart },
     { key: 'earnings', label: 'Earnings', icon: DollarSign },
   ];
@@ -86,6 +88,11 @@ export default function ProducerDashboard() {
               >
                 <t.icon className="w-4 h-4" />
                 {t.label}
+                {t.badge && (
+                  <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                    {t.badge}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -98,7 +105,7 @@ export default function ProducerDashboard() {
             <p className="font-mono text-sm text-black/40">Loading...</p>
           ) : (
             <>
-              {tab === 'beats' && <BeatsTab beats={beats} onBeatsChange={setBeats} />}
+              {tab === 'beats' && <BeatsTab beats={beats} onBeatsChange={setBeats} isAdmin={isAdmin} />}
               {tab === 'sales' && <SalesTab sales={sales} />}
               {tab === 'earnings' && earnings && <EarningsTab earnings={earnings} />}
             </>
@@ -109,9 +116,10 @@ export default function ProducerDashboard() {
   );
 }
 
-function BeatsTab({ beats, onBeatsChange }: { beats: Beat[]; onBeatsChange: (beats: Beat[]) => void }) {
+function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; onBeatsChange: (beats: Beat[]) => void; isAdmin?: boolean }) {
   const [showForm, setShowForm] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [reviewBeat, setReviewBeat] = useState<Beat | null>(null);
 
   // Form state
   const [title, setTitle] = useState('');
@@ -129,6 +137,9 @@ function BeatsTab({ beats, onBeatsChange }: { beats: Beat[]; onBeatsChange: (bea
   const [containsSamples, setContainsSamples] = useState(false);
   const [sampleDetails, setSampleDetails] = useState('');
   const [uploadError, setUploadError] = useState('');
+
+  const pendingBeats = beats.filter((b) => b.status === 'pending_review');
+  const activeBeats = beats.filter((b) => b.status !== 'pending_review');
 
   function resetForm() {
     setTitle(''); setGenre(''); setBpm(''); setMusicalKey('');
@@ -188,20 +199,28 @@ function BeatsTab({ beats, onBeatsChange }: { beats: Beat[]; onBeatsChange: (bea
     }
   }
 
+  function handleAgreementSigned(beatId: string) {
+    // Update beat status locally
+    onBeatsChange(beats.map((b) => b.id === beatId ? { ...b, status: 'active' } : b));
+    setReviewBeat(null);
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-heading-md">MY BEATS</h2>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="bg-accent text-black font-mono text-xs font-bold uppercase tracking-wider px-4 py-2 hover:bg-accent/90 inline-flex items-center gap-1"
-        >
-          {showForm ? <><X className="w-3 h-3" /> Cancel</> : <><Plus className="w-3 h-3" /> Upload Beat</>}
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="bg-accent text-black font-mono text-xs font-bold uppercase tracking-wider px-4 py-2 hover:bg-accent/90 inline-flex items-center gap-1"
+          >
+            {showForm ? <><X className="w-3 h-3" /> Cancel</> : <><Plus className="w-3 h-3" /> Upload Beat</>}
+          </button>
+        )}
       </div>
 
-      {/* Upload Form */}
-      {showForm && (
+      {/* Upload Form -- admin only */}
+      {showForm && isAdmin && (
         <div className="border-2 border-accent p-6 mb-8 space-y-4">
           <h3 className="font-mono text-sm font-bold uppercase">Upload New Beat</h3>
 
@@ -336,6 +355,65 @@ function BeatsTab({ beats, onBeatsChange }: { beats: Beat[]; onBeatsChange: (bea
         </div>
       )}
 
+      {/* Pending Review Section */}
+      {pendingBeats.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <AlertCircle className="w-5 h-5 text-amber-500" />
+            <h3 className="font-mono text-sm font-bold uppercase">
+              Pending Review ({pendingBeats.length})
+            </h3>
+          </div>
+          <div className="space-y-3">
+            {pendingBeats.map((beat) => (
+              <div key={beat.id} className="border-2 border-amber-400 bg-amber-50 p-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 bg-amber-100 flex items-center justify-center flex-shrink-0">
+                    <FileText className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-mono text-sm font-bold">{beat.title}</p>
+                      <span className="bg-amber-200 text-amber-800 font-mono text-[10px] font-bold uppercase px-1.5 py-0.5">
+                        Pending Review
+                      </span>
+                    </div>
+                    <p className="font-mono text-xs text-black/50 mt-0.5">
+                      {beat.genre}{beat.bpm && ` · ${beat.bpm} BPM`}{beat.musical_key && ` · ${beat.musical_key}`}
+                    </p>
+                    <div className="flex flex-wrap gap-3 mt-1">
+                      {beat.mp3_lease_price && <span className="font-mono text-[10px] text-black/40">MP3: {formatCents(beat.mp3_lease_price)}</span>}
+                      {beat.trackout_lease_price && <span className="font-mono text-[10px] text-black/40">Trackout: {formatCents(beat.trackout_lease_price)}</span>}
+                      {beat.exclusive_price && beat.has_exclusive && <span className="font-mono text-[10px] text-accent font-bold">EXCL: {formatCents(beat.exclusive_price)}</span>}
+                    </div>
+                  </div>
+                  {beat.preview_url && (
+                    <audio controls preload="none" className="hidden sm:block max-w-[160px] flex-shrink-0">
+                      <source src={beat.preview_url} type="audio/mpeg" />
+                    </audio>
+                  )}
+                  <button
+                    onClick={() => setReviewBeat(beat)}
+                    className="bg-accent text-black font-mono text-xs font-bold uppercase tracking-wider px-4 py-2 hover:bg-accent/90 flex-shrink-0"
+                  >
+                    Review & Approve
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Agreement Review Modal */}
+      {reviewBeat && (
+        <AgreementModal
+          beat={reviewBeat}
+          onClose={() => setReviewBeat(null)}
+          onSigned={handleAgreementSigned}
+        />
+      )}
+
       {/* Stats */}
       {beats.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
@@ -358,21 +436,23 @@ function BeatsTab({ beats, onBeatsChange }: { beats: Beat[]; onBeatsChange: (bea
         </div>
       )}
 
-      {/* Beat list */}
-      {beats.length === 0 && !showForm ? (
+      {/* Active beat list */}
+      {activeBeats.length === 0 && pendingBeats.length === 0 && !showForm ? (
         <div className="border-2 border-black/10 p-12 text-center">
           <Music className="w-12 h-12 text-black/10 mx-auto mb-4" />
-          <p className="font-mono text-sm text-black/40 mb-4">No beats yet. Upload your first beat!</p>
-          <button
-            onClick={() => setShowForm(true)}
-            className="bg-accent text-black font-mono text-xs font-bold uppercase tracking-wider px-5 py-2.5 hover:bg-accent/90 inline-flex items-center gap-1"
-          >
-            <Plus className="w-3 h-3" /> Upload Beat
-          </button>
+          <p className="font-mono text-sm text-black/40 mb-4">{isAdmin ? 'No beats yet. Upload your first beat!' : 'No beats yet.'}</p>
+          {isAdmin && (
+            <button
+              onClick={() => setShowForm(true)}
+              className="bg-accent text-black font-mono text-xs font-bold uppercase tracking-wider px-5 py-2.5 hover:bg-accent/90 inline-flex items-center gap-1"
+            >
+              <Plus className="w-3 h-3" /> Upload Beat
+            </button>
+          )}
         </div>
-      ) : (
+      ) : activeBeats.length > 0 && (
         <div className="space-y-3">
-          {beats.map((beat) => (
+          {activeBeats.map((beat) => (
             <div key={beat.id} className={`border-2 p-4 ${
               beat.status === 'sold_exclusive' ? 'border-accent/30 bg-accent/5' : 'border-black/10'
             }`}>
@@ -382,6 +462,9 @@ function BeatsTab({ beats, onBeatsChange }: { beats: Beat[]; onBeatsChange: (bea
                     <p className="font-mono text-sm font-bold">{beat.title}</p>
                     {beat.status === 'sold_exclusive' && (
                       <span className="bg-accent/20 text-accent font-mono text-[10px] font-bold uppercase px-1.5 py-0.5">Sold Exclusive</span>
+                    )}
+                    {beat.status === 'active' && (
+                      <span className="bg-green-100 text-green-700 font-mono text-[10px] font-bold uppercase px-1.5 py-0.5">Live</span>
                     )}
                   </div>
                   <p className="font-mono text-xs text-black/50 mt-0.5">
@@ -406,14 +489,163 @@ function BeatsTab({ beats, onBeatsChange }: { beats: Beat[]; onBeatsChange: (bea
                     <source src={beat.preview_url} type="audio/mpeg" />
                   </audio>
                 )}
-                <button onClick={() => deleteBeat(beat.id)} className="text-red-400 hover:text-red-600 p-2 flex-shrink-0">
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {isAdmin && (
+                  <button onClick={() => deleteBeat(beat.id)} className="text-red-400 hover:text-red-600 p-2 flex-shrink-0">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </div>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function AgreementModal({ beat, onClose, onSigned }: { beat: Beat; onClose: () => void; onSigned: (beatId: string) => void }) {
+  const [agreed, setAgreed] = useState(false);
+  const [signing, setSigning] = useState(false);
+  const [error, setError] = useState('');
+  const [scrolledToBottom, setScrolledToBottom] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  function handleScroll() {
+    const el = scrollRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+    if (atBottom) setScrolledToBottom(true);
+  }
+
+  async function handleSign() {
+    if (!agreed) return;
+    setSigning(true);
+    setError('');
+
+    try {
+      const res = await fetch('/api/producer/beats/review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ beat_id: beat.id }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        onSigned(beat.id);
+      } else {
+        setError(data.error || 'Failed to sign agreement');
+      }
+    } catch {
+      setError('Failed to sign agreement. Please try again.');
+    }
+    setSigning(false);
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+      <div className="bg-white w-full max-w-2xl max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-black/10">
+          <div>
+            <h3 className="font-mono text-lg font-bold uppercase">Beat Agreement</h3>
+            <p className="font-mono text-xs text-black/50 mt-1">Review and sign to make &quot;{beat.title}&quot; live</p>
+          </div>
+          <button onClick={onClose} className="text-black/30 hover:text-black p-1">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Beat Details */}
+        <div className="px-6 py-4 bg-black/[0.02] border-b border-black/10">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div>
+              <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Beat</p>
+              <p className="font-mono text-sm font-bold">{beat.title}</p>
+            </div>
+            {beat.genre && (
+              <div>
+                <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Genre</p>
+                <p className="font-mono text-sm">{beat.genre}</p>
+              </div>
+            )}
+            {beat.bpm && (
+              <div>
+                <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">BPM</p>
+                <p className="font-mono text-sm">{beat.bpm}</p>
+              </div>
+            )}
+            <div>
+              <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Revenue Split</p>
+              <p className="font-mono text-sm font-bold text-accent">You keep 60%</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-3 mt-2">
+            {beat.mp3_lease_price && <span className="font-mono text-[10px] text-black/50">MP3 Lease: {formatCents(beat.mp3_lease_price)}</span>}
+            {beat.trackout_lease_price && <span className="font-mono text-[10px] text-black/50">Trackout: {formatCents(beat.trackout_lease_price)}</span>}
+            {beat.exclusive_price && beat.has_exclusive && <span className="font-mono text-[10px] text-accent font-bold">Exclusive: {formatCents(beat.exclusive_price)}</span>}
+          </div>
+        </div>
+
+        {/* Agreement Text */}
+        <div
+          ref={scrollRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-y-auto px-6 py-4 min-h-0"
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <FileText className="w-4 h-4 text-black/40" />
+            <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">
+              Agreement v{BEAT_AGREEMENT_VERSION} — scroll to read full terms
+            </p>
+          </div>
+          <pre className="font-mono text-xs text-black/70 whitespace-pre-wrap leading-relaxed">
+            {BEAT_AGREEMENT_TEXT}
+          </pre>
+        </div>
+
+        {/* Sign Section */}
+        <div className="p-6 border-t border-black/10 space-y-4">
+          {!scrolledToBottom && (
+            <p className="font-mono text-[10px] text-amber-600 uppercase tracking-wider">
+              Please scroll through the full agreement before signing
+            </p>
+          )}
+
+          <label className={`flex items-start gap-3 cursor-pointer ${!scrolledToBottom ? 'opacity-50 pointer-events-none' : ''}`}>
+            <input
+              type="checkbox"
+              checked={agreed}
+              onChange={(e) => setAgreed(e.target.checked)}
+              disabled={!scrolledToBottom}
+              className="w-5 h-5 accent-accent mt-0.5 flex-shrink-0"
+            />
+            <span className="font-mono text-xs text-black/70">
+              I have read and agree to the terms of this Beat Licensing & Distribution Agreement. I confirm that I own the rights to this beat and all samples are properly cleared.
+            </span>
+          </label>
+
+          {error && (
+            <p className="font-mono text-sm text-red-600">{error}</p>
+          )}
+
+          <div className="flex gap-3">
+            <button
+              onClick={handleSign}
+              disabled={!agreed || signing}
+              className="bg-accent text-black font-mono text-sm font-bold uppercase tracking-wider px-6 py-3 hover:bg-accent/90 disabled:opacity-50 inline-flex items-center gap-2"
+            >
+              <CheckCircle className="w-4 h-4" />
+              {signing ? 'Signing...' : 'Sign & Approve'}
+            </button>
+            <button
+              onClick={onClose}
+              className="border border-black/20 text-black/60 font-mono text-sm uppercase tracking-wider px-6 py-3 hover:bg-black/5"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

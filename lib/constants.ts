@@ -156,3 +156,59 @@ export const NAV_LINKS = [
 ] as const;
 
 export type UserRole = 'user' | 'engineer' | 'admin';
+
+// Beat agreement
+export const BEAT_AGREEMENT_VERSION = '1.0';
+
+export const BEAT_AGREEMENT_TEXT = `BEAT LICENSING & DISTRIBUTION AGREEMENT
+Version ${BEAT_AGREEMENT_VERSION} — Sweet Dreams Music LLC
+
+This Agreement ("Agreement") is entered into between the Producer ("You") and Sweet Dreams Music LLC ("Platform"), governing the listing, licensing, and distribution of musical compositions ("Beats") on the Platform.
+
+1. REVENUE SPLIT
+All revenue generated from the licensing or sale of your Beats through the Platform shall be split as follows:
+- Producer: 60% of gross sale price
+- Platform: 40% of gross sale price
+Payouts are processed on a regular schedule. The Platform handles all payment processing and applicable fees.
+
+2. LICENSE GRANT
+By listing a Beat on the Platform, you grant Sweet Dreams Music LLC a non-exclusive right to:
+- Display, promote, and distribute the Beat through the Platform's beat store
+- Facilitate licensing transactions (MP3 Lease, Trackout Lease, Exclusive Rights) on your behalf
+- Use the Beat title, audio preview, and your producer name in marketing materials related to the Platform
+This license is non-exclusive. You retain ownership of your Beats and may sell or license them through other channels.
+
+3. PRODUCER WARRANTIES
+You represent and warrant that:
+- You are the sole creator and rights holder of each Beat you submit, or have obtained all necessary permissions
+- All samples used in the Beat are either original, properly licensed, royalty-free, or fully cleared for commercial use
+- The Beat does not infringe upon any third-party copyrights, trademarks, or other intellectual property rights
+- You have the legal authority to enter into this Agreement
+
+4. PLATFORM RESPONSIBILITIES
+The Platform agrees to:
+- List and promote approved Beats on the beat store
+- Handle all payment processing, licensing documentation, and file delivery to buyers
+- Provide a producer dashboard with sales tracking, earnings reports, and payout history
+- Remit the Producer's share of revenue according to the agreed split
+
+5. SAMPLE CLEARANCE
+You are solely responsible for ensuring all samples used in your Beats are properly cleared for commercial licensing. The Platform is not liable for any copyright claims arising from uncleared samples. If a Beat is found to contain uncleared samples, the Platform reserves the right to immediately remove it from the store.
+
+6. CONTENT REMOVAL
+The Platform reserves the right to remove any Beat from the store at any time for policy violations, legal concerns, quality standards, or any other reason at its sole discretion.
+
+7. TERMINATION
+Either party may terminate this Agreement with 30 days written notice. Upon termination:
+- Active license agreements with buyers remain in effect
+- The Producer's Beats will be removed from the store
+- Any pending earnings will be paid out according to the regular payout schedule
+- The Producer may not relicense or resell any Beat that was sold as an Exclusive through the Platform
+
+8. LIMITATION OF LIABILITY
+The Platform shall not be liable for any indirect, incidental, or consequential damages arising from this Agreement. The Platform's total liability shall not exceed the total amount paid to the Producer under this Agreement.
+
+9. GOVERNING LAW
+This Agreement shall be governed by the laws of the State of Indiana, United States.
+
+By signing below, you acknowledge that you have read, understood, and agree to all terms of this Agreement.`;

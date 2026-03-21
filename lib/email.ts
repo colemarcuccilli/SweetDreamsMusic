@@ -535,6 +535,29 @@ export async function sendSessionInvite(to: string, details: {
   } catch (e) { console.error('Email error (session invite):', e); }
 }
 
+export async function sendBeatReviewNotification(to: string, details: {
+  producerName: string; beatTitle: string;
+}) {
+  try {
+    await resend.emails.send({
+      from: FROM, to,
+      subject: 'New Beat Uploaded — Review Required',
+      html: wrap(`
+        ${h1('New Beat for Review')}
+        ${p(`Hey ${details.producerName},`)}
+        ${p(`A new beat has been uploaded to your catalog and needs your review before it goes live on the store.`)}
+        ${detailTable(`
+          ${detail('Beat', details.beatTitle)}
+          ${detail('Status', 'Pending Review')}
+        `)}
+        ${p('Please log in to your Producer Dashboard to review the beat details and sign the agreement to make it live.')}
+        ${btn('Review Beat', `${SITE_URL}/producer`)}
+        ${p('<span style="color:#666;font-size:11px">The beat will not appear on the store until you review and approve it.</span>')}
+      `),
+    });
+  } catch (e) { console.error('Email error (beat review notification):', e); }
+}
+
 export async function sendContactForm(details: {
   name: string; email: string; subject: string; message: string;
 }) {

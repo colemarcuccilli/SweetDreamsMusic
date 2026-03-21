@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   let query = supabase
     .from('bookings')
     .select('*')
-    .order('created_at', { ascending: false })
+    .order('start_time', { ascending: false })
     .limit(limit);
 
   if (status && status !== 'all') {

@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { DollarSign, TrendingUp, Calendar, Music, Filter, ChevronDown } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
+import { PRODUCER_COMMISSION, PLATFORM_COMMISSION } from '@/lib/constants';
 
 interface Booking {
   id: string;
@@ -180,7 +181,9 @@ export default function Accounting() {
       byLicense[p.license_type].count++;
       byLicense[p.license_type].revenue += p.amount_paid;
     });
-    return { total: filteredPurchases.length, totalRevenue, byLicense };
+    const platformCut = Math.round(totalRevenue * PLATFORM_COMMISSION);
+    const producerCut = Math.round(totalRevenue * PRODUCER_COMMISSION);
+    return { total: filteredPurchases.length, totalRevenue, platformCut, producerCut, byLicense };
   }, [filteredPurchases]);
 
   // Breakdowns
@@ -233,12 +236,14 @@ export default function Accounting() {
   }, [filteredBookings]);
 
   const beatsByProducer = useMemo(() => {
-    const map: Record<string, { count: number; revenue: number }> = {};
+    const map: Record<string, { count: number; revenue: number; producerCut: number; platformCut: number }> = {};
     filteredPurchases.forEach((p) => {
       const prod = p.beats?.producer || 'Unknown';
-      if (!map[prod]) map[prod] = { count: 0, revenue: 0 };
+      if (!map[prod]) map[prod] = { count: 0, revenue: 0, producerCut: 0, platformCut: 0 };
       map[prod].count++;
       map[prod].revenue += p.amount_paid;
+      map[prod].producerCut += Math.round(p.amount_paid * PRODUCER_COMMISSION);
+      map[prod].platformCut += Math.round(p.amount_paid * PLATFORM_COMMISSION);
     });
     return Object.entries(map).sort((a, b) => b[1].revenue - a[1].revenue);
   }, [filteredPurchases]);
@@ -341,15 +346,16 @@ export default function Accounting() {
             <div className="space-y-8">
               {/* Top-level stats */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard icon={DollarSign} label="Total Revenue" value={formatCents(sessionStats.completedRevenue + beatStats.totalRevenue + mediaSales.reduce((s, m) => s + m.amount, 0))} accent />
-                <StatCard icon={Calendar} label="Session Revenue" value={formatCents(sessionStats.completedRevenue)} />
+                <StatCard icon={DollarSign} label="Total Revenue (All)" value={formatCents(sessionStats.totalBooked + beatStats.totalRevenue + mediaSales.reduce((s, m) => s + m.amount, 0))} accent />
+                <StatCard icon={Calendar} label="Session Revenue (All)" value={formatCents(sessionStats.totalBooked)} />
                 <StatCard icon={Music} label="Beat Sales" value={formatCents(beatStats.totalRevenue)} />
                 <StatCard icon={TrendingUp} label="Media Sales" value={formatCents(mediaSales.reduce((s, m) => s + m.amount, 0))} />
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <StatCard icon={Calendar} label="Total Sessions" value={String(sessionStats.total)} />
-                <StatCard icon={Calendar} label="Completed" value={String(sessionStats.completed)} />
+                <StatCard icon={Calendar} label="Completed" value={`${sessionStats.completed} · ${formatCents(sessionStats.completedRevenue)}`} />
+                <StatCard icon={Calendar} label="Upcoming" value={`${sessionStats.total - sessionStats.completed} · ${formatCents(sessionStats.totalBooked - sessionStats.completedRevenue)}`} />
                 <StatCard icon={Calendar} label="Total Hours" value={`${sessionStats.totalHours}hr`} />
                 <StatCard icon={DollarSign} label="Remainder Due" value={formatCents(sessionStats.remainderOutstanding)} />
               </div>
@@ -451,15 +457,37 @@ export default function Accounting() {
                   expanded={expandedSection === 'producer'}
                   onToggle={() => toggleSection('producer')}
                 >
-                  {beatsByProducer.map(([name, data]) => (
-                    <div key={name} className="flex justify-between items-center py-2 border-b border-black/5">
-                      <span className="font-mono text-sm font-semibold">{name}</span>
-                      <div className="flex gap-6 font-mono text-sm">
-                        <span className="text-black/50">{data.count} sales</span>
-                        <span className="font-bold">{formatCents(data.revenue)}</span>
-                      </div>
-                    </div>
-                  ))}
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-black/10">
+                        <th className="text-left font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Producer</th>
+                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Sales</th>
+                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Gross</th>
+                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Producer ({Math.round(PRODUCER_COMMISSION * 100)}%)</th>
+                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Platform ({Math.round(PLATFORM_COMMISSION * 100)}%)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {beatsByProducer.map(([name, data]) => (
+                        <tr key={name} className="border-b border-black/5">
+                          <td className="font-mono text-sm font-semibold py-2">{name}</td>
+                          <td className="font-mono text-sm text-right">{data.count}</td>
+                          <td className="font-mono text-sm text-right">{formatCents(data.revenue)}</td>
+                          <td className="font-mono text-sm text-right text-black/50">{formatCents(data.producerCut)}</td>
+                          <td className="font-mono text-sm font-bold text-right text-accent">{formatCents(data.platformCut)}</td>
+                        </tr>
+                      ))}
+                      {beatsByProducer.length > 1 && (
+                        <tr className="border-t-2 border-black/20">
+                          <td className="font-mono text-sm font-bold py-2">TOTAL</td>
+                          <td className="font-mono text-sm text-right font-bold">{beatStats.total}</td>
+                          <td className="font-mono text-sm text-right font-bold">{formatCents(beatStats.totalRevenue)}</td>
+                          <td className="font-mono text-sm text-right font-bold text-black/50">{formatCents(beatStats.producerCut)}</td>
+                          <td className="font-mono text-sm text-right font-bold text-accent">{formatCents(beatStats.platformCut)}</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </BreakdownSection>
               )}
             </div>
@@ -551,13 +579,21 @@ export default function Accounting() {
                 </span>
               </div>
 
+              {/* Commission summary */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <MiniStat label="Gross Revenue" value={formatCents(beatStats.totalRevenue)} />
+                <MiniStat label={`Platform (${Math.round(PLATFORM_COMMISSION * 100)}%)`} value={formatCents(beatStats.platformCut)} />
+                <MiniStat label={`Producer Payouts (${Math.round(PRODUCER_COMMISSION * 100)}%)`} value={formatCents(beatStats.producerCut)} />
+                <MiniStat label="Total Sales" value={String(beatStats.total)} />
+              </div>
+
               {/* License breakdown */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {Object.entries(beatStats.byLicense).map(([type, data]) => (
                   <MiniStat key={type} label={LICENSE_LABELS[type] || type} value={`${data.count} · ${formatCents(data.revenue)}`} />
                 ))}
                 {Object.keys(beatStats.byLicense).length === 0 && (
-                  <MiniStat label="Total Sales" value="0" />
+                  <MiniStat label="No Sales" value="—" />
                 )}
               </div>
 

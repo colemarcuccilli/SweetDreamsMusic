@@ -34,7 +34,7 @@ export default async function FilesPage() {
       if (file.file_path) {
         const { data } = await serviceClient.storage
           .from('client-audio-files')
-          .createSignedUrl(file.file_path, 3600);
+          .createSignedUrl(file.file_path, 3600, { download: file.file_name || true });
         return { ...file, downloadUrl: data?.signedUrl || null };
       }
       return { ...file, downloadUrl: null };

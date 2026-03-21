@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
 
   const { data } = await serviceClient.storage
     .from('client-audio-files')
-    .createSignedUrl(file.file_path, 3600);
+    .createSignedUrl(file.file_path, 3600, { download: true });
 
   if (!data?.signedUrl) {
     return NextResponse.json({ error: 'Could not generate download URL' }, { status: 500 });

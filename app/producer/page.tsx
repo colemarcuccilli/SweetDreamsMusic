@@ -20,7 +20,7 @@ export default async function ProducerPage() {
         email={user.email}
         profileSlug={user.profile?.public_profile_slug}
       />
-      <ProducerDashboard />
+      <ProducerDashboard isAdmin={user.role === 'admin'} />
     </>
   );
 }

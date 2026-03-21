@@ -58,7 +58,7 @@ export default async function DashboardPage() {
       if (file.file_path) {
         const { data } = await serviceClient.storage
           .from('client-audio-files')
-          .createSignedUrl(file.file_path, 3600); // 1 hour
+          .createSignedUrl(file.file_path, 3600, { download: file.file_name || true }); // 1 hour, force download
         return { ...file, downloadUrl: data?.signedUrl || null };
       }
       return { ...file, downloadUrl: null };

@@ -88,7 +88,10 @@ export default function CreateInvite() {
   }
 
   const startHour = parseTimeSlot(startTime);
-  const pricing = calculateSessionTotal(room, duration, startHour, false);
+  // Check if the selected date is today (Fort Wayne time) for same-day surcharge
+  const todayLocal = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Indiana/Indianapolis' });
+  const isSameDay = date === todayLocal;
+  const pricing = calculateSessionTotal(room, duration, startHour, isSameDay);
   const useCustomPrice = customPrice.trim() !== '';
   const customPriceCents = useCustomPrice ? Math.round(parseFloat(customPrice) * 100) : 0;
   const finalTotal = useCustomPrice ? customPriceCents : pricing.total;
@@ -418,6 +421,12 @@ export default function CreateInvite() {
               <div className="flex justify-between text-amber-600">
                 <span>Night surcharges</span>
                 <span>+{formatCents(pricing.nightFees)}</span>
+              </div>
+            )}
+            {pricing.sameDayFee > 0 && (
+              <div className="flex justify-between text-red-600">
+                <span>Same-day booking (+$10/hr)</span>
+                <span>+{formatCents(pricing.sameDayFee)}</span>
               </div>
             )}
           </>

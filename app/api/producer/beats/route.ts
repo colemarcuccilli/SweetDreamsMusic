@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
-import { verifyProducerAccess } from '@/lib/admin-auth';
+import { verifyProducerAccess, verifyAdminAccess } from '@/lib/admin-auth';
 
 export async function GET() {
   const supabase = await createClient();
@@ -17,11 +17,14 @@ export async function GET() {
   return NextResponse.json({ beats: beats || [] });
 }
 
-// POST — producer uploads a new beat
+// POST — admin uploads a beat (producers can view but not upload)
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
+  const isAdmin = await verifyAdminAccess(supabase);
+  if (!isAdmin) return NextResponse.json({ error: 'Admin access required' }, { status: 401 });
+
   const { isProducer, profileId } = await verifyProducerAccess(supabase);
-  if (!isProducer || !profileId) return NextResponse.json({ error: 'Producer access required' }, { status: 401 });
+  if (!isProducer || !profileId) return NextResponse.json({ error: 'Producer profile required' }, { status: 401 });
 
   const serviceClient = createServiceClient();
   const formData = await request.formData();
@@ -113,7 +116,7 @@ export async function POST(request: NextRequest) {
       has_exclusive: hasExclusive,
       contains_samples: containsSamples,
       sample_details: containsSamples ? sampleDetails || null : null,
-      status: 'active',
+      status: 'pending_review',
     })
     .select()
     .single();
@@ -122,11 +125,14 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ beat });
 }
 
-// DELETE — producer removes their own beat
+// DELETE — admin removes a beat
 export async function DELETE(request: NextRequest) {
   const supabase = await createClient();
+  const isAdmin = await verifyAdminAccess(supabase);
+  if (!isAdmin) return NextResponse.json({ error: 'Admin access required' }, { status: 401 });
+
   const { isProducer, profileId } = await verifyProducerAccess(supabase);
-  if (!isProducer || !profileId) return NextResponse.json({ error: 'Producer access required' }, { status: 401 });
+  if (!isProducer || !profileId) return NextResponse.json({ error: 'Producer profile required' }, { status: 401 });
 
   const serviceClient = createServiceClient();
   const { id } = await request.json();

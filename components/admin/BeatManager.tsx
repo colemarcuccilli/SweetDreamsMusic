@@ -335,6 +335,12 @@ export default function BeatManager() {
                   {beat.status === 'sold_exclusive' && (
                     <span className="bg-accent/20 text-accent font-mono text-[10px] font-bold uppercase px-1.5 py-0.5 flex-shrink-0">Sold</span>
                   )}
+                  {beat.status === 'pending_review' && (
+                    <span className="bg-amber-100 text-amber-700 font-mono text-[10px] font-bold uppercase px-1.5 py-0.5 flex-shrink-0">Pending Review</span>
+                  )}
+                  {beat.status === 'active' && (
+                    <span className="bg-green-100 text-green-700 font-mono text-[10px] font-bold uppercase px-1.5 py-0.5 flex-shrink-0">Live</span>
+                  )}
                   {beat.contains_samples && (
                     <span className="bg-amber-100 text-amber-700 font-mono text-[10px] font-bold uppercase px-1.5 py-0.5 flex-shrink-0">Samples</span>
                   )}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { verifyAdminAccess } from '@/lib/admin-auth';
+import { sendBeatReviewNotification } from '@/lib/email';
 
 // GET - list all beats with producer info
 export async function GET() {
@@ -123,12 +124,34 @@ export async function POST(request: NextRequest) {
       has_exclusive: hasExclusive,
       contains_samples: containsSamples,
       sample_details: containsSamples ? sampleDetails || null : null,
-      status: 'active',
+      status: 'pending_review',
     })
     .select()
     .single();
 
   if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 });
+
+  // Send review notification email to producer
+  try {
+    const { data: producerUser } = await serviceClient
+      .from('profiles')
+      .select('user_id')
+      .eq('id', producerId)
+      .single();
+
+    if (producerUser?.user_id) {
+      const { data: { user: authUser } } = await serviceClient.auth.admin.getUserById(producerUser.user_id);
+      if (authUser?.email) {
+        await sendBeatReviewNotification(authUser.email, {
+          producerName,
+          beatTitle: title,
+        });
+      }
+    }
+  } catch (e) {
+    console.error('Failed to send beat review notification:', e);
+  }
+
   return NextResponse.json({ beat });
 }
 

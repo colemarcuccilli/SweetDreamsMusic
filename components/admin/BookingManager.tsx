@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { RefreshCw, ChevronDown, DollarSign, X, Check, Clock, Pencil, Mail, Banknote } from 'lucide-react';
+import { RefreshCw, ChevronDown, DollarSign, X, Check, Clock, Pencil, Mail, Banknote, CreditCard, Send } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
 import { ENGINEERS, ROOM_LABELS } from '@/lib/constants';
 
@@ -65,6 +65,9 @@ export default function BookingManager() {
   const [showCashPayment, setShowCashPayment] = useState<string | null>(null);
   const [cashAmount, setCashAmount] = useState('');
   const [cashNote, setCashNote] = useState('');
+  const [showPaymentLink, setShowPaymentLink] = useState<string | null>(null);
+  const [paymentLinkAmount, setPaymentLinkAmount] = useState('');
+  const [paymentLinkSent, setPaymentLinkSent] = useState<string | null>(null);
 
   async function fetchBookings() {
     setLoading(true);
@@ -135,6 +138,8 @@ export default function BookingManager() {
   }
 
   async function updateNotes(bookingId: string, notes: string) {
+    // Skip if another update is in progress to avoid race conditions
+    if (updatingId) return;
     await fetch('/api/admin/bookings/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -201,6 +206,69 @@ export default function BookingManager() {
       }
     } catch {
       alert('Error recording payment');
+    }
+    setUpdatingId(null);
+  }
+
+  async function markPaidInFull(bookingId: string) {
+    if (!confirm('Mark this booking as paid in full? This sets the remainder to $0.')) return;
+    setUpdatingId(bookingId);
+    await fetch('/api/admin/bookings/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bookingId, updates: { remainder_amount: 0 } }),
+    });
+    setUpdatingId(null);
+    fetchBookings();
+  }
+
+  async function recordStripePaid(bookingId: string) {
+    // Find the booking to get its remainder
+    const booking = bookings.find(b => b.id === bookingId);
+    if (!booking || booking.remainder_amount <= 0) return;
+    const amount = booking.remainder_amount / 100;
+    setUpdatingId(bookingId);
+    try {
+      const res = await fetch('/api/booking/record-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId, amount, method: 'stripe_manual', note: 'Stripe payment recorded manually' }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert(`Stripe payment of $${amount.toFixed(2)} recorded`);
+        fetchBookings();
+      } else {
+        alert(`Failed: ${data.error}`);
+      }
+    } catch {
+      alert('Error recording payment');
+    }
+    setUpdatingId(null);
+  }
+
+  async function sendPaymentLink(bookingId: string) {
+    const amount = Math.round(parseFloat(paymentLinkAmount) * 100);
+    if (isNaN(amount) || amount <= 0) return;
+    if (!confirm(`Send a payment link for $${(amount / 100).toFixed(2)} to the client's email?`)) return;
+    setUpdatingId(bookingId);
+    try {
+      const res = await fetch('/api/booking/send-payment-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId, amount }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPaymentLinkSent(bookingId);
+        setShowPaymentLink(null);
+        alert(`Payment link for $${(amount / 100).toFixed(2)} sent to client's email!`);
+        setTimeout(() => setPaymentLinkSent(null), 5000);
+      } else {
+        alert(`Failed: ${data.error}`);
+      }
+    } catch {
+      alert('Error sending payment link');
     }
     setUpdatingId(null);
   }
@@ -301,9 +369,11 @@ export default function BookingManager() {
                   </div>
                   <div className="text-right flex-shrink-0">
                     <p className="font-mono text-sm font-bold">{formatCents(b.total_amount)}</p>
-                    {b.actual_deposit_paid != null && b.actual_deposit_paid > 0 && (
+                    {b.remainder_amount === 0 ? (
+                      <p className="font-mono text-[10px] text-green-600 font-bold">Paid in Full</p>
+                    ) : b.actual_deposit_paid != null && b.actual_deposit_paid > 0 ? (
                       <p className="font-mono text-[10px] text-green-600">Paid: {formatCents(b.actual_deposit_paid)}</p>
-                    )}
+                    ) : null}
                   </div>
                   <ChevronDown className={`w-4 h-4 text-black/30 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
                 </button>
@@ -520,10 +590,42 @@ export default function BookingManager() {
                       )}
                       {b.remainder_amount > 0 && (
                         <button
-                          onClick={() => { setShowCashPayment(showCashPayment === b.id ? null : b.id); setCashAmount((b.remainder_amount / 100).toFixed(2)); setCashNote(''); }}
+                          onClick={() => { setShowCashPayment(showCashPayment === b.id ? null : b.id); setShowPaymentLink(null); setCashAmount((b.remainder_amount / 100).toFixed(2)); setCashNote(''); }}
                           disabled={updatingId === b.id}
                           className="border border-black/30 text-black/70 font-mono text-xs font-bold uppercase px-3 py-2 hover:bg-black/5 disabled:opacity-50 inline-flex items-center gap-1">
                           <Banknote className="w-3 h-3" /> Record Cash
+                        </button>
+                      )}
+                      {b.remainder_amount > 0 && (
+                        <button
+                          onClick={() => {
+                            if (!confirm(`Record ${formatCents(b.remainder_amount)} as paid via Stripe?`)) return;
+                            recordStripePaid(b.id);
+                          }}
+                          disabled={updatingId === b.id}
+                          className="border border-blue-400 text-blue-600 font-mono text-xs font-bold uppercase px-3 py-2 hover:bg-blue-50 disabled:opacity-50 inline-flex items-center gap-1">
+                          <CreditCard className="w-3 h-3" /> Record Stripe
+                        </button>
+                      )}
+                      {b.remainder_amount > 0 && b.customer_email && (
+                        <button
+                          onClick={() => { setShowPaymentLink(showPaymentLink === b.id ? null : b.id); setShowCashPayment(null); setPaymentLinkAmount((b.remainder_amount / 100).toFixed(2)); }}
+                          disabled={updatingId === b.id}
+                          className="border border-blue-400 text-blue-600 font-mono text-xs font-bold uppercase px-3 py-2 hover:bg-blue-50 disabled:opacity-50 inline-flex items-center gap-1">
+                          <Send className="w-3 h-3" /> Send Payment Link
+                        </button>
+                      )}
+                      {paymentLinkSent === b.id && (
+                        <span className="font-mono text-xs text-green-600 font-bold inline-flex items-center gap-1">
+                          <Check className="w-3 h-3" /> Link Sent!
+                        </span>
+                      )}
+                      {b.remainder_amount > 0 && (
+                        <button
+                          onClick={() => markPaidInFull(b.id)}
+                          disabled={updatingId === b.id}
+                          className="bg-green-600 text-white font-mono text-xs font-bold uppercase px-3 py-2 hover:bg-green-700 disabled:opacity-50 inline-flex items-center gap-1">
+                          <Check className="w-3 h-3" /> Mark Paid in Full
                         </button>
                       )}
                       {b.remainder_amount === 0 && (
@@ -588,10 +690,10 @@ export default function BookingManager() {
                       </div>
                     )}
 
-                    {/* Cash Payment Form */}
+                    {/* Record Cash Payment Form */}
                     {showCashPayment === b.id && (
                       <div className="border border-black/10 p-3 space-y-2">
-                        <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Record Cash/External Payment</p>
+                        <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Record Cash Payment</p>
                         <div className="flex items-center gap-2 flex-wrap">
                           <div className="flex items-center gap-1">
                             <span className="font-mono text-sm">$</span>
@@ -614,10 +716,40 @@ export default function BookingManager() {
                           <button
                             onClick={() => recordCashPayment(b.id)}
                             disabled={updatingId === b.id}
-                            className="bg-black text-white font-mono text-[10px] font-bold uppercase px-3 py-1.5 disabled:opacity-50"
-                          >Record</button>
+                            className="bg-black text-white font-mono text-[10px] font-bold uppercase px-3 py-1.5 disabled:opacity-50 inline-flex items-center gap-1"
+                          ><Banknote className="w-3 h-3" /> Record</button>
                           <button
                             onClick={() => setShowCashPayment(null)}
+                            className="border border-black/20 font-mono text-[10px] text-black/60 uppercase px-3 py-1.5"
+                          >Cancel</button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Send Payment Link Form */}
+                    {showPaymentLink === b.id && (
+                      <div className="border border-blue-200 bg-blue-50/30 p-3 space-y-2">
+                        <p className="font-mono text-[10px] text-blue-600 uppercase tracking-wider font-bold">Send Stripe Payment Link</p>
+                        <p className="font-mono text-[10px] text-black/50">Creates a Stripe checkout link and emails it to {b.customer_email}</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex items-center gap-1">
+                            <span className="font-mono text-sm">$</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={paymentLinkAmount}
+                              onChange={(e) => setPaymentLinkAmount(e.target.value)}
+                              className="w-24 border border-blue-300 px-2 py-1.5 font-mono text-xs focus:border-blue-500 focus:outline-none"
+                              placeholder="Amount"
+                            />
+                          </div>
+                          <button
+                            onClick={() => sendPaymentLink(b.id)}
+                            disabled={updatingId === b.id}
+                            className="bg-blue-600 text-white font-mono text-[10px] font-bold uppercase px-4 py-1.5 hover:bg-blue-700 disabled:opacity-50 inline-flex items-center gap-1"
+                          ><Send className="w-3 h-3" /> Send Link</button>
+                          <button
+                            onClick={() => setShowPaymentLink(null)}
                             className="border border-black/20 font-mono text-[10px] text-black/60 uppercase px-3 py-1.5"
                           >Cancel</button>
                         </div>
