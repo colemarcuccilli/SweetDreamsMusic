@@ -34,10 +34,11 @@ function detailTable(rows: string): string {
 
 export async function sendBookingConfirmation(to: string, details: {
   customerName: string; date: string; startTime: string; duration: number;
-  room: string; total: number; deposit: number;
+  room: string; total: number; deposit: number; bookingId?: string;
 }) {
   try {
     const roomLabel = ROOM_LABELS[details.room as Room] || details.room;
+    const prepUrl = details.bookingId ? `${SITE_URL}/dashboard/prep/${details.bookingId}` : `${SITE_URL}/dashboard`;
     await resend.emails.send({
       from: FROM, to, subject: 'Booking Confirmed — Sweet Dreams Music',
       html: wrap(`
@@ -54,6 +55,11 @@ export async function sendBookingConfirmation(to: string, details: {
         `)}
         ${p('An engineer will be assigned to your session shortly. You\'ll receive another email when they\'re confirmed.')}
         ${p('The remaining balance will be charged to your card on file after your session.')}
+        <div style="margin-top:24px;padding:20px;background:#111;border-left:3px solid #F4C430">
+          ${p('<strong style="color:#F4C430">🎤 Prepare for Your Session</strong>')}
+          ${p('Don\'t waste studio time searching for beats! Upload your beat, share reference tracks, and let your engineer know what you want to accomplish — so you can hit the ground running.')}
+          ${btn('Prepare Now', prepUrl)}
+        </div>
         ${btn('View Dashboard', `${SITE_URL}/dashboard`)}
       `),
     });
@@ -335,10 +341,11 @@ export async function sendAdminBookingAlert(booking: {
 
 export async function sendSessionReminder(to: string, details: {
   customerName: string; artistName?: string | null; date: string; startTime: string;
-  room: string; engineerName: string | null;
+  room: string; engineerName: string | null; bookingId?: string; hasPrep?: boolean;
 }) {
   try {
     const roomLabel = ROOM_LABELS[details.room as Room] || details.room;
+    const prepUrl = details.bookingId ? `${SITE_URL}/dashboard/prep/${details.bookingId}` : null;
     await resend.emails.send({
       from: FROM, to, subject: 'Session in 1 Hour — Sweet Dreams Music',
       html: wrap(`
@@ -350,6 +357,13 @@ export async function sendSessionReminder(to: string, details: {
           ${detail('Studio', roomLabel)}
           ${details.engineerName ? detail('Engineer', details.engineerName) : ''}
         `)}
+        ${!details.hasPrep && prepUrl ? `
+          <div style="margin-top:16px;padding:16px;background:#111;border-left:3px solid #F4C430">
+            ${p('<strong style="color:#F4C430">⚡ Quick Tip</strong>')}
+            ${p('You haven\'t filled out your session prep yet. Even a quick note about what you want to work on helps your engineer prepare.')}
+            ${btn('Prepare Now', prepUrl)}
+          </div>
+        ` : ''}
         ${p('Make sure to arrive a few minutes early. See you soon!')}
       `),
     });
@@ -360,9 +374,24 @@ export async function sendSessionReminderToStaff(emails: string[], details: {
   customerName: string; customerEmail: string; artistName?: string | null;
   date: string; startTime: string; duration: number;
   room: string; engineerName: string;
+  prepSummary?: { sessionType?: string; hasBeats?: boolean; beatSource?: string; lyricsStatus?: string; goals?: string; refCount?: number } | null;
 }) {
   try {
     const roomLabel = ROOM_LABELS[details.room as Room] || details.room;
+    const prep = details.prepSummary;
+    const prepSection = prep ? `
+      <div style="margin-top:16px;padding:16px;background:#111;border-left:3px solid #F4C430">
+        <p style="font-size:12px;color:#F4C430;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin:0 0 12px">Session Prep</p>
+        ${detailTable(`
+          ${prep.sessionType ? detail('Type', prep.sessionType) : ''}
+          ${prep.goals ? detail('Goals', prep.goals.substring(0, 120) + (prep.goals.length > 120 ? '...' : '')) : ''}
+          ${prep.beatSource ? detail('Beat', prep.beatSource) : ''}
+          ${prep.lyricsStatus ? detail('Lyrics', prep.lyricsStatus) : ''}
+          ${prep.refCount ? detail('References', `${prep.refCount} track${prep.refCount > 1 ? 's' : ''}`) : ''}
+        `)}
+      </div>
+    ` : '';
+
     const html = wrap(`
       ${h1('Upcoming Session — 1 Hour')}
       ${p('A session is starting in about 1 hour.')}
@@ -376,6 +405,7 @@ export async function sendSessionReminderToStaff(emails: string[], details: {
         ${detail('Studio', roomLabel)}
         ${detail('Engineer', details.engineerName)}
       `)}
+      ${prepSection}
       ${btn('View Dashboard', `${SITE_URL}/admin`)}
     `);
 

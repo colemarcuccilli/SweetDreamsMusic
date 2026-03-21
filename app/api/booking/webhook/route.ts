@@ -80,6 +80,7 @@ export async function POST(request: NextRequest) {
           room: meta.room,
           total: parseInt(meta.total_amount),
           deposit: session.amount_total || parseInt(meta.deposit_amount),
+          bookingId: newBooking?.id,
         });
 
         // Admin alert
@@ -163,6 +164,7 @@ export async function POST(request: NextRequest) {
               room: existingBooking.room || '',
               total: existingBooking.total_amount,
               deposit: session.amount_total || existingBooking.deposit_amount,
+              bookingId,
             });
           }
 
@@ -322,6 +324,7 @@ export async function POST(request: NextRequest) {
             customerName: asyncMeta.customer_name, date: dateStr, startTime: timeStr,
             duration, room: asyncMeta.room, total: parseInt(asyncMeta.total_amount),
             deposit: asyncSession.amount_total || parseInt(asyncMeta.deposit_amount),
+            bookingId: newBooking?.id,
           });
 
           await sendAdminBookingAlert({
@@ -384,6 +387,7 @@ export async function POST(request: NextRequest) {
               duration: existingBooking.duration, room: existingBooking.room || '',
               total: existingBooking.total_amount,
               deposit: asyncSession.amount_total || existingBooking.deposit_amount,
+              bookingId,
             });
           }
 

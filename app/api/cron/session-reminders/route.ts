@@ -69,6 +69,15 @@ export async function GET(request: NextRequest) {
         ? booking.customer_name
         : booking.artist_name || booking.customer_email || 'Client';
 
+      // Check if session prep has been filled out
+      const { data: prepData } = await supabase
+        .from('session_prep')
+        .select('completed')
+        .eq('booking_id', booking.id)
+        .maybeSingle();
+
+      const hasPrep = !!prepData?.completed;
+
       // 1. Send reminder to client (if they have an email and it's not empty)
       if (booking.customer_email && booking.customer_email.trim()) {
         await sendSessionReminder(booking.customer_email, {
@@ -78,6 +87,8 @@ export async function GET(request: NextRequest) {
           startTime: timeStr,
           room: booking.room || '',
           engineerName: booking.engineer_name || null,
+          bookingId: booking.id,
+          hasPrep,
         });
       }
 
@@ -97,6 +108,26 @@ export async function GET(request: NextRequest) {
         staffEmails.add(booking.created_by_email);
       }
 
+      // Build prep summary for staff email
+      let prepSummary = null;
+      if (prepData) {
+        const fullPrep = await supabase
+          .from('session_prep')
+          .select('session_type, session_goals, beat_source, lyrics_status, reference_tracks')
+          .eq('booking_id', booking.id)
+          .maybeSingle();
+
+        if (fullPrep.data) {
+          prepSummary = {
+            sessionType: fullPrep.data.session_type,
+            goals: fullPrep.data.session_goals,
+            beatSource: fullPrep.data.beat_source,
+            lyricsStatus: fullPrep.data.lyrics_status,
+            refCount: Array.isArray(fullPrep.data.reference_tracks) ? fullPrep.data.reference_tracks.length : 0,
+          };
+        }
+      }
+
       await sendSessionReminderToStaff([...staffEmails], {
         customerName: displayName,
         customerEmail: booking.customer_email?.trim() || 'Not provided',
@@ -106,6 +137,7 @@ export async function GET(request: NextRequest) {
         duration: booking.duration,
         room: booking.room || '',
         engineerName: booking.engineer_name || 'Unassigned',
+        prepSummary,
       });
 
       // 3. Mark reminder as sent

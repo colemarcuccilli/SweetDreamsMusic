@@ -408,6 +408,10 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
   const [notifying, setNotifying] = useState(false);
   const [showChangeEngineer, setShowChangeEngineer] = useState(false);
   const [selectedEngineer, setSelectedEngineer] = useState(booking.engineer_name || '');
+  const [showPrep, setShowPrep] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [prepData, setPrepData] = useState<any>(null);
+  const [prepLoading, setPrepLoading] = useState(false);
 
   const date = new Date(booking.start_time);
   const remainder = booking.remainder_amount || 0;
@@ -662,6 +666,75 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
 
       {booking.admin_notes && (
         <p className="font-mono text-xs text-black/50 mt-2 border-t border-black/5 pt-2">{booking.admin_notes}</p>
+      )}
+
+      {/* Session Prep Info */}
+      {booking.status === 'confirmed' && (
+        <div className="mt-2 border-t border-black/5 pt-2">
+          <button
+            onClick={async () => {
+              if (!showPrep && !prepData) {
+                setPrepLoading(true);
+                try {
+                  const res = await fetch(`/api/booking/prep?bookingId=${booking.id}`);
+                  const data = await res.json();
+                  setPrepData(data.prep || null);
+                } catch { setPrepData(null); }
+                setPrepLoading(false);
+              }
+              setShowPrep(!showPrep);
+            }}
+            className="font-mono text-[11px] font-bold text-accent hover:underline flex items-center gap-1"
+          >
+            🎤 {showPrep ? 'Hide' : 'View'} Session Prep
+          </button>
+          {showPrep && prepLoading && <p className="font-mono text-[10px] text-black/40 mt-1">Loading...</p>}
+          {showPrep && !prepLoading && !prepData && (
+            <p className="font-mono text-[10px] text-black/40 mt-1 italic">Client hasn&apos;t filled out their session prep yet.</p>
+          )}
+          {showPrep && prepData && (
+            <div className="mt-2 space-y-1.5 bg-black/[.02] p-3 border border-black/5">
+              {prepData.session_type && (
+                <p className="font-mono text-[11px]"><span className="text-black/40 uppercase">Type:</span> <span className="font-semibold">{String(prepData.session_type).replace('_', ' + ')}</span></p>
+              )}
+              {prepData.session_goals && (
+                <p className="font-mono text-[11px]"><span className="text-black/40 uppercase">Goals:</span> {String(prepData.session_goals)}</p>
+              )}
+              {prepData.beat_source && (
+                <p className="font-mono text-[11px]"><span className="text-black/40 uppercase">Beat:</span> {String(prepData.beat_source).replace('_', ' ')}{prepData.beat_file_name ? ` — ${prepData.beat_file_name}` : ''}{prepData.beat_link ? ` — ${prepData.beat_link}` : ''}</p>
+              )}
+              {prepData.beat_notes && (
+                <p className="font-mono text-[11px]"><span className="text-black/40 uppercase">Beat Notes:</span> {String(prepData.beat_notes)}</p>
+              )}
+              {prepData.lyrics_status && (
+                <p className="font-mono text-[11px]"><span className="text-black/40 uppercase">Lyrics:</span> {String(prepData.lyrics_status)}</p>
+              )}
+              {prepData.vocal_style && (
+                <p className="font-mono text-[11px]"><span className="text-black/40 uppercase">Style:</span> {String(prepData.vocal_style)}</p>
+              )}
+              {prepData.num_songs && Number(prepData.num_songs) > 1 && (
+                <p className="font-mono text-[11px]"><span className="text-black/40 uppercase">Songs:</span> {String(prepData.num_songs)}+</p>
+              )}
+              {Array.isArray(prepData.reference_tracks) && prepData.reference_tracks.length > 0 && (
+                <div>
+                  <p className="font-mono text-[10px] text-black/40 uppercase">References:</p>
+                  {prepData.reference_tracks.map((ref: { title?: string; artist?: string; link?: string }, i: number) => (
+                    <p key={i} className="font-mono text-[11px] ml-2">
+                      • {ref.title || 'Untitled'}{ref.artist ? ` — ${ref.artist}` : ''}
+                      {ref.link && <a href={ref.link} target="_blank" rel="noopener noreferrer" className="text-accent ml-1 hover:underline">↗</a>}
+                    </p>
+                  ))}
+                </div>
+              )}
+              {prepData.special_requests && (
+                <p className="font-mono text-[11px]"><span className="text-black/40 uppercase">Requests:</span> {String(prepData.special_requests)}</p>
+              )}
+              {!prepData.completed && (
+                <p className="font-mono text-[10px] text-amber-600 italic mt-1">⚠ Client started prep but hasn&apos;t submitted yet</p>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Action buttons */}

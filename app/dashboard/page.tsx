@@ -165,9 +165,19 @@ export default async function DashboardPage() {
                           </span>
                         </div>
                       </div>
-                      {/* Reschedule request for confirmed sessions with an engineer assigned that isn't the requested one */}
-                      {booking.status === 'confirmed' && booking.engineer_name && !booking.reschedule_requested && (
-                        <RescheduleButton bookingId={booking.id} />
+                      {/* Session prep + reschedule for confirmed sessions */}
+                      {booking.status === 'confirmed' && (
+                        <div className="mt-3 pt-3 border-t border-black/5 flex flex-wrap gap-2">
+                          <Link
+                            href={`/dashboard/prep/${booking.id}`}
+                            className="font-mono text-[11px] font-bold text-accent hover:underline no-underline flex items-center gap-1"
+                          >
+                            🎤 Prepare for Session
+                          </Link>
+                          {booking.engineer_name && !booking.reschedule_requested && (
+                            <RescheduleButton bookingId={booking.id} />
+                          )}
+                        </div>
                       )}
                     </div>
                   ))}
