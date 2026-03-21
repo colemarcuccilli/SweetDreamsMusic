@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { RefreshCw, ChevronDown, DollarSign, X, Check, Clock, Pencil, Mail, Banknote, CreditCard, Send } from 'lucide-react';
+import { RefreshCw, ChevronDown, DollarSign, X, Check, Clock, Pencil, Mail, Banknote, CreditCard, Send, Upload } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
 import { ENGINEERS, ROOM_LABELS } from '@/lib/constants';
 
@@ -68,6 +68,12 @@ export default function BookingManager() {
   const [showPaymentLink, setShowPaymentLink] = useState<string | null>(null);
   const [paymentLinkAmount, setPaymentLinkAmount] = useState('');
   const [paymentLinkSent, setPaymentLinkSent] = useState<string | null>(null);
+  const [showFileUpload, setShowFileUpload] = useState<string | null>(null);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   async function fetchBookings() {
     setLoading(true);
@@ -106,6 +112,65 @@ export default function BookingManager() {
     });
     setUpdatingId(null);
     fetchBookings();
+  }
+
+  async function handleFileUpload(booking: Booking) {
+    if (uploadFiles.length === 0 || !booking.customer_email) return;
+    setUploading(true);
+    const sessionDate = new Date(booking.start_time);
+
+    try {
+      for (let i = 0; i < uploadFiles.length; i++) {
+        const file = uploadFiles[i];
+        setUploadProgress(`Uploading ${i + 1} of ${uploadFiles.length}: ${file.name}`);
+
+        // Step 1: Get signed upload URL
+        const urlRes = await fetch('/api/admin/library/upload-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileName: file.name, customerEmail: booking.customer_email }),
+        });
+        const urlData = await urlRes.json();
+        if (!urlRes.ok) { alert(`Failed: ${urlData.error}`); continue; }
+
+        // Step 2: Upload directly to Supabase Storage
+        const uploadRes = await fetch(urlData.signedUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': file.type || 'application/octet-stream' },
+          body: file,
+        });
+        if (!uploadRes.ok) { alert(`Upload failed for ${file.name}`); continue; }
+
+        // Step 3: Create record + send email on last file only
+        const isLast = i === uploadFiles.length - 1;
+        const formData = new FormData();
+        formData.append('user_id', urlData.userId);
+        formData.append('file_name', file.name);
+        formData.append('file_path', urlData.filePath);
+        formData.append('file_size', String(file.size));
+        formData.append('file_type', file.type);
+        formData.append('display_name', file.name);
+        formData.append('description', `From session on ${sessionDate.toLocaleDateString('en-US', { timeZone: 'UTC' })}`);
+        formData.append('send_email', isLast ? 'true' : 'false');
+        formData.append('customer_email', booking.customer_email);
+        formData.append('customer_name', booking.customer_name);
+        formData.append('booking_room', booking.room || '');
+        formData.append('booking_date', sessionDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' }));
+        formData.append('skip_upload', 'true');
+        await fetch('/api/admin/library/deliverables', { method: 'POST', body: formData });
+      }
+
+      setUploadSuccess(booking.id);
+      setUploadFiles([]);
+      setUploadProgress('');
+      setTimeout(() => setUploadSuccess(null), 5000);
+    } catch (err) {
+      console.error('Upload error:', err);
+      alert('Network error — please try again');
+    } finally {
+      setUploading(false);
+      setUploadProgress('');
+    }
   }
 
   async function chargeRemainder(bookingId: string, amount: number) {
@@ -753,6 +818,87 @@ export default function BookingManager() {
                             className="border border-black/20 font-mono text-[10px] text-black/60 uppercase px-3 py-1.5"
                           >Cancel</button>
                         </div>
+                      </div>
+                    )}
+
+                    {/* File Upload */}
+                    <div className="flex flex-wrap gap-2 items-center">
+                      <button
+                        onClick={() => { setShowFileUpload(showFileUpload === b.id ? null : b.id); setUploadFiles([]); setUploadSuccess(null); }}
+                        className="border border-black/20 text-black/60 font-mono text-[10px] font-bold uppercase px-3 py-2 hover:bg-black/5 inline-flex items-center gap-1"
+                      >
+                        <Upload className="w-3 h-3" /> Upload Files
+                      </button>
+                      {uploadSuccess === b.id && (
+                        <span className="font-mono text-xs text-green-600 font-bold inline-flex items-center gap-1">
+                          <Check className="w-3 h-3" /> Files Delivered!
+                        </span>
+                      )}
+                    </div>
+                    {showFileUpload === b.id && (
+                      <div className="border border-black/10 p-3 space-y-3">
+                        <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider font-bold">Upload Session Files for {b.customer_name}</p>
+                        {b.customer_email ? (
+                          <>
+                            <div
+                              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                              onDragLeave={() => setIsDragging(false)}
+                              onDrop={(e) => {
+                                e.preventDefault();
+                                setIsDragging(false);
+                                const files = Array.from(e.dataTransfer.files);
+                                setUploadFiles(prev => [...prev, ...files]);
+                              }}
+                              className={`border-2 border-dashed p-4 text-center cursor-pointer transition-colors ${isDragging ? 'border-accent bg-accent/5' : 'border-black/15 hover:border-accent/50'}`}
+                              onClick={() => {
+                                const input = document.createElement('input');
+                                input.type = 'file';
+                                input.multiple = true;
+                                input.onchange = () => {
+                                  if (input.files) setUploadFiles(prev => [...prev, ...Array.from(input.files!)]);
+                                };
+                                input.click();
+                              }}
+                            >
+                              <p className="font-mono text-xs text-black/50">
+                                {isDragging ? 'Drop files here' : 'Click or drag files to upload'}
+                              </p>
+                            </div>
+                            {uploadFiles.length > 0 && (
+                              <div className="space-y-1">
+                                {uploadFiles.map((file, idx) => (
+                                  <div key={idx} className="flex items-center justify-between bg-black/[0.02] px-2 py-1 font-mono text-xs">
+                                    <span className="truncate">{file.name}</span>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <span className="text-black/40">{(file.size / 1024 / 1024).toFixed(1)}MB</span>
+                                      <button onClick={() => setUploadFiles(prev => prev.filter((_, i) => i !== idx))} className="text-red-500 hover:text-red-700">
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {uploadProgress && (
+                              <p className="font-mono text-[10px] text-accent">{uploadProgress}</p>
+                            )}
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleFileUpload(b)}
+                                disabled={uploading || uploadFiles.length === 0}
+                                className="bg-black text-white font-mono text-[10px] font-bold uppercase px-4 py-2 hover:bg-black/80 disabled:opacity-50 inline-flex items-center gap-1"
+                              >
+                                <Upload className="w-3 h-3" /> {uploading ? 'Uploading...' : `Upload ${uploadFiles.length} File${uploadFiles.length !== 1 ? 's' : ''} & Notify`}
+                              </button>
+                              <button
+                                onClick={() => { setShowFileUpload(null); setUploadFiles([]); }}
+                                className="border border-black/20 font-mono text-[10px] text-black/60 uppercase px-3 py-2"
+                              >Cancel</button>
+                            </div>
+                          </>
+                        ) : (
+                          <p className="font-mono text-xs text-red-500">No customer email on this booking — cannot upload files.</p>
+                        )}
                       </div>
                     )}
 
