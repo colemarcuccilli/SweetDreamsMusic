@@ -32,25 +32,86 @@ export async function GET(request: NextRequest) {
   });
 }
 
-// POST — producer signs the agreement and beat goes active
-export async function POST(request: NextRequest) {
+// PATCH — producer edits beat details (title, genre, bpm, key, tags) while pending
+export async function PATCH(request: NextRequest) {
   const supabase = await createClient();
   const { isProducer, profileId } = await verifyProducerAccess(supabase);
   if (!isProducer || !profileId) return NextResponse.json({ error: 'Producer access required' }, { status: 401 });
 
   const serviceClient = createServiceClient();
   const body = await request.json();
-  const { beat_id } = body;
+  const { beat_id, title, genre, bpm, musical_key, tags } = body;
 
-  if (!beat_id) {
+  if (!beat_id) return NextResponse.json({ error: 'beat_id required' }, { status: 400 });
+
+  // Verify beat belongs to producer and is pending
+  const { data: beat } = await serviceClient
+    .from('beats')
+    .select('id, producer_id, status')
+    .eq('id', beat_id)
+    .single();
+
+  if (!beat) return NextResponse.json({ error: 'Beat not found' }, { status: 404 });
+  if (beat.producer_id !== profileId) return NextResponse.json({ error: 'Not your beat' }, { status: 403 });
+  if (beat.status !== 'pending_review') return NextResponse.json({ error: 'Can only edit beats pending review' }, { status: 400 });
+
+  // Build update object — only allowed fields
+  const updates: Record<string, unknown> = {};
+  if (title !== undefined && title.trim()) updates.title = title.trim();
+  if (genre !== undefined) updates.genre = genre.trim() || null;
+  if (bpm !== undefined) updates.bpm = bpm ? parseInt(bpm) : null;
+  if (musical_key !== undefined) updates.musical_key = musical_key.trim() || null;
+  if (tags !== undefined) {
+    updates.tags = typeof tags === 'string'
+      ? tags.split(',').map((t: string) => t.trim()).filter(Boolean)
+      : tags;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: 'No valid updates provided' }, { status: 400 });
+  }
+
+  const { data: updated, error } = await serviceClient
+    .from('beats')
+    .update(updates)
+    .eq('id', beat_id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Beat update error:', error);
+    return NextResponse.json({ error: 'Failed to update beat' }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true, beat: updated });
+}
+
+// POST — producer uploads cover image, signs agreement, and beat goes active
+export async function POST(request: NextRequest) {
+  const supabase = await createClient();
+  const { isProducer, profileId } = await verifyProducerAccess(supabase);
+  if (!isProducer || !profileId) return NextResponse.json({ error: 'Producer access required' }, { status: 401 });
+
+  const serviceClient = createServiceClient();
+
+  // Accept FormData for cover image upload
+  const formData = await request.formData();
+  const beatId = formData.get('beat_id') as string;
+  const coverImage = formData.get('cover_image') as File | null;
+
+  if (!beatId) {
     return NextResponse.json({ error: 'beat_id required' }, { status: 400 });
+  }
+
+  if (!coverImage || coverImage.size === 0) {
+    return NextResponse.json({ error: 'Cover image is required to go live' }, { status: 400 });
   }
 
   // Verify the beat exists, belongs to this producer, and is pending_review
   const { data: beat, error: beatError } = await serviceClient
     .from('beats')
     .select('id, title, producer, producer_id, status')
-    .eq('id', beat_id)
+    .eq('id', beatId)
     .single();
 
   if (beatError || !beat) {
@@ -64,6 +125,32 @@ export async function POST(request: NextRequest) {
   if (beat.status !== 'pending_review') {
     return NextResponse.json({ error: `Beat is not pending review (current status: ${beat.status})` }, { status: 400 });
   }
+
+  // Upload cover image to storage
+  const ext = coverImage.name.split('.').pop()?.toLowerCase() || 'jpg';
+  const imagePath = `covers/${beatId}.${ext}`;
+  const imageBuffer = Buffer.from(await coverImage.arrayBuffer());
+
+  const { error: uploadError } = await serviceClient
+    .storage
+    .from('beats')
+    .upload(imagePath, imageBuffer, {
+      contentType: coverImage.type || 'image/jpeg',
+      upsert: true,
+    });
+
+  if (uploadError) {
+    console.error('Cover image upload error:', uploadError);
+    return NextResponse.json({ error: 'Failed to upload cover image' }, { status: 500 });
+  }
+
+  // Get public URL for the cover image
+  const { data: urlData } = serviceClient
+    .storage
+    .from('beats')
+    .getPublicUrl(imagePath);
+
+  const coverImageUrl = urlData.publicUrl;
 
   // Get producer name
   const { data: profile } = await serviceClient
@@ -103,10 +190,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to save agreement' }, { status: 500 });
   }
 
-  // Update beat status to active
+  // Update beat status to active + set cover image
   const { error: updateError } = await serviceClient
     .from('beats')
-    .update({ status: 'active' })
+    .update({
+      status: 'active',
+      cover_image_url: coverImageUrl,
+      cover_image_path: imagePath,
+    })
     .eq('id', beat.id);
 
   if (updateError) {
@@ -114,5 +205,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Agreement saved but failed to activate beat' }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true, agreement });
+  return NextResponse.json({ success: true, agreement, cover_image_url: coverImageUrl });
 }

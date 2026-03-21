@@ -9,7 +9,7 @@ export async function GET() {
 
   const { data: beats, error } = await supabase
     .from('beats')
-    .select('id, title, genre, bpm, musical_key, mp3_lease_price, trackout_lease_price, exclusive_price, has_exclusive, lease_count, total_lease_revenue, status, created_at, preview_url')
+    .select('id, title, genre, bpm, musical_key, tags, mp3_lease_price, trackout_lease_price, exclusive_price, has_exclusive, lease_count, total_lease_revenue, status, created_at, preview_url, cover_image_url')
     .eq('producer_id', profileId)
     .order('created_at', { ascending: false });
 

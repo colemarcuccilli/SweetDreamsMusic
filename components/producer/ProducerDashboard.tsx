@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Music, DollarSign, ShoppingCart, TrendingUp, Plus, X, Upload, Trash2, AlertCircle, CheckCircle, FileText } from 'lucide-react';
+import { Music, DollarSign, ShoppingCart, TrendingUp, Plus, X, Upload, Trash2, AlertCircle, CheckCircle, FileText, ImagePlus, Pencil } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
 import { PRODUCER_COMMISSION, PLATFORM_COMMISSION, BEAT_LICENSES, BEAT_AGREEMENT_TEXT, BEAT_AGREEMENT_VERSION } from '@/lib/constants';
 
@@ -11,6 +11,7 @@ interface Beat {
   genre: string | null;
   bpm: number | null;
   musical_key: string | null;
+  tags: string[] | null;
   mp3_lease_price: number | null;
   trackout_lease_price: number | null;
   exclusive_price: number | null;
@@ -20,6 +21,7 @@ interface Beat {
   status: string;
   created_at: string;
   preview_url: string | null;
+  cover_image_url: string | null;
 }
 
 interface Sale {
@@ -506,9 +508,32 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
 function AgreementModal({ beat, onClose, onSigned }: { beat: Beat; onClose: () => void; onSigned: (beatId: string) => void }) {
   const [agreed, setAgreed] = useState(false);
   const [signing, setSigning] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [scrolledToBottom, setScrolledToBottom] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Editable fields
+  const [editMode, setEditMode] = useState(false);
+  const [editTitle, setEditTitle] = useState(beat.title);
+  const [editGenre, setEditGenre] = useState(beat.genre || '');
+  const [editBpm, setEditBpm] = useState(String(beat.bpm || ''));
+  const [editKey, setEditKey] = useState(beat.musical_key || '');
+  const [editTags, setEditTags] = useState((beat.tags || []).join(', '));
+  const [localBeat, setLocalBeat] = useState(beat);
+
+  // Cover image
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
+
+  function handleCoverSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCoverFile(file);
+    const reader = new FileReader();
+    reader.onload = () => setCoverPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  }
 
   function handleScroll() {
     const el = scrollRef.current;
@@ -517,21 +542,53 @@ function AgreementModal({ beat, onClose, onSigned }: { beat: Beat; onClose: () =
     if (atBottom) setScrolledToBottom(true);
   }
 
+  async function saveEdits() {
+    setSaving(true);
+    setError('');
+    try {
+      const res = await fetch('/api/producer/beats/review', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          beat_id: localBeat.id,
+          title: editTitle,
+          genre: editGenre,
+          bpm: editBpm,
+          musical_key: editKey,
+          tags: editTags,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.beat) {
+        setLocalBeat({ ...localBeat, title: data.beat.title, genre: data.beat.genre, bpm: data.beat.bpm, musical_key: data.beat.musical_key, tags: data.beat.tags });
+        setEditMode(false);
+      } else {
+        setError(data.error || 'Failed to save edits');
+      }
+    } catch {
+      setError('Failed to save edits');
+    }
+    setSaving(false);
+  }
+
   async function handleSign() {
-    if (!agreed) return;
+    if (!agreed || !coverFile) return;
     setSigning(true);
     setError('');
 
     try {
+      const formData = new FormData();
+      formData.append('beat_id', localBeat.id);
+      formData.append('cover_image', coverFile);
+
       const res = await fetch('/api/producer/beats/review', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ beat_id: beat.id }),
+        body: formData,
       });
       const data = await res.json();
 
       if (data.success) {
-        onSigned(beat.id);
+        onSigned(localBeat.id);
       } else {
         setError(data.error || 'Failed to sign agreement');
       }
@@ -548,41 +605,131 @@ function AgreementModal({ beat, onClose, onSigned }: { beat: Beat; onClose: () =
         <div className="flex items-center justify-between p-6 border-b border-black/10">
           <div>
             <h3 className="font-mono text-lg font-bold uppercase">Beat Agreement</h3>
-            <p className="font-mono text-xs text-black/50 mt-1">Review and sign to make &quot;{beat.title}&quot; live</p>
+            <p className="font-mono text-xs text-black/50 mt-1">Review, edit, and sign to make &quot;{localBeat.title}&quot; live</p>
           </div>
           <button onClick={onClose} className="text-black/30 hover:text-black p-1">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Beat Details */}
+        {/* Beat Details — Editable */}
         <div className="px-6 py-4 bg-black/[0.02] border-b border-black/10">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div>
-              <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Beat</p>
-              <p className="font-mono text-sm font-bold">{beat.title}</p>
-            </div>
-            {beat.genre && (
-              <div>
-                <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Genre</p>
-                <p className="font-mono text-sm">{beat.genre}</p>
+          {editMode ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="col-span-2">
+                  <label className="block font-mono text-[10px] text-black/40 uppercase tracking-wider mb-1">Title</label>
+                  <input type="text" value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
+                    className="w-full border border-black/20 px-2 py-1.5 font-mono text-sm focus:border-accent focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block font-mono text-[10px] text-black/40 uppercase tracking-wider mb-1">Genre</label>
+                  <input type="text" value={editGenre} onChange={(e) => setEditGenre(e.target.value)}
+                    className="w-full border border-black/20 px-2 py-1.5 font-mono text-sm focus:border-accent focus:outline-none" />
+                </div>
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="block font-mono text-[10px] text-black/40 uppercase tracking-wider mb-1">BPM</label>
+                    <input type="number" value={editBpm} onChange={(e) => setEditBpm(e.target.value)}
+                      className="w-full border border-black/20 px-2 py-1.5 font-mono text-sm focus:border-accent focus:outline-none" />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block font-mono text-[10px] text-black/40 uppercase tracking-wider mb-1">Key</label>
+                    <input type="text" value={editKey} onChange={(e) => setEditKey(e.target.value)}
+                      className="w-full border border-black/20 px-2 py-1.5 font-mono text-sm focus:border-accent focus:outline-none" />
+                  </div>
+                </div>
               </div>
-            )}
-            {beat.bpm && (
               <div>
-                <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">BPM</p>
-                <p className="font-mono text-sm">{beat.bpm}</p>
+                <label className="block font-mono text-[10px] text-black/40 uppercase tracking-wider mb-1">Tags (comma separated)</label>
+                <input type="text" value={editTags} onChange={(e) => setEditTags(e.target.value)}
+                  className="w-full border border-black/20 px-2 py-1.5 font-mono text-sm focus:border-accent focus:outline-none" placeholder="dark, trap, melodic" />
               </div>
-            )}
-            <div>
-              <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Revenue Split</p>
-              <p className="font-mono text-sm font-bold text-accent">You keep 60%</p>
+              <div className="flex gap-2">
+                <button onClick={saveEdits} disabled={saving || !editTitle.trim()}
+                  className="bg-black text-white font-mono text-xs font-bold uppercase px-4 py-2 hover:bg-black/80 disabled:opacity-50">
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+                <button onClick={() => { setEditMode(false); setEditTitle(localBeat.title); setEditGenre(localBeat.genre || ''); setEditBpm(String(localBeat.bpm || '')); setEditKey(localBeat.musical_key || ''); setEditTags((localBeat.tags || []).join(', ')); }}
+                  className="border border-black/20 text-black/60 font-mono text-xs uppercase px-4 py-2 hover:bg-black/5">
+                  Cancel
+                </button>
+              </div>
             </div>
+          ) : (
+            <>
+              <div className="flex items-start justify-between">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1">
+                  <div>
+                    <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Beat</p>
+                    <p className="font-mono text-sm font-bold">{localBeat.title}</p>
+                  </div>
+                  {localBeat.genre && (
+                    <div>
+                      <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Genre</p>
+                      <p className="font-mono text-sm">{localBeat.genre}</p>
+                    </div>
+                  )}
+                  {localBeat.bpm && (
+                    <div>
+                      <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">BPM</p>
+                      <p className="font-mono text-sm">{localBeat.bpm}</p>
+                    </div>
+                  )}
+                  <div>
+                    <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Revenue Split</p>
+                    <p className="font-mono text-sm font-bold text-accent">You keep 60%</p>
+                  </div>
+                </div>
+                <button onClick={() => setEditMode(true)}
+                  className="text-black/30 hover:text-accent p-1 flex-shrink-0" title="Edit details">
+                  <Pencil className="w-4 h-4" />
+                </button>
+              </div>
+              {localBeat.tags && localBeat.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {localBeat.tags.map((tag, i) => (
+                    <span key={i} className="font-mono text-[10px] text-black/40 border border-black/10 px-1.5 py-0.5">{tag}</span>
+                  ))}
+                </div>
+              )}
+              <div className="flex flex-wrap gap-3 mt-2">
+                {localBeat.mp3_lease_price && <span className="font-mono text-[10px] text-black/50">MP3 Lease: {formatCents(localBeat.mp3_lease_price)}</span>}
+                {localBeat.trackout_lease_price && <span className="font-mono text-[10px] text-black/50">Trackout: {formatCents(localBeat.trackout_lease_price)}</span>}
+                {localBeat.exclusive_price && localBeat.has_exclusive && <span className="font-mono text-[10px] text-accent font-bold">Exclusive: {formatCents(localBeat.exclusive_price)}</span>}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Cover Image Upload — Required */}
+        <div className="px-6 py-4 border-b border-black/10">
+          <div className="flex items-center gap-2 mb-3">
+            <ImagePlus className="w-4 h-4 text-black/40" />
+            <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">
+              Cover Image <span className="text-red-500">*</span> — Required to go live
+            </p>
           </div>
-          <div className="flex flex-wrap gap-3 mt-2">
-            {beat.mp3_lease_price && <span className="font-mono text-[10px] text-black/50">MP3 Lease: {formatCents(beat.mp3_lease_price)}</span>}
-            {beat.trackout_lease_price && <span className="font-mono text-[10px] text-black/50">Trackout: {formatCents(beat.trackout_lease_price)}</span>}
-            {beat.exclusive_price && beat.has_exclusive && <span className="font-mono text-[10px] text-accent font-bold">Exclusive: {formatCents(beat.exclusive_price)}</span>}
+          <div className="flex items-center gap-4">
+            {coverPreview ? (
+              <div className="relative w-24 h-24 flex-shrink-0">
+                <img src={coverPreview} alt="Cover preview" className="w-24 h-24 object-cover border-2 border-accent" />
+                <button onClick={() => { setCoverFile(null); setCoverPreview(null); }}
+                  className="absolute -top-2 -right-2 bg-red-500 text-white w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ) : (
+              <label className="w-24 h-24 border-2 border-dashed border-black/20 flex flex-col items-center justify-center cursor-pointer hover:border-accent transition-colors flex-shrink-0">
+                <ImagePlus className="w-6 h-6 text-black/20 mb-1" />
+                <span className="font-mono text-[9px] text-black/30 uppercase">Upload</span>
+                <input type="file" accept="image/*" onChange={handleCoverSelect} className="hidden" />
+              </label>
+            )}
+            <div className="font-mono text-xs text-black/40 space-y-1">
+              <p>Upload artwork for this beat. This will show in the store and on your profile.</p>
+              <p className="text-[10px]">Recommended: square image, at least 500×500px. JPG or PNG.</p>
+            </div>
           </div>
         </div>
 
@@ -611,6 +758,12 @@ function AgreementModal({ beat, onClose, onSigned }: { beat: Beat; onClose: () =
             </p>
           )}
 
+          {!coverFile && scrolledToBottom && (
+            <p className="font-mono text-[10px] text-red-500 uppercase tracking-wider">
+              You must upload a cover image before signing
+            </p>
+          )}
+
           <label className={`flex items-start gap-3 cursor-pointer ${!scrolledToBottom ? 'opacity-50 pointer-events-none' : ''}`}>
             <input
               type="checkbox"
@@ -631,11 +784,11 @@ function AgreementModal({ beat, onClose, onSigned }: { beat: Beat; onClose: () =
           <div className="flex gap-3">
             <button
               onClick={handleSign}
-              disabled={!agreed || signing}
+              disabled={!agreed || !coverFile || signing}
               className="bg-accent text-black font-mono text-sm font-bold uppercase tracking-wider px-6 py-3 hover:bg-accent/90 disabled:opacity-50 inline-flex items-center gap-2"
             >
               <CheckCircle className="w-4 h-4" />
-              {signing ? 'Signing...' : 'Sign & Approve'}
+              {signing ? 'Signing...' : 'Upload Cover & Sign'}
             </button>
             <button
               onClick={onClose}

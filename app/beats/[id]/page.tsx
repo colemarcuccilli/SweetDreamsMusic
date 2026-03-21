@@ -54,17 +54,24 @@ export default async function BeatDetailPage({ params }: Props) {
               <Link href="/beats" className="font-mono text-xs text-white/40 hover:text-accent uppercase tracking-wider no-underline mb-4 block">
                 &larr; Back to beats
               </Link>
-              <h1 className="text-display-md mb-3">{beat.title}</h1>
-              <p className="font-mono text-white/50 text-lg mb-6">
-                by{' '}
-                {producer?.public_profile_slug ? (
-                  <Link href={`/u/${producer.public_profile_slug}`} className="text-accent hover:underline no-underline">
-                    {producerName}
-                  </Link>
-                ) : (
-                  producerName
+              <div className="flex items-start gap-6 mb-6">
+                {beat.cover_image_url && (
+                  <img src={beat.cover_image_url} alt={beat.title} className="w-32 h-32 sm:w-40 sm:h-40 object-cover flex-shrink-0 border border-white/10" />
                 )}
-              </p>
+                <div>
+                  <h1 className="text-display-md mb-3">{beat.title}</h1>
+                  <p className="font-mono text-white/50 text-lg">
+                    by{' '}
+                    {producer?.public_profile_slug ? (
+                      <Link href={`/u/${producer.public_profile_slug}`} className="text-accent hover:underline no-underline">
+                        {producerName}
+                      </Link>
+                    ) : (
+                      producerName
+                    )}
+                  </p>
+                </div>
+              </div>
 
               {/* Tags */}
               <div className="flex flex-wrap gap-2 mb-8">

@@ -15,6 +15,7 @@ export interface BeatData {
   musical_key: string | null;
   tags: string[];
   preview_url: string | null;
+  cover_image_url: string | null;
   mp3_lease_price: number | null;
   trackout_lease_price: number | null;
   exclusive_price: number | null;
@@ -57,6 +58,7 @@ export default function BeatCard({ beat, isSaved, onToggleSave, showWriteButton 
         producer: producerName,
         producerSlug: producerSlug || undefined,
         previewUrl: beat.preview_url,
+        coverImageUrl: beat.cover_image_url || undefined,
         genre: beat.genre || undefined,
         bpm: beat.bpm || undefined,
         musicalKey: beat.musical_key || undefined,
@@ -72,17 +74,26 @@ export default function BeatCard({ beat, isSaved, onToggleSave, showWriteButton 
       {/* Play area */}
       <div className="p-4 sm:p-5">
         <div className="flex items-start gap-3">
-          {/* Play button */}
+          {/* Play button / Cover image */}
           <button
             onClick={handlePlayToggle}
             disabled={!beat.preview_url}
-            className={`w-12 h-12 flex items-center justify-center flex-shrink-0 transition-colors ${
-              isThisPlaying
-                ? 'bg-accent text-black'
-                : 'bg-black text-white hover:bg-accent hover:text-black'
+            className={`w-12 h-12 flex items-center justify-center flex-shrink-0 transition-colors relative overflow-hidden ${
+              beat.cover_image_url ? '' : (isThisPlaying ? 'bg-accent text-black' : 'bg-black text-white hover:bg-accent hover:text-black')
             } disabled:opacity-30`}
           >
-            {isThisPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
+            {beat.cover_image_url ? (
+              <>
+                <img src={beat.cover_image_url} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                <div className={`absolute inset-0 flex items-center justify-center transition-opacity ${
+                  isThisPlaying ? 'bg-accent/80' : 'bg-black/40 hover:bg-accent/70'
+                }`}>
+                  {isThisPlaying ? <Pause className="w-5 h-5 text-black" /> : <Play className="w-5 h-5 ml-0.5 text-white" />}
+                </div>
+              </>
+            ) : (
+              isThisPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />
+            )}
           </button>
 
           {/* Track info */}

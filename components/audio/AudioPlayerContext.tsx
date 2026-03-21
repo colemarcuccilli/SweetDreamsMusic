@@ -8,6 +8,7 @@ export interface AudioTrack {
   producer: string;
   producerSlug?: string;
   previewUrl: string;
+  coverImageUrl?: string;
   genre?: string;
   bpm?: number;
   musicalKey?: string;
