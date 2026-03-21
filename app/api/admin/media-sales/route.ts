@@ -65,6 +65,41 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ sale });
 }
 
+// PUT — update an existing media sale
+export async function PUT(request: NextRequest) {
+  const supabase = await createClient();
+  const hasAccess = await verifyEngineerAccess(supabase);
+  if (!hasAccess) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const body = await request.json();
+  const { id, description, amount, saleType, soldBy, filmedBy, editedBy, clientName, clientEmail, notes } = body;
+
+  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+  if (!description || amount === undefined) return NextResponse.json({ error: 'Description and amount required' }, { status: 400 });
+
+  const serviceClient = createServiceClient();
+  const { data: sale, error } = await serviceClient
+    .from('media_sales')
+    .update({
+      description,
+      amount: Math.round(amount * 100),
+      sale_type: saleType || 'video',
+      sold_by: soldBy || null,
+      filmed_by: filmedBy || null,
+      edited_by: editedBy || null,
+      engineer_name: soldBy || '',
+      client_name: clientName || null,
+      client_email: clientEmail || null,
+      notes: notes || null,
+    })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ sale });
+}
+
 // DELETE — remove a media sale
 export async function DELETE(request: NextRequest) {
   const supabase = await createClient();

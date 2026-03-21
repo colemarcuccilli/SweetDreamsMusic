@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, DollarSign, Video, Filter } from 'lucide-react';
+import { Plus, Trash2, DollarSign, Video, Pencil, X, Check } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
 import { ENGINEERS } from '@/lib/constants';
 
@@ -35,6 +35,7 @@ export default function MediaSales() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   // Form
   const [description, setDescription] = useState('');
@@ -57,17 +58,46 @@ export default function MediaSales() {
     setLoading(false);
   }
 
-  async function handleCreate() {
+  function resetForm() {
+    setDescription(''); setAmount(''); setSaleType('video'); setSoldBy(''); setFilmedBy(''); setEditedBy('');
+    setClientName(''); setClientEmail(''); setNotes('');
+    setEditingId(null);
+  }
+
+  function startEdit(sale: MediaSale) {
+    setEditingId(sale.id);
+    setDescription(sale.description);
+    setAmount((sale.amount / 100).toFixed(2));
+    setSaleType(sale.sale_type || 'video');
+    setSoldBy(sale.sold_by || '');
+    setFilmedBy(sale.filmed_by || '');
+    setEditedBy(sale.edited_by || '');
+    setClientName(sale.client_name || '');
+    setClientEmail(sale.client_email || '');
+    setNotes(sale.notes || '');
+    setShowForm(true);
+  }
+
+  async function handleSave() {
     if (!description || !amount) { alert('Description and amount required'); return; }
     setSaving(true);
-    const res = await fetch('/api/admin/media-sales', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ description, amount: parseFloat(amount), saleType, soldBy, filmedBy, editedBy, clientName, clientEmail, notes }),
-    });
+
+    const body = { description, amount: parseFloat(amount), saleType, soldBy, filmedBy, editedBy, clientName, clientEmail, notes };
+
+    const res = editingId
+      ? await fetch('/api/admin/media-sales', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: editingId, ...body }),
+        })
+      : await fetch('/api/admin/media-sales', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
     if (res.ok) {
-      setDescription(''); setAmount(''); setSaleType('video'); setSoldBy(''); setFilmedBy(''); setEditedBy('');
-      setClientName(''); setClientEmail(''); setNotes('');
+      resetForm();
       setShowForm(false);
       fetchSales();
     } else {
@@ -113,6 +143,28 @@ export default function MediaSales() {
     return Object.entries(map);
   }, [sales]);
 
+  // Per-person payout tracking
+  const personPayouts = useMemo(() => {
+    const map: Record<string, { soldCount: number; soldRevenue: number; soldCommission: number; filmedCount: number; editedCount: number }> = {};
+    sales.forEach(s => {
+      if (s.sold_by) {
+        if (!map[s.sold_by]) map[s.sold_by] = { soldCount: 0, soldRevenue: 0, soldCommission: 0, filmedCount: 0, editedCount: 0 };
+        map[s.sold_by].soldCount++;
+        map[s.sold_by].soldRevenue += s.amount;
+        map[s.sold_by].soldCommission += Math.round(s.amount * MEDIA_COMMISSION);
+      }
+      if (s.filmed_by) {
+        if (!map[s.filmed_by]) map[s.filmed_by] = { soldCount: 0, soldRevenue: 0, soldCommission: 0, filmedCount: 0, editedCount: 0 };
+        map[s.filmed_by].filmedCount++;
+      }
+      if (s.edited_by) {
+        if (!map[s.edited_by]) map[s.edited_by] = { soldCount: 0, soldRevenue: 0, soldCommission: 0, filmedCount: 0, editedCount: 0 };
+        map[s.edited_by].editedCount++;
+      }
+    });
+    return Object.entries(map).sort((a, b) => b[1].soldCommission - a[1].soldCommission);
+  }, [sales]);
+
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -121,17 +173,19 @@ export default function MediaSales() {
           <p className="font-mono text-xs text-black/40 mt-1">Track video, photo, and content sales. 15% commission to the seller.</p>
         </div>
         <button
-          onClick={() => setShowForm(!showForm)}
+          onClick={() => { resetForm(); setShowForm(!showForm); }}
           className="inline-flex items-center gap-2 bg-black text-white font-mono text-xs font-bold uppercase tracking-wider px-5 py-2.5 hover:bg-black/80 transition-colors"
         >
           <Plus className="w-3 h-3" /> Log Sale
         </button>
       </div>
 
-      {/* New Sale Form */}
+      {/* New/Edit Sale Form */}
       {showForm && (
         <div className="border-2 border-accent p-6 space-y-4">
-          <h3 className="font-mono text-sm font-bold uppercase tracking-wider">Log New Media Sale</h3>
+          <h3 className="font-mono text-sm font-bold uppercase tracking-wider">
+            {editingId ? 'Edit Media Sale' : 'Log New Media Sale'}
+          </h3>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -217,11 +271,11 @@ export default function MediaSales() {
           )}
 
           <div className="flex gap-2">
-            <button onClick={handleCreate} disabled={saving || !description || !amount}
+            <button onClick={handleSave} disabled={saving || !description || !amount}
               className="bg-accent text-black font-mono text-xs font-bold uppercase tracking-wider px-5 py-2.5 hover:bg-accent/90 disabled:opacity-50 transition-colors">
-              {saving ? 'Saving...' : 'Log Sale'}
+              {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Log Sale'}
             </button>
-            <button onClick={() => setShowForm(false)}
+            <button onClick={() => { setShowForm(false); resetForm(); }}
               className="border border-black/20 font-mono text-xs font-bold uppercase tracking-wider px-5 py-2.5 hover:bg-black/5 transition-colors">
               Cancel
             </button>
@@ -252,6 +306,37 @@ export default function MediaSales() {
               </div>
             ))}
           </div>
+
+          {/* Per-Person Payout Breakdown */}
+          {personPayouts.length > 0 && (
+            <div className="border border-black/10 p-4">
+              <h3 className="font-mono text-sm font-bold uppercase tracking-wider mb-3">Team Payouts & Involvement</h3>
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-black/10">
+                    <th className="text-left font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Person</th>
+                    <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Sales Brought In</th>
+                    <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Sales Revenue</th>
+                    <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Commission Owed (15%)</th>
+                    <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Filmed</th>
+                    <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Edited</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {personPayouts.map(([name, data]) => (
+                    <tr key={name} className="border-b border-black/5">
+                      <td className="font-mono text-sm font-semibold py-2">{name}</td>
+                      <td className="font-mono text-sm text-right">{data.soldCount}</td>
+                      <td className="font-mono text-sm text-right">{formatCents(data.soldRevenue)}</td>
+                      <td className="font-mono text-sm text-right font-bold text-accent">{formatCents(data.soldCommission)}</td>
+                      <td className="font-mono text-sm text-right text-black/50">{data.filmedCount || '—'}</td>
+                      <td className="font-mono text-sm text-right text-black/50">{data.editedCount || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* By Seller Breakdown */}
           {bySeller.length > 0 && (
@@ -312,9 +397,14 @@ export default function MediaSales() {
                           <p className="font-mono text-[10px] text-accent">{formatCents(Math.round(sale.amount * MEDIA_COMMISSION))} commission</p>
                         )}
                       </div>
-                      <button onClick={() => handleDelete(sale.id)} className="text-red-400 hover:text-red-600 p-1 flex-shrink-0">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex flex-col gap-1 flex-shrink-0">
+                        <button onClick={() => startEdit(sale)} className="text-black/40 hover:text-accent p-1" title="Edit">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => handleDelete(sale.id)} className="text-red-400 hover:text-red-600 p-1" title="Delete">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}

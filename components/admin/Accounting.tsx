@@ -31,7 +31,7 @@ interface BeatPurchase {
   beats: { title: string; producer: string } | null;
 }
 
-type View = 'overview' | 'sessions' | 'beats';
+type View = 'overview' | 'sessions' | 'beats' | 'media';
 type DatePreset = 'thisMonth' | 'lastMonth' | 'month' | '30d' | '90d' | 'year' | 'custom';
 
 function getMonthOptions(): { value: string; label: string }[] {
@@ -93,7 +93,7 @@ const LICENSE_LABELS: Record<string, string> = {
 export default function Accounting() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [beatPurchases, setBeatPurchases] = useState<BeatPurchase[]>([]);
-  const [mediaSales, setMediaSales] = useState<{ amount: number }[]>([]);
+  const [mediaSales, setMediaSales] = useState<{ id: string; description: string; amount: number; sale_type: string; sold_by: string | null; filmed_by: string | null; edited_by: string | null; client_name: string | null; notes: string | null; created_at: string }[]>([]);
   const [cancelledBookings, setCancelledBookings] = useState<{ id: string; customer_name: string; start_time: string; total_amount: number; deposit_amount: number; actual_deposit_paid: number | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>('overview');
@@ -248,6 +248,52 @@ export default function Accounting() {
     return Object.entries(map).sort((a, b) => b[1].revenue - a[1].revenue);
   }, [filteredPurchases]);
 
+  // Media stats
+  const MEDIA_COMMISSION = 0.15;
+
+  const mediaStats = useMemo(() => {
+    const totalRevenue = mediaSales.reduce((s, m) => s + m.amount, 0);
+    const totalCommissions = mediaSales.reduce((s, m) => s + (m.sold_by ? Math.round(m.amount * MEDIA_COMMISSION) : 0), 0);
+    const businessRevenue = totalRevenue - totalCommissions;
+
+    // By type
+    const byType: Record<string, { count: number; revenue: number }> = {};
+    mediaSales.forEach(m => {
+      const type = m.sale_type || 'other';
+      if (!byType[type]) byType[type] = { count: 0, revenue: 0 };
+      byType[type].count++;
+      byType[type].revenue += m.amount;
+    });
+
+    // Per-person payouts
+    const personPayouts: Record<string, { soldCount: number; soldRevenue: number; commission: number; filmedCount: number; editedCount: number }> = {};
+    mediaSales.forEach(m => {
+      if (m.sold_by) {
+        if (!personPayouts[m.sold_by]) personPayouts[m.sold_by] = { soldCount: 0, soldRevenue: 0, commission: 0, filmedCount: 0, editedCount: 0 };
+        personPayouts[m.sold_by].soldCount++;
+        personPayouts[m.sold_by].soldRevenue += m.amount;
+        personPayouts[m.sold_by].commission += Math.round(m.amount * MEDIA_COMMISSION);
+      }
+      if (m.filmed_by) {
+        if (!personPayouts[m.filmed_by]) personPayouts[m.filmed_by] = { soldCount: 0, soldRevenue: 0, commission: 0, filmedCount: 0, editedCount: 0 };
+        personPayouts[m.filmed_by].filmedCount++;
+      }
+      if (m.edited_by) {
+        if (!personPayouts[m.edited_by]) personPayouts[m.edited_by] = { soldCount: 0, soldRevenue: 0, commission: 0, filmedCount: 0, editedCount: 0 };
+        personPayouts[m.edited_by].editedCount++;
+      }
+    });
+
+    return { total: mediaSales.length, totalRevenue, totalCommissions, businessRevenue, byType, personPayouts: Object.entries(personPayouts).sort((a, b) => b[1].commission - a[1].commission) };
+  }, [mediaSales]);
+
+  const SALE_TYPE_LABELS: Record<string, string> = {
+    video: 'Music Video',
+    photo: 'Photo Shoot',
+    content: 'Content Creation',
+    other: 'Other',
+  };
+
   const STATUS_COLORS: Record<string, string> = {
     pending: 'bg-yellow-100 text-yellow-800',
     pending_approval: 'bg-orange-100 text-orange-800',
@@ -265,6 +311,7 @@ export default function Accounting() {
     { key: 'overview', label: 'Overview' },
     { key: 'sessions', label: 'Sessions' },
     { key: 'beats', label: 'Beat Sales' },
+    { key: 'media', label: 'Media Sales' },
   ];
 
   function toggleSection(key: string) {
@@ -623,6 +670,95 @@ export default function Accounting() {
                 ))}
                 {filteredPurchases.length === 0 && (
                   <p className="font-mono text-sm text-black/30 text-center py-12">No beat sales found</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ========= MEDIA SALES DETAIL ========= */}
+          {view === 'media' && (
+            <div className="space-y-6">
+              {/* Summary cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <MiniStat label="Total Media Revenue" value={formatCents(mediaStats.totalRevenue)} />
+                <MiniStat label="Business Revenue (85%)" value={formatCents(mediaStats.businessRevenue)} />
+                <MiniStat label="Total Commissions Owed" value={formatCents(mediaStats.totalCommissions)} />
+                <MiniStat label="Total Sales" value={String(mediaStats.total)} />
+              </div>
+
+              {/* By Type */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {Object.entries(mediaStats.byType).map(([type, data]) => (
+                  <MiniStat key={type} label={SALE_TYPE_LABELS[type] || type} value={`${data.count} · ${formatCents(data.revenue)}`} />
+                ))}
+                {Object.keys(mediaStats.byType).length === 0 && (
+                  <MiniStat label="No Sales" value="—" />
+                )}
+              </div>
+
+              {/* Per-Person Payouts */}
+              {mediaStats.personPayouts.length > 0 && (
+                <div className="border border-black/10 p-4">
+                  <h3 className="font-mono text-sm font-bold uppercase tracking-wider mb-3">Team Payouts & Involvement</h3>
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-black/10">
+                        <th className="text-left font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Person</th>
+                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Sales Brought In</th>
+                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Sales Revenue</th>
+                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Commission Owed (15%)</th>
+                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Filmed</th>
+                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Edited</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mediaStats.personPayouts.map(([name, data]) => (
+                        <tr key={name} className="border-b border-black/5">
+                          <td className="font-mono text-sm font-semibold py-2">{name}</td>
+                          <td className="font-mono text-sm text-right">{data.soldCount}</td>
+                          <td className="font-mono text-sm text-right">{formatCents(data.soldRevenue)}</td>
+                          <td className="font-mono text-sm text-right font-bold text-accent">{formatCents(data.commission)}</td>
+                          <td className="font-mono text-sm text-right text-black/50">{data.filmedCount || '—'}</td>
+                          <td className="font-mono text-sm text-right text-black/50">{data.editedCount || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Sales List */}
+              <div className="space-y-1">
+                <div className="hidden md:grid grid-cols-12 gap-2 font-mono text-[10px] text-black/40 uppercase tracking-wider py-2 px-3 border-b border-black/10">
+                  <div className="col-span-2">Date</div>
+                  <div className="col-span-3">Description</div>
+                  <div className="col-span-1">Type</div>
+                  <div className="col-span-2">Client</div>
+                  <div className="col-span-2">Crew</div>
+                  <div className="col-span-1 text-right">Amount</div>
+                  <div className="col-span-1 text-right">Commission</div>
+                </div>
+                {mediaSales.map((m) => (
+                  <div key={m.id} className="grid grid-cols-2 md:grid-cols-12 gap-2 font-mono text-xs py-3 px-3 border-b border-black/5 hover:bg-black/[0.02]">
+                    <div className="col-span-2">
+                      {new Date(m.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
+                    </div>
+                    <div className="col-span-3 font-semibold truncate">{m.description}</div>
+                    <div className="col-span-1">
+                      <span className="text-[10px] font-bold uppercase bg-black/5 px-1.5 py-0.5">{SALE_TYPE_LABELS[m.sale_type] || m.sale_type}</span>
+                    </div>
+                    <div className="col-span-2 text-black/60 truncate">{m.client_name || '—'}</div>
+                    <div className="col-span-2 text-black/50 truncate">
+                      {[m.sold_by && `S: ${m.sold_by}`, m.filmed_by && `F: ${m.filmed_by}`, m.edited_by && `E: ${m.edited_by}`].filter(Boolean).join(' · ') || '—'}
+                    </div>
+                    <div className="col-span-1 text-right font-bold">{formatCents(m.amount)}</div>
+                    <div className="col-span-1 text-right text-accent font-bold">
+                      {m.sold_by ? formatCents(Math.round(m.amount * MEDIA_COMMISSION)) : '—'}
+                    </div>
+                  </div>
+                ))}
+                {mediaSales.length === 0 && (
+                  <p className="font-mono text-sm text-black/30 text-center py-12">No media sales found</p>
                 )}
               </div>
             </div>
