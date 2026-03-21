@@ -3,9 +3,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { DollarSign, TrendingUp, Calendar, Filter } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
+import { ENGINEER_SESSION_SPLIT, MEDIA_SELLER_COMMISSION } from '@/lib/constants';
 
-const ENGINEER_SPLIT = 0.6;
-const MEDIA_COMMISSION = 0.15;
+const ENGINEER_SPLIT = ENGINEER_SESSION_SPLIT;
+const MEDIA_COMMISSION = MEDIA_SELLER_COMMISSION;
 
 interface Booking {
   id: string;

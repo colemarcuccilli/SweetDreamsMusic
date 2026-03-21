@@ -142,6 +142,9 @@ export type BeatLicenseType = keyof typeof BEAT_LICENSES;
 // Beat store commission rates
 export const PRODUCER_COMMISSION = 0.60; // 60% to producer
 export const PLATFORM_COMMISSION = 0.40; // 40% to platform
+export const ENGINEER_SESSION_SPLIT = 0.60; // 60% to engineer for sessions
+export const BUSINESS_SESSION_SPLIT = 0.40; // 40% to business for sessions
+export const MEDIA_SELLER_COMMISSION = 0.15; // 15% to seller for media sales
 export const EXCLUSIVE_PRICE_FLOOR = 40000; // $400 minimum exclusive price in cents
 
 export const NAV_LINKS = [
