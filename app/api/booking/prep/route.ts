@@ -15,6 +15,30 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
+    // Verify booking ownership or staff access
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    const isStaff = profile?.role === 'engineer' || profile?.role === 'admin';
+
+    if (!isStaff) {
+      // Non-staff: verify they own the booking
+      const { createServiceClient } = await import('@/lib/supabase/server');
+      const serviceClient = createServiceClient();
+      const { data: booking } = await serviceClient
+        .from('bookings')
+        .select('customer_email')
+        .eq('id', bookingId)
+        .single();
+
+      if (!booking || booking.customer_email !== user.email) {
+        return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
+      }
+    }
+
     const { data: prep } = await supabase
       .from('session_prep')
       .select('*')
@@ -86,7 +110,7 @@ export async function POST(request: NextRequest) {
         .update({
           ...prepData,
           updated_at: now,
-          ...(isCompleted ? { completed_at: now } : {}),
+          completed_at: isCompleted ? now : null,
         })
         .eq('id', existing.id)
         .select()

@@ -31,7 +31,10 @@ export async function GET(request: NextRequest) {
 
     // Non-staff can only see their own bookings
     if (!isStaff) {
-      query = query.eq('customer_email', user.email!);
+      if (!user.email) {
+        return NextResponse.json({ error: 'No email on account' }, { status: 400 });
+      }
+      query = query.eq('customer_email', user.email);
     }
 
     const { data: booking, error } = await query.single();
