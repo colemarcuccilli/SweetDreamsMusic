@@ -3,12 +3,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Search, SlidersHorizontal, Music, X } from 'lucide-react';
 import BeatCard, { type BeatData } from './BeatCard';
+import { BEAT_GENRES } from '@/lib/constants';
 
 interface BeatStoreClientProps {
   initialBeats: BeatData[];
 }
 
-const GENRE_OPTIONS = ['Hip-Hop', 'R&B', 'Trap', 'Pop', 'Lo-Fi', 'Drill', 'Afrobeats', 'Soul', 'Jazz', 'Rock'];
+const GENRE_OPTIONS = BEAT_GENRES.map(g => g.value);
 const SORT_OPTIONS = [
   { value: 'newest', label: 'Newest' },
   { value: 'popular', label: 'Most Popular' },

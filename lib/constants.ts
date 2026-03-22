@@ -147,6 +147,25 @@ export const BUSINESS_SESSION_SPLIT = 0.40; // 40% to business for sessions
 export const MEDIA_SELLER_COMMISSION = 0.15; // 15% to seller for media sales
 export const EXCLUSIVE_PRICE_FLOOR = 40000; // $400 minimum exclusive price in cents
 
+// Beat store genres with cover art colors
+export const BEAT_GENRES: { value: string; label: string; bg: string; text: string }[] = [
+  { value: 'Hip-Hop', label: 'Hip-Hop', bg: '#1a1a2e', text: '#e6c94a' },
+  { value: 'Trap', label: 'Trap', bg: '#0d0d0d', text: '#ff4444' },
+  { value: 'R&B', label: 'R&B', bg: '#2d1b4e', text: '#e8a0ff' },
+  { value: 'Pop', label: 'Pop', bg: '#ff6b9d', text: '#ffffff' },
+  { value: 'Drill', label: 'Drill', bg: '#0a0a0a', text: '#00e5ff' },
+  { value: 'Lo-Fi', label: 'Lo-Fi', bg: '#2c3e50', text: '#f39c12' },
+  { value: 'Afrobeats', label: 'Afrobeats', bg: '#1b5e20', text: '#ffd600' },
+  { value: 'Soul', label: 'Soul', bg: '#4a1a2e', text: '#ffb74d' },
+  { value: 'Jazz', label: 'Jazz', bg: '#1a237e', text: '#c5cae9' },
+  { value: 'Rock', label: 'Rock', bg: '#3e0000', text: '#ffffff' },
+  { value: 'Country', label: 'Country', bg: '#5d4037', text: '#ffcc80' },
+  { value: 'Electronic', label: 'Electronic', bg: '#0d0d0d', text: '#00ff88' },
+  { value: 'Latin', label: 'Latin', bg: '#e65100', text: '#fff9c4' },
+  { value: 'Reggaeton', label: 'Reggaeton', bg: '#004d40', text: '#80cbc4' },
+  { value: 'Boom Bap', label: 'Boom Bap', bg: '#212121', text: '#bdbdbd' },
+];
+
 export const NAV_LINKS = [
   { href: '/', label: 'Home' },
   { href: '/book', label: 'Book' },

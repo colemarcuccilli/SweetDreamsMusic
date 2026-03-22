@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, Music, X, Upload, TrendingUp, ShoppingCart } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
-import { BEAT_LICENSES } from '@/lib/constants';
+import { BEAT_LICENSES, BEAT_GENRES } from '@/lib/constants';
 
 interface Producer {
   id: string;
@@ -52,9 +52,9 @@ export default function BeatManager() {
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [mp3File, setMp3File] = useState<File | null>(null);
   const [trackoutFile, setTrackoutFile] = useState<File | null>(null);
-  const [mp3Price, setMp3Price] = useState('2999');
-  const [trackoutPrice, setTrackoutPrice] = useState('7499');
-  const [exclusivePrice, setExclusivePrice] = useState('40000');
+  const [mp3Price, setMp3Price] = useState('29.99');
+  const [trackoutPrice, setTrackoutPrice] = useState('74.99');
+  const [exclusivePrice, setExclusivePrice] = useState('400.00');
   const [hasExclusive, setHasExclusive] = useState(true);
   const [containsSamples, setContainsSamples] = useState(false);
   const [sampleDetails, setSampleDetails] = useState('');
@@ -115,7 +115,7 @@ export default function BeatManager() {
   function resetForm() {
     setTitle(''); setProducerId(''); setGenre(''); setBpm(''); setMusicalKey('');
     setTags(''); setPreviewFile(null); setMp3File(null); setTrackoutFile(null);
-    setMp3Price('2999'); setTrackoutPrice('7499'); setExclusivePrice('40000');
+    setMp3Price('29.99'); setTrackoutPrice('74.99'); setExclusivePrice('400.00');
     setHasExclusive(true); setContainsSamples(false); setSampleDetails('');
   }
 
@@ -190,8 +190,13 @@ export default function BeatManager() {
             </div>
             <div>
               <label className="block font-mono text-xs text-black/60 uppercase tracking-wider mb-1">Genre</label>
-              <input type="text" value={genre} onChange={(e) => setGenre(e.target.value)}
-                className="w-full border border-black/20 px-3 py-2 font-mono text-sm focus:border-accent focus:outline-none" placeholder="Hip-Hop, R&B, etc." />
+              <select value={genre} onChange={(e) => setGenre(e.target.value)}
+                className="w-full border border-black/20 px-3 py-2 font-mono text-sm focus:border-accent focus:outline-none bg-white">
+                <option value="">Select genre...</option>
+                {BEAT_GENRES.map((g) => (
+                  <option key={g.value} value={g.value}>{g.label}</option>
+                ))}
+              </select>
             </div>
             <div className="flex gap-3">
               <div className="flex-1">
@@ -252,29 +257,34 @@ export default function BeatManager() {
 
           {/* Pricing */}
           <div>
-            <label className="block font-mono text-xs text-black/60 uppercase tracking-wider mb-2">License Prices (in cents)</label>
+            <label className="block font-mono text-xs text-black/60 uppercase tracking-wider mb-2">License Prices ($)</label>
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="font-mono text-[10px] text-black/40">{BEAT_LICENSES.mp3_lease.name}</label>
-                <input type="number" value={mp3Price} onChange={(e) => setMp3Price(e.target.value)}
-                  className="w-full border border-black/20 px-3 py-2 font-mono text-sm focus:border-accent focus:outline-none" />
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-sm text-black/30">$</span>
+                  <input type="text" inputMode="decimal" value={mp3Price} onChange={(e) => setMp3Price(e.target.value)}
+                    className="w-full border border-black/20 pl-7 pr-3 py-2 font-mono text-sm focus:border-accent focus:outline-none" placeholder="29.99" />
+                </div>
               </div>
               <div>
                 <label className="font-mono text-[10px] text-black/40">{BEAT_LICENSES.trackout_lease.name}</label>
-                <input type="number" value={trackoutPrice} onChange={(e) => setTrackoutPrice(e.target.value)}
-                  className="w-full border border-black/20 px-3 py-2 font-mono text-sm focus:border-accent focus:outline-none" />
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-sm text-black/30">$</span>
+                  <input type="text" inputMode="decimal" value={trackoutPrice} onChange={(e) => setTrackoutPrice(e.target.value)}
+                    className="w-full border border-black/20 pl-7 pr-3 py-2 font-mono text-sm focus:border-accent focus:outline-none" placeholder="74.99" />
+                </div>
               </div>
               <div>
                 <label className="font-mono text-[10px] text-black/40">{BEAT_LICENSES.exclusive.name}</label>
-                <input type="number" value={exclusivePrice} onChange={(e) => setExclusivePrice(e.target.value)}
-                  disabled={!hasExclusive}
-                  className="w-full border border-black/20 px-3 py-2 font-mono text-sm focus:border-accent focus:outline-none disabled:opacity-30" />
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-sm text-black/30">$</span>
+                  <input type="text" inputMode="decimal" value={exclusivePrice} onChange={(e) => setExclusivePrice(e.target.value)}
+                    disabled={!hasExclusive}
+                    className="w-full border border-black/20 pl-7 pr-3 py-2 font-mono text-sm focus:border-accent focus:outline-none disabled:opacity-30" placeholder="400.00" />
+                </div>
               </div>
             </div>
-            <p className="font-mono text-[10px] text-black/30 mt-1">
-              Preview: MP3 {formatCents(parseInt(mp3Price) || 0)} · Trackout {formatCents(parseInt(trackoutPrice) || 0)}
-              {hasExclusive && ` · Exclusive ${formatCents(parseInt(exclusivePrice) || 0)}`}
-            </p>
           </div>
 
           {/* Options */}
