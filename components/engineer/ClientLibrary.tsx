@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Upload, Plus, Trash2, FileAudio, StickyNote, ChevronLeft } from 'lucide-react';
+import { Search, Upload, Plus, Trash2, FileAudio, StickyNote, ChevronLeft, Download } from 'lucide-react';
 
 interface Client {
   id: string;
@@ -154,6 +154,23 @@ export default function ClientLibrary() {
       setShowNote(false);
     }
     setAddingNote(false);
+  }
+
+  async function downloadFile(id: string, fileName: string) {
+    try {
+      const res = await fetch(`/api/engineer/files/download?id=${id}`);
+      const data = await res.json();
+      if (data.url) {
+        const link = document.createElement('a');
+        link.href = data.url;
+        link.download = fileName;
+        link.click();
+      } else {
+        alert('Could not generate download link');
+      }
+    } catch {
+      alert('Download failed');
+    }
   }
 
   async function deleteFile(id: string) {
@@ -332,9 +349,14 @@ export default function ClientLibrary() {
                     </p>
                     {file.description && <p className="font-mono text-[10px] text-black/50 mt-1">{file.description}</p>}
                   </div>
-                  <button onClick={() => deleteFile(file.id)} className="text-red-400 hover:text-red-600 flex-shrink-0 p-1">
-                    <Trash2 className="w-3 h-3" />
-                  </button>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button onClick={() => downloadFile(file.id, file.file_name)} className="text-accent hover:text-accent/70 p-1" title="Download">
+                      <Download className="w-3 h-3" />
+                    </button>
+                    <button onClick={() => deleteFile(file.id)} className="text-red-400 hover:text-red-600 p-1" title="Delete">
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
               ))}
               {deliverables.length === 0 && (
