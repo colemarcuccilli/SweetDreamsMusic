@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { RefreshCw, ChevronDown, DollarSign, X, Check, Clock, Pencil, Mail, Banknote, CreditCard, Send, Upload } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { RefreshCw, ChevronDown, DollarSign, X, Check, Clock, Pencil, Mail, Banknote, CreditCard, Send, Upload, Download, FileAudio } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
 import { ENGINEERS, ROOM_LABELS } from '@/lib/constants';
 
@@ -74,16 +74,48 @@ export default function BookingManager() {
   const [uploadProgress, setUploadProgress] = useState('');
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [showFiles, setShowFiles] = useState<string | null>(null);
+  const [bookingFiles, setBookingFiles] = useState<{ id: string; file_name: string; display_name: string; file_size: number; file_type: string; created_at: string; uploaded_by_name: string | null }[]>([]);
+  const [loadingFiles, setLoadingFiles] = useState(false);
 
-  async function fetchBookings() {
+  async function fetchBookingFiles(customerEmail: string) {
+    setLoadingFiles(true);
+    try {
+      const res = await fetch(`/api/admin/library/deliverables?email=${encodeURIComponent(customerEmail)}`);
+      const data = await res.json();
+      setBookingFiles(data.deliverables || []);
+    } catch {
+      setBookingFiles([]);
+    }
+    setLoadingFiles(false);
+  }
+
+  async function downloadFile(fileId: string, fileName: string) {
+    try {
+      const res = await fetch(`/api/engineer/files/download?id=${fileId}`);
+      const data = await res.json();
+      if (data.url) {
+        const link = document.createElement('a');
+        link.href = data.url;
+        link.download = fileName;
+        link.click();
+      } else {
+        alert('Could not generate download link');
+      }
+    } catch {
+      alert('Download failed');
+    }
+  }
+
+  const fetchBookings = useCallback(async () => {
     setLoading(true);
     const res = await fetch(`/api/admin/bookings?status=${filter}&limit=100`);
     const data = await res.json();
     setBookings(data.bookings || []);
     setLoading(false);
-  }
+  }, [filter]);
 
-  useEffect(() => { fetchBookings(); }, [filter]);
+  useEffect(() => { fetchBookings(); }, [fetchBookings]);
 
   async function updateStatus(bookingId: string, status: string) {
     setUpdatingId(bookingId);
@@ -898,6 +930,49 @@ export default function BookingManager() {
                           </>
                         ) : (
                           <p className="font-mono text-xs text-red-500">No customer email on this booking — cannot upload files.</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* View Delivered Files */}
+                    <div className="flex flex-wrap gap-2 items-center">
+                      <button
+                        onClick={() => {
+                          if (showFiles === b.id) { setShowFiles(null); return; }
+                          setShowFiles(b.id);
+                          if (b.customer_email) fetchBookingFiles(b.customer_email);
+                        }}
+                        className="border border-black/20 text-black/60 font-mono text-[10px] font-bold uppercase px-3 py-2 hover:bg-black/5 inline-flex items-center gap-1"
+                      >
+                        <FileAudio className="w-3 h-3" /> {showFiles === b.id ? 'Hide' : 'View'} Files
+                      </button>
+                    </div>
+                    {showFiles === b.id && (
+                      <div className="border border-black/10 p-3 space-y-2">
+                        <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider font-bold">Delivered Files for {b.customer_name}</p>
+                        {loadingFiles ? (
+                          <p className="font-mono text-xs text-black/40">Loading...</p>
+                        ) : bookingFiles.length === 0 ? (
+                          <p className="font-mono text-xs text-black/30">No files delivered yet</p>
+                        ) : (
+                          <div className="space-y-1">
+                            {bookingFiles.map(f => (
+                              <div key={f.id} className="flex items-center justify-between bg-black/[0.02] px-2 py-1.5 font-mono text-xs hover:bg-black/[0.04]">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <FileAudio className="w-3 h-3 text-black/30 flex-shrink-0" />
+                                  <span className="truncate font-semibold">{f.display_name || f.file_name}</span>
+                                  <span className="text-black/30 flex-shrink-0">{(f.file_size / 1024 / 1024).toFixed(1)}MB</span>
+                                  {f.uploaded_by_name && <span className="text-black/30 flex-shrink-0">by {f.uploaded_by_name}</span>}
+                                </div>
+                                <button
+                                  onClick={() => downloadFile(f.id, f.file_name)}
+                                  className="text-accent hover:text-accent/80 flex-shrink-0 ml-2 inline-flex items-center gap-1"
+                                >
+                                  <Download className="w-3 h-3" /> Download
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                         )}
                       </div>
                     )}

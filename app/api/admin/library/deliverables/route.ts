@@ -12,14 +12,29 @@ export async function GET(request: NextRequest) {
   const hasAccess = await verifyEngineerAccess(supabase);
   if (!hasAccess) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const userId = new URL(request.url).searchParams.get('user_id');
-  if (!userId) return NextResponse.json({ error: 'user_id required' }, { status: 400 });
+  const url = new URL(request.url);
+  const userId = url.searchParams.get('user_id');
+  const email = url.searchParams.get('email');
+  if (!userId && !email) return NextResponse.json({ error: 'user_id or email required' }, { status: 400 });
 
   const serviceClient = createServiceClient();
+
+  // If email provided, look up user_id from auth users
+  let resolvedUserId = userId;
+  if (!resolvedUserId && email) {
+    const { data: users } = await serviceClient.auth.admin.listUsers({ perPage: 1000 });
+    const user = users?.users?.find((u: { email?: string }) => u.email?.toLowerCase() === email.toLowerCase());
+    if (user) {
+      resolvedUserId = user.id;
+    } else {
+      return NextResponse.json({ deliverables: [] });
+    }
+  }
+
   const { data, error } = await serviceClient
     .from('deliverables')
     .select('*')
-    .eq('user_id', userId)
+    .eq('user_id', resolvedUserId!)
     .order('created_at', { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
