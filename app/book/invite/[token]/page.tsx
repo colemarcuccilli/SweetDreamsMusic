@@ -310,7 +310,7 @@ export default function InvitePage() {
                     Sign In
                   </a>
                   <a
-                    href={`/signup?redirect=${encodeURIComponent(`/book/invite/${token}?booking=${bookingId}`)}`}
+                    href={`/login?redirect=${encodeURIComponent(`/book/invite/${token}?booking=${bookingId}`)}&mode=signup`}
                     className="bg-accent text-black font-mono text-xs font-bold uppercase tracking-wider px-5 py-2.5 hover:bg-accent/90 transition-colors inline-block no-underline"
                   >
                     Create Account

@@ -7,7 +7,13 @@ import { createClient } from '@/lib/supabase/client';
 type Mode = 'signin' | 'signup' | 'forgot';
 
 export default function AuthForm() {
-  const [mode, setMode] = useState<Mode>('signin');
+  const [mode, setMode] = useState<Mode>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('mode') === 'signup') return 'signup';
+    }
+    return 'signin';
+  });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
