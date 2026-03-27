@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { sendWelcomeEmail } from '@/lib/email';
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -28,6 +29,29 @@ export async function GET(request: NextRequest) {
 
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      // Send welcome email to newly created users
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const createdAt = new Date(user.created_at);
+          const now = new Date();
+          const ageMs = now.getTime() - createdAt.getTime();
+          // If user was created less than 2 minutes ago, this is a new signup confirmation
+          if (ageMs < 2 * 60 * 1000) {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('full_name')
+              .eq('id', user.id)
+              .single();
+            const name = profile?.full_name || user.user_metadata?.full_name || 'there';
+            sendWelcomeEmail(user.email!, name);
+          }
+        }
+      } catch (e) {
+        // Don't block the redirect if the welcome email fails
+        console.error('Welcome email error:', e);
+      }
+
       return response;
     }
   }

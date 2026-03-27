@@ -109,11 +109,24 @@ export default async function BeatDetailPage({ params }: Props) {
                 musicalKey: beat.musical_key,
               }} />
 
-              {beat.lease_count > 0 && (
-                <p className="font-mono text-[10px] text-white/30 mt-4">
-                  {beat.lease_count} lease{beat.lease_count !== 1 ? 's' : ''} sold
-                </p>
-              )}
+              {/* Info badges */}
+              <div className="flex flex-wrap gap-3 mt-4">
+                {beat.lease_count > 0 && (
+                  <span className="font-mono text-[10px] text-white/30">
+                    {beat.lease_count} lease{beat.lease_count !== 1 ? 's' : ''} sold
+                  </span>
+                )}
+                {beat.contains_samples && (
+                  <span className="font-mono text-[10px] text-amber-400 border border-amber-400/30 px-2 py-0.5">
+                    Contains Samples
+                  </span>
+                )}
+                {beat.has_exclusive && beat.exclusive_price && beat.lease_count >= 3 && (
+                  <span className="font-mono text-[10px] text-amber-400 border border-amber-400/30 px-2 py-0.5">
+                    Exclusive price increases with demand
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Right: License pricing table */}

@@ -1,6 +1,6 @@
 'use client';
 
-import { Play, Pause, Heart, PenLine } from 'lucide-react';
+import { Play, Pause, Heart, PenLine, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { formatCents } from '@/lib/utils';
 import { useAudioPlayer, type AudioTrack } from '@/components/audio/AudioPlayerContext';
@@ -187,9 +187,16 @@ export default function BeatCard({ beat, isSaved, onToggleSave, showWriteButton 
             </Link>
           )}
         </div>
-        {beat.lease_count > 0 && (
-          <span className="font-mono text-[10px] text-black/30">{beat.lease_count} sold</span>
-        )}
+        <div className="flex items-center gap-2">
+          {beat.lease_count > 0 && (
+            <span className="font-mono text-[10px] text-black/30">{beat.lease_count} sold</span>
+          )}
+          {beat.has_exclusive && beat.exclusive_price && beat.lease_count >= 3 && (
+            <span className="font-mono text-[10px] text-amber-600 inline-flex items-center gap-0.5" title="Exclusive price increases with demand">
+              <TrendingUp className="w-3 h-3" /> Price rising
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

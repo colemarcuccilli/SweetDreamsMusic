@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   const body = await request.json();
-  const { booking_id, content, what_was_worked_on, next_steps, linked_project_id } = body;
+  const { booking_id, content, what_was_worked_on, next_steps, linked_project_id, is_visible_to_client } = body;
 
   if (!booking_id) return NextResponse.json({ error: 'booking_id required' }, { status: 400 });
   if (!content?.trim()) return NextResponse.json({ error: 'content required' }, { status: 400 });
@@ -91,6 +91,7 @@ export async function POST(request: NextRequest) {
       what_was_worked_on: what_was_worked_on || null,
       next_steps: next_steps || null,
       linked_project_id: linked_project_id || null,
+      is_visible_to_client: is_visible_to_client !== undefined ? is_visible_to_client : true,
     })
     .select()
     .single();
@@ -105,7 +106,7 @@ export async function PUT(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   const body = await request.json();
-  const { id, content, what_was_worked_on, next_steps, linked_project_id } = body;
+  const { id, content, what_was_worked_on, next_steps, linked_project_id, is_visible_to_client } = body;
 
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
@@ -114,6 +115,7 @@ export async function PUT(request: NextRequest) {
   if (what_was_worked_on !== undefined) updates.what_was_worked_on = what_was_worked_on;
   if (next_steps !== undefined) updates.next_steps = next_steps;
   if (linked_project_id !== undefined) updates.linked_project_id = linked_project_id || null;
+  if (is_visible_to_client !== undefined) updates.is_visible_to_client = is_visible_to_client;
 
   const { data: note, error } = await supabase
     .from('session_notes')

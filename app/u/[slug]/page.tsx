@@ -144,6 +144,23 @@ export default async function PublicProfilePage({ params }: Props) {
 
             <div className="text-center sm:text-left flex-1">
               <h1 className="text-display-sm mb-3">{profile.display_name}</h1>
+
+              {/* Career Stage & Genre Badges */}
+              {(profile.career_stage || profile.genre) && (
+                <div className="flex flex-wrap gap-2 mb-3 justify-center sm:justify-start">
+                  {profile.career_stage && (
+                    <span className="font-mono text-[10px] font-bold uppercase tracking-wider bg-white/10 text-accent px-3 py-1">
+                      {profile.career_stage}
+                    </span>
+                  )}
+                  {profile.genre && (
+                    <span className="font-mono text-[10px] font-bold uppercase tracking-wider bg-white/10 text-white/70 px-3 py-1">
+                      {profile.genre}
+                    </span>
+                  )}
+                </div>
+              )}
+
               {profile.bio && (
                 <p className="font-mono text-white/60 text-body-sm max-w-lg whitespace-pre-line">{profile.bio}</p>
               )}

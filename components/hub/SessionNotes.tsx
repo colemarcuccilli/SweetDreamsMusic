@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { FileText, Plus, Check, MessageSquare, Music } from 'lucide-react';
+import { FileText, Plus, Check, MessageSquare, Music, Eye, EyeOff } from 'lucide-react';
 
 interface SessionNote {
   id: string;
@@ -11,6 +11,7 @@ interface SessionNote {
   what_was_worked_on: string | null;
   next_steps: string | null;
   linked_project_id: string | null;
+  is_visible_to_client: boolean;
   created_at: string;
 }
 
@@ -28,7 +29,7 @@ interface Project {
   title: string;
 }
 
-export default function SessionNotes({ onXpEarned }: { onXpEarned?: () => void }) {
+export default function SessionNotes({ onXpEarned, isEngineer = false }: { onXpEarned?: () => void; isEngineer?: boolean }) {
   const [sessions, setSessions] = useState<CompletedSession[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,6 +42,8 @@ export default function SessionNotes({ onXpEarned }: { onXpEarned?: () => void }
   const [workedOn, setWorkedOn] = useState('');
   const [nextSteps, setNextSteps] = useState('');
   const [linkedProject, setLinkedProject] = useState('');
+  const [visibleToClient, setVisibleToClient] = useState(true);
+  const [togglingVisibility, setTogglingVisibility] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -76,6 +79,7 @@ export default function SessionNotes({ onXpEarned }: { onXpEarned?: () => void }
     setWorkedOn('');
     setNextSteps('');
     setLinkedProject('');
+    setVisibleToClient(true);
     setExpandedForm(null);
   }
 
@@ -93,6 +97,7 @@ export default function SessionNotes({ onXpEarned }: { onXpEarned?: () => void }
           what_was_worked_on: workedOn.trim() || null,
           next_steps: nextSteps.trim() || null,
           linked_project_id: linkedProject || null,
+          is_visible_to_client: visibleToClient,
         }),
       });
 
@@ -126,6 +131,31 @@ export default function SessionNotes({ onXpEarned }: { onXpEarned?: () => void }
       console.error('Failed to save note:', err);
     } finally {
       setSaving(null);
+    }
+  }
+
+  async function toggleVisibility(noteId: string, currentValue: boolean) {
+    setTogglingVisibility(noteId);
+    try {
+      const res = await fetch('/api/hub/session-notes', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: noteId, is_visible_to_client: !currentValue }),
+      });
+      if (!res.ok) throw new Error('Failed to update visibility');
+
+      setSessions((prev) =>
+        prev.map((s) => ({
+          ...s,
+          notes: s.notes.map((n) =>
+            n.id === noteId ? { ...n, is_visible_to_client: !currentValue } : n
+          ),
+        }))
+      );
+    } catch (err) {
+      console.error('Failed to toggle visibility:', err);
+    } finally {
+      setTogglingVisibility(null);
     }
   }
 
@@ -196,10 +226,32 @@ export default function SessionNotes({ onXpEarned }: { onXpEarned?: () => void }
                 <div className="space-y-3 mb-3">
                   {engineerNotes.map((note) => (
                     <div key={note.id} className="border-l-2 border-black/20 pl-3">
-                      <p className="font-mono text-[10px] font-bold uppercase text-black/40 mb-1">
-                        <MessageSquare className="w-3 h-3 inline mr-1" />
-                        Engineer Notes
-                      </p>
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="font-mono text-[10px] font-bold uppercase text-black/40">
+                          <MessageSquare className="w-3 h-3 inline mr-1" />
+                          Engineer Notes
+                        </p>
+                        <div className="flex items-center gap-1">
+                          {isEngineer ? (
+                            <button
+                              onClick={() => toggleVisibility(note.id, note.is_visible_to_client)}
+                              disabled={togglingVisibility === note.id}
+                              className="inline-flex items-center gap-1 font-mono text-[10px] text-black/40 hover:text-black transition-colors disabled:opacity-40"
+                              title={note.is_visible_to_client ? 'Visible to client — click to hide' : 'Hidden from client — click to show'}
+                            >
+                              {note.is_visible_to_client ? (
+                                <Eye className="w-3.5 h-3.5" />
+                              ) : (
+                                <EyeOff className="w-3.5 h-3.5 text-red-400" />
+                              )}
+                            </button>
+                          ) : (
+                            note.is_visible_to_client && (
+                              <span title="Visible to you"><Eye className="w-3 h-3 text-black/20" /></span>
+                            )
+                          )}
+                        </div>
+                      </div>
                       <p className="font-mono text-xs text-black/70">{note.content}</p>
                       {note.what_was_worked_on && (
                         <p className="font-mono text-[10px] text-black/40 mt-1">
@@ -211,10 +263,26 @@ export default function SessionNotes({ onXpEarned }: { onXpEarned?: () => void }
 
                   {artistNotes.map((note) => (
                     <div key={note.id} className="border-l-2 border-accent pl-3">
-                      <p className="font-mono text-[10px] font-bold uppercase text-accent mb-1">
-                        <FileText className="w-3 h-3 inline mr-1" />
-                        Your Notes
-                      </p>
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="font-mono text-[10px] font-bold uppercase text-accent">
+                          <FileText className="w-3 h-3 inline mr-1" />
+                          Your Notes
+                        </p>
+                        {isEngineer && (
+                          <button
+                            onClick={() => toggleVisibility(note.id, note.is_visible_to_client)}
+                            disabled={togglingVisibility === note.id}
+                            className="inline-flex items-center gap-1 font-mono text-[10px] text-black/40 hover:text-black transition-colors disabled:opacity-40"
+                            title={note.is_visible_to_client ? 'Visible to client — click to hide' : 'Hidden from client — click to show'}
+                          >
+                            {note.is_visible_to_client ? (
+                              <Eye className="w-3.5 h-3.5" />
+                            ) : (
+                              <EyeOff className="w-3.5 h-3.5 text-red-400" />
+                            )}
+                          </button>
+                        )}
+                      </div>
                       <p className="font-mono text-xs text-black/70">{note.content}</p>
                       {note.what_was_worked_on && (
                         <p className="font-mono text-[10px] text-black/40 mt-1">
@@ -272,6 +340,20 @@ export default function SessionNotes({ onXpEarned }: { onXpEarned?: () => void }
                         </option>
                       ))}
                     </select>
+                  )}
+                  {isEngineer && (
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={visibleToClient}
+                        onChange={(e) => setVisibleToClient(e.target.checked)}
+                        className="w-3.5 h-3.5 accent-accent cursor-pointer"
+                      />
+                      <span className="font-mono text-xs text-black/60 flex items-center gap-1">
+                        {visibleToClient ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                        Visible to client
+                      </span>
+                    </label>
                   )}
                   <div className="flex items-center gap-3">
                     <button

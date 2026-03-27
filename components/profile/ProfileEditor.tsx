@@ -2,6 +2,16 @@
 
 import { useState, useEffect } from 'react';
 import { Save, ExternalLink, Upload, X, Plus, GripVertical } from 'lucide-react';
+import { BEAT_GENRES } from '@/lib/constants';
+
+const CAREER_STAGES = [
+  'Just Starting',
+  'Building a Fanbase',
+  'Independent Artist',
+  'Signed Artist',
+  'Producer',
+  'Engineer',
+];
 
 interface Profile {
   display_name: string;
@@ -307,21 +317,23 @@ export default function ProfileEditor({ userId, profileSlug }: { userId: string;
             className="w-full border-2 border-black/20 px-4 py-3 font-mono text-sm focus:border-accent focus:outline-none bg-white"
           >
             <option value="">Select...</option>
-            <option value="emerging">Emerging — Just getting started</option>
-            <option value="developing">Developing — Building your foundation</option>
-            <option value="established">Established — Growing your audience</option>
-            <option value="professional">Professional — Full-time artist</option>
+            {CAREER_STAGES.map((stage) => (
+              <option key={stage} value={stage}>{stage}</option>
+            ))}
           </select>
         </div>
         <div>
           <label className="block font-mono text-xs font-semibold uppercase tracking-wider mb-1">Primary Genre</label>
-          <input
-            type="text"
+          <select
             value={genre}
             onChange={(e) => setGenre(e.target.value)}
-            className="w-full border-2 border-black/20 px-4 py-3 font-mono text-sm focus:border-accent focus:outline-none"
-            placeholder="Hip-Hop, R&B, Pop, etc."
-          />
+            className="w-full border-2 border-black/20 px-4 py-3 font-mono text-sm focus:border-accent focus:outline-none bg-white"
+          >
+            <option value="">Select...</option>
+            {BEAT_GENRES.map((g) => (
+              <option key={g.value} value={g.value}>{g.label}</option>
+            ))}
+          </select>
         </div>
       </div>
 
