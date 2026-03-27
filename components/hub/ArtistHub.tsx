@@ -33,6 +33,13 @@ const EXTENDED_TABS = [
 
 type ExtendedTab = HubTab | 'notes';
 
+interface XpHistoryItem {
+  label: string;
+  xp_amount: number;
+  action: string;
+  created_at: string;
+}
+
 interface XpData {
   level: number;
   currentLevelXp: number;
@@ -41,12 +48,14 @@ interface XpData {
   totalXp: number;
   streak: number;
   recentXp: { label: string; xp: number }[];
+  xpHistory: XpHistoryItem[];
 }
 
 export default function ArtistHub({ userId }: { userId: string }) {
   const [tab, setTab] = useState<ExtendedTab>('overview');
   const [xpData, setXpData] = useState<XpData | null>(null);
   const [newAchievements, setNewAchievements] = useState<string[]>([]);
+  const [achievementProgress, setAchievementProgress] = useState<Record<string, { current: number; target: number }>>({});
 
   const loadXp = useCallback(async () => {
     try {
@@ -65,6 +74,7 @@ export default function ArtistHub({ userId }: { userId: string }) {
         ...levelInfo,
         streak: data.dailyStreak || 0,
         recentXp,
+        xpHistory: (data.xpHistory || []).slice(0, 5),
       });
     } catch {
       // silent
@@ -76,6 +86,9 @@ export default function ArtistHub({ userId }: { userId: string }) {
       const res = await fetch('/api/hub/achievements/check', { method: 'POST' });
       if (!res.ok) return;
       const data = await res.json();
+      if (data.progress) {
+        setAchievementProgress(data.progress);
+      }
       if (data.newAchievements?.length > 0) {
         setNewAchievements(data.newAchievements);
         // Reload XP after achievement awards
@@ -93,10 +106,12 @@ export default function ArtistHub({ userId }: { userId: string }) {
     return () => clearTimeout(timer);
   }, [loadXp, checkAchievements]);
 
-  // Callback for child components to trigger XP refresh
+  // Callback for child components to trigger XP refresh + re-check achievements
   const onXpEarned = useCallback(() => {
     loadXp();
-  }, [loadXp]);
+    // Re-check achievements after any XP-granting action
+    setTimeout(checkAchievements, 500);
+  }, [loadXp, checkAchievements]);
 
   return (
     <>
@@ -114,6 +129,7 @@ export default function ArtistHub({ userId }: { userId: string }) {
               color={getLevelColor(xpData.level)}
               streak={xpData.streak}
               recentXp={xpData.recentXp}
+              xpHistory={xpData.xpHistory}
             />
           </div>
         </section>
@@ -151,7 +167,7 @@ export default function ArtistHub({ userId }: { userId: string }) {
           {tab === 'goals' && <GoalTracker onXpEarned={onXpEarned} />}
           {tab === 'metrics' && <MetricsDashboard onXpEarned={onXpEarned} />}
           {tab === 'calendar' && <ContentCalendar onXpEarned={onXpEarned} />}
-          {tab === 'achievements' && <AchievementBadges newUnlocks={newAchievements} onDismiss={() => setNewAchievements([])} />}
+          {tab === 'achievements' && <AchievementBadges newUnlocks={newAchievements} progress={achievementProgress} onDismiss={() => setNewAchievements([])} />}
           {tab === 'roadmap' && <ArtistRoadmap />}
           {tab === 'notes' && <SessionNotes onXpEarned={onXpEarned} />}
 

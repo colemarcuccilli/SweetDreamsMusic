@@ -75,21 +75,44 @@ export function getLevelColor(level: number): string {
 // XP Action Values
 // ============================================================
 export const XP_ACTIONS = {
+  // Daily & streaks
   hub_visit: { xp: 10, label: 'Daily Hub Visit', once_per_day: true },
+  daily_streak: { xp: 5, label: 'Daily Streak Bonus' }, // multiplied by streak count (capped at 10)
+  first_login_streak_3: { xp: 50, label: '3-Day Streak Milestone', unique: true },
+  first_login_streak_7: { xp: 100, label: '7-Day Streak Milestone', unique: true },
+
+  // Projects & tasks
   create_project: { xp: 15, label: 'Created a Project' },
   complete_task: { xp: 10, label: 'Completed a Task' },
   advance_phase: { xp: 50, label: 'Advanced Project Phase' },
   complete_project: { xp: 200, label: 'Completed a Project' },
-  set_goal: { xp: 10, label: 'Set a New Goal' },
+
+  // Goals
+  set_goal: { xp: 15, label: 'Set a New Goal' },
   update_goal: { xp: 5, label: 'Updated Goal Progress' },
-  complete_goal: { xp: 75, label: 'Completed a Goal' },
+  complete_goal: { xp: 30, label: 'Completed a Goal' },
+
+  // Sessions & booking
+  book_session: { xp: 50, label: 'Booked a Session' },
+  complete_session: { xp: 75, label: 'Completed a Session' },
+  log_session_notes: { xp: 15, label: 'Logged Session Notes' },
+
+  // Beat store
+  purchase_beat: { xp: 40, label: 'Purchased a Beat' },
+
+  // Calendar & metrics
+  add_calendar_event: { xp: 10, label: 'Added Calendar Event' },
   log_metrics: { xp: 15, label: 'Logged Metrics' },
-  add_calendar_event: { xp: 5, label: 'Added Calendar Event' },
-  book_session: { xp: 25, label: 'Booked a Session' },
-  complete_session: { xp: 50, label: 'Completed a Session' },
-  log_session_notes: { xp: 25, label: 'Logged Session Notes' },
+
+  // Profile & platform
+  complete_profile: { xp: 25, label: 'Completed Profile', unique: true },
+  connect_platform: { xp: 20, label: 'Connected a Platform' },
+  upload_to_profile: { xp: 15, label: 'Shared File on Profile' },
+
+  // Roadmap & achievements
+  complete_roadmap_item: { xp: 10, label: 'Completed Roadmap Item' },
   unlock_achievement: { xp: 100, label: 'Unlocked Achievement' },
-  daily_streak: { xp: 5, label: 'Daily Streak Bonus' }, // multiplied by streak count (capped at 10)
+  earn_achievement: { xp: 0, label: 'Earned Achievement' }, // XP varies, passed via override
 } as const;
 
 export type XpAction = keyof typeof XP_ACTIONS;
@@ -146,4 +169,83 @@ export function getPlatformLevelTitle(level: number): string {
   if (level <= 12) return 'Viral';
   if (level <= 14) return 'Major';
   return 'Superstar';
+}
+
+// ============================================================
+// Server-side XP Award Helper (use in API routes / webhooks)
+// ============================================================
+// Requires a Supabase client (service or authenticated).
+// Handles dedup via reference_id, unique actions, and profile update.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function awardXP(
+  supabase: any,
+  userId: string,
+  action: XpAction,
+  opts?: {
+    referenceId?: string;
+    metadata?: Record<string, unknown>;
+    xpOverride?: number;
+  },
+): Promise<{ awarded: boolean; xp: number; error?: string }> {
+  const xpAction = XP_ACTIONS[action];
+  if (!xpAction) return { awarded: false, xp: 0, error: 'Unknown action' };
+
+  const xpAmount = opts?.xpOverride ?? xpAction.xp;
+  if (xpAmount <= 0 && !opts?.xpOverride) return { awarded: false, xp: 0, error: 'Zero XP' };
+
+  // Dedup: if reference_id provided, check for existing entry
+  if (opts?.referenceId) {
+    const { data: existing } = await supabase
+      .from('xp_log')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('action', action)
+      .eq('reference_id', opts.referenceId)
+      .limit(1);
+    if (existing && existing.length > 0) {
+      return { awarded: false, xp: 0, error: 'Already awarded for this reference' };
+    }
+  }
+
+  // Unique actions (one-time ever): check if already earned
+  if ('unique' in xpAction && xpAction.unique) {
+    const { data: existing } = await supabase
+      .from('xp_log')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('action', action)
+      .limit(1);
+    if (existing && existing.length > 0) {
+      return { awarded: false, xp: 0, error: 'Already earned (unique action)' };
+    }
+  }
+
+  // Insert xp_log entry
+  const { error: logError } = await supabase.from('xp_log').insert({
+    user_id: userId,
+    action,
+    xp_amount: xpAmount,
+    label: xpAction.label,
+    reference_id: opts?.referenceId || null,
+    metadata: opts?.metadata || {},
+  });
+
+  if (logError) return { awarded: false, xp: 0, error: logError.message };
+
+  // Update profile totals
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('total_xp')
+    .eq('id', userId)
+    .single();
+
+  const newTotal = (profile?.total_xp || 0) + xpAmount;
+  const levelInfo = calculateLevel(newTotal);
+
+  await supabase
+    .from('profiles')
+    .update({ total_xp: newTotal, artist_level: levelInfo.level })
+    .eq('id', userId);
+
+  return { awarded: true, xp: xpAmount };
 }

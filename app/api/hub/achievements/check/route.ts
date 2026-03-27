@@ -31,6 +31,9 @@ export async function POST() {
     tasksResult,
     profileResult,
     sessionNotesResult,
+    beatPurchasesResult,
+    calendarEventsResult,
+    platformConnectionsResult,
     existingAchievementsResult,
   ] = await Promise.all([
     // Completed bookings as CLIENT (customer_email = user.email)
@@ -94,7 +97,7 @@ export async function POST() {
     // Profile data
     supabase
       .from('profiles')
-      .select('total_xp, artist_level, daily_streak, display_name, genre, career_stage, profile_picture_url, role')
+      .select('total_xp, artist_level, daily_streak, display_name, genre, career_stage, profile_picture_url, public_profile_slug, role')
       .eq('id', user.id)
       .single(),
 
@@ -103,6 +106,24 @@ export async function POST() {
       .from('session_notes')
       .select('id', { count: 'exact', head: true })
       .eq('author_id', user.id),
+
+    // Beat purchases by this user
+    service
+      .from('beat_purchases')
+      .select('id', { count: 'exact', head: true })
+      .eq('buyer_id', user.id),
+
+    // Calendar events created by this user
+    supabase
+      .from('calendar_events')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id),
+
+    // Platform connections (Spotify, YouTube, etc.)
+    supabase
+      .from('platform_connections')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id),
 
     // Existing achievements
     supabase
@@ -129,6 +150,10 @@ export async function POST() {
   const completedTasks = tasksResult.count || 0;
   const profile = profileResult.data;
   const sessionNotesCount = sessionNotesResult.count || 0;
+  const beatPurchaseCount = beatPurchasesResult.count || 0;
+  const calendarEventCount = calendarEventsResult.count || 0;
+  const platformConnectionCount = platformConnectionsResult.count || 0;
+  const hasPublicProfile = !!profile?.public_profile_slug;
 
   const existingKeys = new Set(
     (existingAchievementsResult.data || []).map((a) => a.achievement_key)
@@ -188,7 +213,11 @@ export async function POST() {
     first_goal_completed: completedGoals >= 1,
     five_goals_completed: completedGoals >= 5,
     profile_complete: profileComplete,
+    public_profile: hasPublicProfile,
+    first_beat_purchase: beatPurchaseCount >= 1,
     first_session_notes: sessionNotesCount >= 1,
+    first_calendar_event: calendarEventCount >= 1,
+    connect_platform: platformConnectionCount >= 1,
     level_5: artistLevel >= 5,
     level_10: artistLevel >= 10,
     level_25: artistLevel >= 25,
@@ -242,5 +271,40 @@ export async function POST() {
     }
   }
 
-  return NextResponse.json({ newAchievements, totalXpAwarded });
+  // Return progress data so the UI can show "3/5 sessions" etc.
+  const progress: Record<string, { current: number; target: number }> = {
+    first_session: { current: Math.min(completedSessions, 1), target: 1 },
+    five_sessions: { current: Math.min(completedSessions, 5), target: 5 },
+    ten_sessions: { current: Math.min(completedSessions, 10), target: 10 },
+    twenty_five_sessions: { current: Math.min(completedSessions, 25), target: 25 },
+    first_project: { current: Math.min(totalProjects, 1), target: 1 },
+    first_release: { current: Math.min(completedProjects, 1), target: 1 },
+    five_releases: { current: Math.min(completedProjects, 5), target: 5 },
+    ten_releases: { current: Math.min(completedProjects, 10), target: 10 },
+    first_metric_log: { current: Math.min(metricCount, 1), target: 1 },
+    four_week_streak: { current: Math.min(metricWeeksStreak, 4), target: 4 },
+    twelve_week_streak: { current: Math.min(metricWeeksStreak, 12), target: 12 },
+    first_goal_set: { current: Math.min(totalGoals, 1), target: 1 },
+    first_goal_completed: { current: Math.min(completedGoals, 1), target: 1 },
+    five_goals_completed: { current: Math.min(completedGoals, 5), target: 5 },
+    first_beat_purchase: { current: Math.min(beatPurchaseCount, 1), target: 1 },
+    first_calendar_event: { current: Math.min(calendarEventCount, 1), target: 1 },
+    connect_platform: { current: Math.min(platformConnectionCount, 1), target: 1 },
+    level_5: { current: Math.min(artistLevel, 5), target: 5 },
+    level_10: { current: Math.min(artistLevel, 10), target: 10 },
+    level_25: { current: Math.min(artistLevel, 25), target: 25 },
+    level_50: { current: Math.min(artistLevel, 50), target: 50 },
+    seven_day_streak: { current: Math.min(dailyStreak, 7), target: 7 },
+    thirty_day_streak: { current: Math.min(dailyStreak, 30), target: 30 },
+    hundred_tasks: { current: Math.min(completedTasks, 100), target: 100 },
+    ...(isEngineer ? {
+      eng_first_session: { current: Math.min(engineerSessions, 1), target: 1 },
+      eng_five_sessions: { current: Math.min(engineerSessions, 5), target: 5 },
+      eng_ten_sessions: { current: Math.min(engineerSessions, 10), target: 10 },
+      eng_twenty_five_sessions: { current: Math.min(engineerSessions, 25), target: 25 },
+      eng_fifty_sessions: { current: Math.min(engineerSessions, 50), target: 50 },
+    } : {}),
+  };
+
+  return NextResponse.json({ newAchievements, totalXpAwarded, progress });
 }

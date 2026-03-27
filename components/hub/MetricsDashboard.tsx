@@ -6,6 +6,8 @@ import { METRIC_PLATFORMS, METRIC_FIELD_LABELS } from '@/lib/hub-constants';
 import { getPlatformLevel, getPlatformLevelTitle } from '@/lib/xp-system';
 import { SkeletonChart } from './LoadingSkeleton';
 import EmptyState from './EmptyState';
+import MetricsChart, { Sparkline, calculateGrowthRate } from './MetricsChart';
+import type { DataPoint, ChartSeries } from './MetricsChart';
 
 interface Metric {
   id: string;
@@ -171,33 +173,23 @@ export default function MetricsDashboard({ onXpEarned }: { onXpEarned?: () => vo
   // Filter metrics for chart
   const chartMetrics = activePlatform === 'all' ? metrics : metrics.filter((m) => m.platform === activePlatform);
 
-  // Sparkline renderer
-  function renderSparkline(data: Metric[], field: string, color: string) {
-    const values = data.map((d) => (d[field] as number) || 0).filter((v) => v > 0);
-    if (values.length < 2) return null;
-    const max = Math.max(...values);
-    const min = Math.min(...values);
-    const range = max - min || 1;
-    const w = 200;
-    const h = 80;
-    const padY = 4;
-    const usableH = h - padY * 2;
-    const points = values.map((v, i) => `${(i / (values.length - 1)) * w},${padY + usableH - ((v - min) / range) * usableH}`).join(' ');
-    const gridLines = [0.25, 0.5, 0.75].map((pct) => padY + usableH * (1 - pct));
+  // Build DataPoint arrays for chart components
+  function buildDataPoints(data: Metric[], field: string): DataPoint[] {
+    return data
+      .filter((d) => ((d[field] as number) || 0) > 0)
+      .map((d) => ({ date: d.metric_date, value: (d[field] as number) || 0 }));
+  }
 
-    return (
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-20 transition-all duration-300">
-        {gridLines.map((y, i) => (
-          <line key={i} x1="0" y1={y} x2={w} y2={y} stroke="rgba(0,0,0,0.05)" strokeWidth="0.5" strokeDasharray="4 3" />
-        ))}
-        <line x1="0" y1={h - padY} x2={w} y2={h - padY} stroke="rgba(0,0,0,0.08)" strokeWidth="0.5" />
-        <polygon points={`0,${h - padY} ${points} ${w},${h - padY}`} fill={color} fillOpacity="0.08" />
-        <polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-        {values.length > 0 && (
-          <circle cx={w} cy={padY + usableH - ((values[values.length - 1] - min) / range) * usableH} r="3" fill={color} />
-        )}
-      </svg>
-    );
+  // Build chart series for a platform
+  function buildChartSeries(platformKey: string, fields: string[], color: string): ChartSeries[] {
+    const platformData = metrics.filter((m) => m.platform === platformKey);
+    return fields
+      .map((field) => ({
+        label: METRIC_FIELD_LABELS[field] || field.replace(/_/g, ' '),
+        data: buildDataPoints(platformData, field),
+        color,
+      }))
+      .filter((s) => s.data.length >= 2);
   }
 
   function getDelta(current: number | null, previous: number | null): { text: string; value: number; positive: boolean } | null {
@@ -508,9 +500,24 @@ export default function MetricsDashboard({ onXpEarned }: { onXpEarned?: () => vo
                   )}
                 </div>
 
-                {/* Sparkline chart */}
+                {/* Sparkline chart + 30-day growth */}
                 <div className="mt-2">
-                  {renderSparkline(platformMetrics, primaryField, platform.color)}
+                  {(() => {
+                    const dataPoints = buildDataPoints(platformMetrics, primaryField);
+                    const sparkValues = dataPoints.map((d) => d.value);
+                    const growth = calculateGrowthRate(dataPoints, 30);
+                    return (
+                      <>
+                        <Sparkline data={sparkValues} color={platform.color} width={200} height={32} className="w-full" />
+                        {growth && (
+                          <div className={`font-mono text-[10px] mt-1 ${growth.positive ? 'text-green-600' : 'text-red-500'}`}>
+                            {growth.positive ? '+' : ''}{growth.percent}% last 30d
+                            <span className="text-black/25 ml-1">({growth.positive ? '+' : ''}{growth.absolute.toLocaleString()})</span>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
 
                 {/* Last updated + source */}
@@ -543,90 +550,73 @@ export default function MetricsDashboard({ onXpEarned }: { onXpEarned?: () => vo
             <h3 className="font-mono text-xs font-bold uppercase tracking-wider mb-4">
               {platform.icon} {platform.label} — Detailed Charts
             </h3>
-            <div className="space-y-6">
-              {fieldsWithData.map((field) => (
-                <div key={field}>
-                  <h4 className="font-mono text-[10px] uppercase tracking-wider text-black/40 mb-2">
-                    {METRIC_FIELD_LABELS[field] || field.replace(/_/g, ' ')}
-                  </h4>
-                  <div className="h-40">
-                    {renderExpandedChart(chartMetrics, field, platform.color)}
+            <div className="space-y-8">
+              {fieldsWithData.map((field) => {
+                const dataPoints = buildDataPoints(chartMetrics, field);
+                const growth = calculateGrowthRate(dataPoints, 30);
+                const chartSeries: ChartSeries[] = [{
+                  label: METRIC_FIELD_LABELS[field] || field.replace(/_/g, ' '),
+                  data: dataPoints,
+                  color: platform.color,
+                }];
+                return (
+                  <div key={field}>
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="font-mono text-[10px] uppercase tracking-wider text-black/40">
+                        {METRIC_FIELD_LABELS[field] || field.replace(/_/g, ' ')}
+                      </h4>
+                      {growth && (
+                        <span className={`font-mono text-[10px] font-bold ${growth.positive ? 'text-green-600' : 'text-red-500'}`}>
+                          {growth.positive ? '+' : ''}{growth.percent}% this month
+                          <span className="text-black/25 font-normal ml-1">
+                            ({growth.positive ? '+' : ''}{growth.absolute.toLocaleString()})
+                          </span>
+                        </span>
+                      )}
+                    </div>
+                    <MetricsChart series={chartSeries} height={180} />
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         );
       })()}
+
+      {/* Overview trend charts when "All" is selected */}
+      {activePlatform === 'all' && metrics.length >= 2 && (
+        <div className="mt-6 space-y-6">
+          {METRIC_PLATFORMS.map((platform) => {
+            const allSeries = buildChartSeries(platform.key, [platform.primaryField], platform.color);
+            if (allSeries.length === 0) return null;
+            const growth = calculateGrowthRate(allSeries[0].data, 30);
+            return (
+              <div key={platform.key} className="border-2 border-black/10 p-5 transition-all duration-300 hover:border-black/20">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span>{platform.icon}</span>
+                    <h3 className="font-mono text-xs font-bold uppercase tracking-wider" style={{ color: platform.color }}>
+                      {platform.label}
+                    </h3>
+                    <span className="font-mono text-[10px] text-black/30 uppercase">
+                      {METRIC_FIELD_LABELS[platform.primaryField]}
+                    </span>
+                  </div>
+                  {growth && (
+                    <div className={`flex items-center gap-1 font-mono text-xs font-bold ${growth.positive ? 'text-green-600' : 'text-red-500'}`}>
+                      {growth.positive ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                      {growth.positive ? '+' : ''}{growth.percent}%
+                      <span className="text-black/25 font-normal text-[10px] ml-1">30d</span>
+                    </div>
+                  )}
+                </div>
+                <MetricsChart series={allSeries} height={160} showDots={false} />
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 
-  // Expanded chart with axis labels and grid
-  function renderExpandedChart(data: Metric[], field: string, color: string) {
-    const entries = data.filter((d) => ((d[field] as number) || 0) > 0);
-    if (entries.length < 2) return <p className="font-mono text-xs text-black/30">Not enough data points</p>;
-
-    const values = entries.map((d) => (d[field] as number) || 0);
-    const dates = entries.map((d) => d.metric_date);
-    const max = Math.max(...values);
-    const min = Math.min(...values);
-    const range = max - min || 1;
-    const w = 400;
-    const h = 160;
-    const padL = 50;
-    const padR = 10;
-    const padT = 10;
-    const padB = 24;
-    const chartW = w - padL - padR;
-    const chartH = h - padT - padB;
-
-    const points = values.map((v, i) =>
-      `${padL + (i / (values.length - 1)) * chartW},${padT + chartH - ((v - min) / range) * chartH}`
-    ).join(' ');
-
-    const yTicks = [0, 0.25, 0.5, 0.75, 1].map((pct) => ({
-      y: padT + chartH * (1 - pct),
-      label: formatNumber(min + range * pct),
-    }));
-
-    const xLabels: { x: number; label: string }[] = [];
-    if (dates.length >= 2) {
-      xLabels.push({ x: padL, label: formatDate(dates[0]) });
-      if (dates.length >= 3) {
-        const mid = Math.floor(dates.length / 2);
-        xLabels.push({ x: padL + (mid / (dates.length - 1)) * chartW, label: formatDate(dates[mid]) });
-      }
-      xLabels.push({ x: padL + chartW, label: formatDate(dates[dates.length - 1]) });
-    }
-
-    return (
-      <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-full transition-all duration-300">
-        {yTicks.map((tick, i) => (
-          <g key={i}>
-            <line x1={padL} y1={tick.y} x2={w - padR} y2={tick.y} stroke="rgba(0,0,0,0.06)" strokeWidth="0.5" strokeDasharray="4 3" />
-            <text x={padL - 6} y={tick.y + 3} textAnchor="end" className="font-mono" fontSize="7" fill="rgba(0,0,0,0.3)">{tick.label}</text>
-          </g>
-        ))}
-        {xLabels.map((lbl, i) => (
-          <text key={i} x={lbl.x} y={h - 4} textAnchor={i === 0 ? 'start' : i === xLabels.length - 1 ? 'end' : 'middle'} className="font-mono" fontSize="7" fill="rgba(0,0,0,0.3)">{lbl.label}</text>
-        ))}
-        <polygon points={`${padL},${padT + chartH} ${points} ${padL + chartW},${padT + chartH}`} fill={color} fillOpacity="0.06" />
-        <polyline points={points} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-        {values.map((v, i) => (
-          <circle key={i} cx={padL + (i / (values.length - 1)) * chartW} cy={padT + chartH - ((v - min) / range) * chartH} r="2.5" fill="white" stroke={color} strokeWidth="1.5" className="transition-all duration-200" />
-        ))}
-      </svg>
-    );
-  }
-}
-
-function formatNumber(n: number): string {
-  if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
-  return Math.round(n).toString();
-}
-
-function formatDate(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00');
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }

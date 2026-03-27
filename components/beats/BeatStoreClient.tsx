@@ -21,6 +21,7 @@ export default function BeatStoreClient({ initialBeats }: BeatStoreClientProps) 
   const [beats, setBeats] = useState<BeatData[]>(initialBeats);
   const [search, setSearch] = useState('');
   const [genre, setGenre] = useState('');
+  const [sampleFilter, setSampleFilter] = useState<'all' | 'original' | 'samples'>('all');
   const [sort, setSort] = useState('newest');
   const [showFilters, setShowFilters] = useState(false);
   const [savedBeatIds, setSavedBeatIds] = useState<Set<string>>(new Set());
@@ -53,6 +54,12 @@ export default function BeatStoreClient({ initialBeats }: BeatStoreClientProps) 
       result = result.filter((b) => b.genre?.toLowerCase() === genre.toLowerCase());
     }
 
+    if (sampleFilter === 'original') {
+      result = result.filter((b) => !b.contains_samples);
+    } else if (sampleFilter === 'samples') {
+      result = result.filter((b) => b.contains_samples);
+    }
+
     // Sort
     switch (sort) {
       case 'popular':
@@ -69,7 +76,7 @@ export default function BeatStoreClient({ initialBeats }: BeatStoreClientProps) 
     }
 
     return result;
-  }, [beats, search, genre, sort]);
+  }, [beats, search, genre, sampleFilter, sort]);
 
   // Get unique genres from beats
   const availableGenres = useMemo(() => {
@@ -97,10 +104,11 @@ export default function BeatStoreClient({ initialBeats }: BeatStoreClientProps) 
   function clearFilters() {
     setSearch('');
     setGenre('');
+    setSampleFilter('all');
     setSort('newest');
   }
 
-  const hasActiveFilters = search || genre || sort !== 'newest';
+  const hasActiveFilters = search || genre || sampleFilter !== 'all' || sort !== 'newest';
 
   return (
     <div>
@@ -168,6 +176,23 @@ export default function BeatStoreClient({ initialBeats }: BeatStoreClientProps) 
                 {g}
               </button>
             ))}
+          </div>
+
+          <div className="mt-3">
+            <p className="font-mono text-xs text-black/60 uppercase tracking-wider mb-2">Sample Status</p>
+            <div className="flex gap-2">
+              {(['all', 'original', 'samples'] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setSampleFilter(f)}
+                  className={`font-mono text-xs px-3 py-1.5 border transition-colors ${
+                    sampleFilter === f ? 'border-accent bg-accent/10 text-accent font-bold' : 'border-black/20 text-black/50 hover:border-black/40'
+                  }`}
+                >
+                  {f === 'all' ? 'All' : f === 'original' ? '✓ Original' : '⚠ Has Samples'}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}

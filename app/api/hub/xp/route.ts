@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { calculateLevel, XP_ACTIONS, XpAction } from '@/lib/xp-system';
+import { calculateLevel, XP_ACTIONS, XpAction, awardXP } from '@/lib/xp-system';
 
 export async function GET() {
   const supabase = await createClient();
@@ -92,6 +92,14 @@ export async function GET() {
     }
 
     await supabase.from('xp_log').insert(logEntries);
+
+    // Award streak milestone XP (unique — only once ever)
+    if (dailyStreak >= 3) {
+      await awardXP(supabase, user.id, 'first_login_streak_3');
+    }
+    if (dailyStreak >= 7) {
+      await awardXP(supabase, user.id, 'first_login_streak_7');
+    }
   }
 
   // Fetch recent XP history
@@ -128,7 +136,7 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   const body = await request.json();
-  const { action, metadata } = body;
+  const { action, metadata, reference_id, xp_override } = body;
 
   if (!action || !(action in XP_ACTIONS)) {
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
@@ -153,41 +161,28 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const xpAmount = xpAction.xp;
-
-  // Insert xp_log entry
-  const { error: logError } = await supabase.from('xp_log').insert({
-    user_id: user.id,
-    action,
-    xp_amount: xpAmount,
-    label: xpAction.label,
-    metadata: metadata || {},
+  const result = await awardXP(supabase, user.id, action as XpAction, {
+    referenceId: reference_id,
+    metadata,
+    xpOverride: xp_override,
   });
 
-  if (logError) return NextResponse.json({ error: logError.message }, { status: 500 });
+  if (!result.awarded) {
+    return NextResponse.json({ error: result.error, alreadyAwarded: true }, { status: 409 });
+  }
 
-  // Get current total and update
+  // Get updated totals for response
   const { data: profile } = await supabase
     .from('profiles')
     .select('total_xp')
     .eq('id', user.id)
     .single();
 
-  const newTotal = (profile?.total_xp || 0) + xpAmount;
+  const newTotal = profile?.total_xp || 0;
   const levelInfo = calculateLevel(newTotal);
 
-  const { error: updateError } = await supabase
-    .from('profiles')
-    .update({
-      total_xp: newTotal,
-      artist_level: levelInfo.level,
-    })
-    .eq('id', user.id);
-
-  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
-
   return NextResponse.json({
-    xpAwarded: xpAmount,
+    xpAwarded: result.xp,
     totalXp: newTotal,
     level: levelInfo.level,
     currentLevelXp: levelInfo.currentLevelXp,

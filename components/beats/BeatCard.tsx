@@ -20,6 +20,7 @@ export interface BeatData {
   trackout_lease_price: number | null;
   exclusive_price: number | null;
   has_exclusive: boolean;
+  contains_samples: boolean;
   lease_count: number;
   status: string;
   created_at: string;
@@ -128,6 +129,15 @@ export default function BeatCard({ beat, isSaved, onToggleSave, showWriteButton 
               {beat.musical_key && (
                 <span className="font-mono text-[10px] text-black/40 border border-black/10 px-1.5 py-0.5">
                   {beat.musical_key}
+                </span>
+              )}
+              {beat.contains_samples ? (
+                <span className="font-mono text-[10px] text-amber-600 border border-amber-200 bg-amber-50 px-1.5 py-0.5">
+                  Contains Samples
+                </span>
+              ) : (
+                <span className="font-mono text-[10px] text-green-600 border border-green-200 bg-green-50 px-1.5 py-0.5">
+                  Original
                 </span>
               )}
             </div>

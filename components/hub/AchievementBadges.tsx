@@ -5,7 +5,8 @@ import {
   Award, Lock, Mic, Calendar, Star, Folder, Rocket, Disc,
   BarChart3 as BarChart, Flame, Target, Trophy, User, Heart,
   PenLine, Zap, Crown, CheckCircle, FileText, Library, X,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, Globe, Music, Link, Wrench,
+  Sliders, Headphones,
 } from 'lucide-react';
 import { ACHIEVEMENTS, TIER_COLORS } from '@/lib/achievements';
 import { SkeletonGrid } from './LoadingSkeleton';
@@ -16,7 +17,7 @@ import { SkeletonGrid } from './LoadingSkeleton';
 const ICON_MAP: Record<string, typeof Award> = {
   Mic, Calendar, Star, Award, Folder, Rocket, Disc, BarChart, Flame,
   Target, Trophy, User, Heart, PenLine, Zap, Crown, CheckCircle, FileText,
-  Library, Lock,
+  Library, Lock, Globe, Music, Link, Wrench, Sliders, Headphones,
 };
 
 // ---------------------------------------------------------------------------
@@ -29,6 +30,7 @@ const CATEGORY_META: Record<string, { label: string; order: number }> = {
   goals:       { label: 'Goals',       order: 3 },
   engagement:  { label: 'Engagement',  order: 4 },
   milestones:  { label: 'Milestones',  order: 5 },
+  engineer:    { label: 'Engineer',    order: 6 },
 };
 
 // ---------------------------------------------------------------------------
@@ -41,13 +43,14 @@ interface Achievement {
 
 interface AchievementBadgesProps {
   newUnlocks?: string[];
+  progress?: Record<string, { current: number; target: number }>;
   onDismiss?: () => void;
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
-export default function AchievementBadges({ newUnlocks = [], onDismiss }: AchievementBadgesProps) {
+export default function AchievementBadges({ newUnlocks = [], progress = {}, onDismiss }: AchievementBadgesProps) {
   const [unlocked, setUnlocked] = useState<Achievement[]>([]);
   const [loading, setLoading] = useState(true);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
@@ -71,6 +74,15 @@ export default function AchievementBadges({ newUnlocks = [], onDismiss }: Achiev
   const unlockedCount = unlockedKeys.size;
   const totalCount = Object.keys(ACHIEVEMENTS).length;
   const progressPct = totalCount > 0 ? Math.round((unlockedCount / totalCount) * 100) : 0;
+
+  // Total XP earned from achievements
+  const totalXpEarned = useMemo(() => {
+    let xp = 0;
+    for (const key of unlockedKeys) {
+      if (ACHIEVEMENTS[key]) xp += ACHIEVEMENTS[key].xp;
+    }
+    return xp;
+  }, [unlockedKeys]);
 
   // Group achievements by category
   const grouped = useMemo(() => {
@@ -150,9 +162,16 @@ export default function AchievementBadges({ newUnlocks = [], onDismiss }: Achiev
       {/* ---- Header with overall progress -------------------------------- */}
       <div className="flex items-center justify-between mb-2">
         <h2 className="text-heading-md font-mono">ACHIEVEMENTS</h2>
-        <span className="font-mono text-xs text-accent font-bold uppercase tracking-wider animate-count-up">
-          {unlockedCount} / {totalCount} Unlocked
-        </span>
+        <div className="flex items-center gap-4">
+          {totalXpEarned > 0 && (
+            <span className="font-mono text-xs text-yellow-700 bg-yellow-50 border border-yellow-300 px-2 py-0.5 font-bold uppercase tracking-wider animate-count-up">
+              {totalXpEarned.toLocaleString()} XP Earned
+            </span>
+          )}
+          <span className="font-mono text-xs text-accent font-bold uppercase tracking-wider animate-count-up">
+            {unlockedCount} / {totalCount} Unlocked
+          </span>
+        </div>
       </div>
 
       {/* Progress bar */}
@@ -198,6 +217,10 @@ export default function AchievementBadges({ newUnlocks = [], onDismiss }: Achiev
                     const unlockedData = unlocked.find((a) => a.achievement_key === key);
                     const Icon = ICON_MAP[def.icon] || Award;
                     const tier = TIER_COLORS[def.tier] ?? TIER_COLORS.bronze;
+                    const prog = progress[key];
+                    const progPct = prog && prog.target > 0
+                      ? Math.min(100, Math.round((prog.current / prog.target) * 100))
+                      : 0;
 
                     return (
                       <div
@@ -231,6 +254,21 @@ export default function AchievementBadges({ newUnlocks = [], onDismiss }: Achiev
 
                         {/* Description */}
                         <p className="font-mono text-[10px] text-black/40 mt-1">{def.description}</p>
+
+                        {/* Progress bar for locked achievements */}
+                        {!isUnlocked && prog && prog.target > 1 && (
+                          <div className="mt-2">
+                            <div className="w-full h-1 bg-black/10 overflow-hidden">
+                              <div
+                                className="h-full bg-black/25 transition-all duration-500"
+                                style={{ width: `${progPct}%` }}
+                              />
+                            </div>
+                            <p className="font-mono text-[10px] text-black/40 mt-0.5">
+                              {prog.current}/{prog.target}
+                            </p>
+                          </div>
+                        )}
 
                         {/* XP reward */}
                         <p className={`font-mono text-[10px] mt-1.5 font-bold ${isUnlocked ? tier.text : 'text-black/20'}`}>

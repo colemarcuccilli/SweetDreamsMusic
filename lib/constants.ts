@@ -1,3 +1,6 @@
+// Achievement definitions are in lib/achievements.ts — re-exported here for convenience
+export { ACHIEVEMENTS } from './achievements';
+
 export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://sweetdreamsmusic.com';
 
 export const BRAND = {

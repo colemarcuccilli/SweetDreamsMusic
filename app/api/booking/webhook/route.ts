@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { sendBookingConfirmation, sendAdminBookingAlert, sendEngineerNewBookingAlert, sendEngineerPriorityAlert } from '@/lib/email';
 import { ENGINEERS, type Room } from '@/lib/constants';
 import { calculatePriorityExpiry, getPriorityHoursLabel, calculateRescheduleDeadline } from '@/lib/priority';
+import { awardXP } from '@/lib/xp-system';
 import type Stripe from 'stripe';
 
 export async function POST(request: NextRequest) {
@@ -130,6 +131,22 @@ export async function POST(request: NextRequest) {
             });
           }
         }
+
+        // Award XP for booking — look up user by email
+        try {
+          const { data: bookerProfile } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('email', meta.customer_email)
+            .limit(1)
+            .single();
+          if (bookerProfile?.id && newBooking?.id) {
+            await awardXP(supabase, bookerProfile.id, 'book_session', {
+              referenceId: newBooking.id,
+              metadata: { room: meta.room, date: meta.session_date },
+            });
+          }
+        } catch { /* user may not have an account — skip XP */ }
       } else if (meta.type === 'invite_deposit') {
         // Invite booking — deposit paid, confirm the existing pending booking
         const bookingId = meta.booking_id;
@@ -262,6 +279,16 @@ export async function POST(request: NextRequest) {
             exclusive_buyer_id: meta.buyer_id || null,
             exclusive_sold_at: new Date().toISOString(),
           }).eq('id', meta.beat_id);
+        }
+
+        // Award XP for beat purchase
+        if (meta.buyer_id) {
+          try {
+            await awardXP(supabase, meta.buyer_id, 'purchase_beat', {
+              referenceId: `${meta.beat_id}_${meta.license_type}`,
+              metadata: { beat_id: meta.beat_id, license_type: meta.license_type, beat_title: meta.beat_title },
+            });
+          } catch { /* buyer may not have a profile — skip XP */ }
         }
       }
       break;

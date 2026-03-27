@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
 
   let query = supabase
     .from('beats')
-    .select('id, title, producer, producer_id, genre, bpm, musical_key, tags, preview_url, cover_image_url, mp3_lease_price, trackout_lease_price, exclusive_price, has_exclusive, lease_count, status, created_at, profiles!producer_id(display_name, producer_name, public_profile_slug)')
+    .select('id, title, producer, producer_id, genre, bpm, musical_key, tags, preview_url, cover_image_url, mp3_lease_price, trackout_lease_price, exclusive_price, has_exclusive, contains_samples, lease_count, status, created_at, profiles!producer_id(display_name, producer_name, public_profile_slug)')
     .eq('status', 'active');
 
   if (genre) query = query.eq('genre', genre);

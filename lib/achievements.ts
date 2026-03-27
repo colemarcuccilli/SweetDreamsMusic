@@ -124,6 +124,16 @@ export const ACHIEVEMENTS: Record<string, AchievementDef> = {
     description: 'Completed your full profile',
     icon: 'User', xp: 50, tier: 'bronze', category: 'engagement',
   },
+  public_profile: {
+    title: 'Going Public',
+    description: 'Made your profile public',
+    icon: 'Globe', xp: 50, tier: 'bronze', category: 'engagement',
+  },
+  first_beat_purchase: {
+    title: 'Beat Buyer',
+    description: 'Purchased your first beat',
+    icon: 'Music', xp: 50, tier: 'bronze', category: 'engagement',
+  },
   first_beat_saved: {
     title: 'Beat Collector',
     description: 'Saved your first beat',
@@ -138,6 +148,16 @@ export const ACHIEVEMENTS: Record<string, AchievementDef> = {
     title: 'Reviewer',
     description: 'Wrote your first session notes',
     icon: 'FileText', xp: 50, tier: 'bronze', category: 'engagement',
+  },
+  first_calendar_event: {
+    title: 'Planner',
+    description: 'Created your first calendar event',
+    icon: 'Calendar', xp: 25, tier: 'bronze', category: 'engagement',
+  },
+  connect_platform: {
+    title: 'Connected',
+    description: 'Connected Spotify or YouTube',
+    icon: 'Link', xp: 50, tier: 'bronze', category: 'engagement',
   },
 
   // === Milestones ===

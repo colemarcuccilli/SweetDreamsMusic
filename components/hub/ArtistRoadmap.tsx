@@ -1,11 +1,25 @@
 'use client';
 
-import { useState } from 'react';
-import { ChevronDown, ChevronRight, BookOpen, DollarSign, Music, Users, Mic, Radio, Globe, TrendingUp, Shield, Lightbulb } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import {
+  ChevronDown,
+  ChevronRight,
+  DollarSign,
+  Music,
+  Globe,
+  TrendingUp,
+  Lightbulb,
+  Check,
+  Loader2,
+} from 'lucide-react';
+
+// ============================================================
+// Types
+// ============================================================
 
 interface Section {
   id: string;
-  icon: typeof BookOpen;
+  icon: typeof Music;
   title: string;
   subtitle: string;
   content: RoadmapItem[];
@@ -15,6 +29,19 @@ interface RoadmapItem {
   heading: string;
   body: string[];
 }
+
+// Map career_stage values to default expanded section
+const CAREER_STAGE_MAP: Record<string, string> = {
+  'just-starting': 'foundation',
+  emerging: 'creating',
+  growing: 'growing',
+  established: 'monetizing',
+  professional: 'scaling',
+};
+
+// ============================================================
+// Roadmap Data
+// ============================================================
 
 const ROADMAP_SECTIONS: Section[] = [
   {
@@ -219,9 +246,123 @@ const ROADMAP_SECTIONS: Section[] = [
   },
 ];
 
+// ============================================================
+// Helper: count total items across all sections
+// ============================================================
+
+function getTotalItemCount(): number {
+  return ROADMAP_SECTIONS.reduce((sum, s) => sum + s.content.length, 0);
+}
+
+function getSectionItemIds(section: Section): string[] {
+  return section.content.map((_, idx) => `${section.id}-${idx}`);
+}
+
+// ============================================================
+// Component
+// ============================================================
+
 export default function ArtistRoadmap() {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['foundation']));
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const [progress, setProgress] = useState<Record<string, boolean>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [careerStage, setCareerStage] = useState<string | null>(null);
+
+  // Fetch progress and career stage on mount
+  useEffect(() => {
+    async function fetchProgress() {
+      try {
+        const res = await fetch('/api/hub/roadmap');
+        if (res.ok) {
+          const data = await res.json();
+          setProgress(data.progress || {});
+          setCareerStage(data.careerStage || null);
+
+          // Set default expanded section based on career stage
+          if (data.careerStage && CAREER_STAGE_MAP[data.careerStage]) {
+            setExpandedSections(new Set([CAREER_STAGE_MAP[data.careerStage]]));
+          }
+        }
+      } catch {
+        // silently fail, keep empty progress
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchProgress();
+  }, []);
+
+  // Toggle a roadmap item's completion
+  const toggleCompletion = useCallback(async (itemId: string) => {
+    const newCompleted = !progress[itemId];
+    setSaving(itemId);
+
+    // Optimistic update
+    setProgress((prev) => {
+      const next = { ...prev };
+      if (newCompleted) {
+        next[itemId] = true;
+      } else {
+        delete next[itemId];
+      }
+      return next;
+    });
+
+    try {
+      const res = await fetch('/api/hub/roadmap', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemId, completed: newCompleted }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setProgress(data.progress);
+
+        // Award XP if completing (not unchecking) and eligible
+        if (data.xpEligible) {
+          try {
+            await fetch('/api/hub/xp', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                action: 'complete_roadmap_item',
+                metadata: { itemId },
+              }),
+            });
+          } catch {
+            // XP award failure is non-blocking
+          }
+        }
+      } else {
+        // Revert on failure
+        setProgress((prev) => {
+          const next = { ...prev };
+          if (newCompleted) {
+            delete next[itemId];
+          } else {
+            next[itemId] = true;
+          }
+          return next;
+        });
+      }
+    } catch {
+      // Revert on network error
+      setProgress((prev) => {
+        const next = { ...prev };
+        if (newCompleted) {
+          delete next[itemId];
+        } else {
+          next[itemId] = true;
+        }
+        return next;
+      });
+    } finally {
+      setSaving(null);
+    }
+  }, [progress]);
 
   function toggleSection(id: string) {
     setExpandedSections((prev) => {
@@ -241,32 +382,84 @@ export default function ArtistRoadmap() {
     });
   }
 
+  // Calculate completion stats
+  const totalItems = getTotalItemCount();
+  const completedCount = Object.keys(progress).length;
+  const overallPercent = totalItems > 0 ? Math.round((completedCount / totalItems) * 100) : 0;
+
+  function getSectionStats(section: Section) {
+    const ids = getSectionItemIds(section);
+    const done = ids.filter((id) => progress[id]).length;
+    const total = ids.length;
+    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+    return { done, total, percent };
+  }
+
   return (
     <div>
       <div className="mb-8">
         <h2 className="text-heading-md mb-2">ARTIST ROADMAP</h2>
         <p className="font-mono text-sm text-black/60 max-w-2xl">
-          A comprehensive guide to building a music career from scratch. This isn&apos;t motivational fluff — it&apos;s the real playbook. Every stage, every step, every dollar.
+          A comprehensive guide to building a music career from scratch. This isn&apos;t motivational fluff &mdash; it&apos;s the real playbook. Check off items as you complete them to track your progress.
         </p>
+      </div>
+
+      {/* Overall progress bar */}
+      <div className="mb-6 border-2 border-black/10 p-4 sm:p-5">
+        <div className="flex items-center justify-between mb-2">
+          <span className="font-mono text-xs font-semibold uppercase tracking-wider">Overall Progress</span>
+          <span className="font-mono text-xs text-black/50">
+            {loading ? '...' : `${completedCount} / ${totalItems} items (${overallPercent}%)`}
+          </span>
+        </div>
+        <div className="w-full h-3 bg-black/5 overflow-hidden">
+          <div
+            className="h-full bg-accent transition-all duration-500 ease-out"
+            style={{ width: loading ? '0%' : `${overallPercent}%` }}
+          />
+        </div>
       </div>
 
       <div className="space-y-4">
         {ROADMAP_SECTIONS.map((section) => {
           const isOpen = expandedSections.has(section.id);
           const Icon = section.icon;
+          const stats = getSectionStats(section);
 
           return (
             <div key={section.id} className="border-2 border-black/10">
-              <button onClick={() => toggleSection(section.id)}
-                className="w-full p-5 sm:p-6 flex items-center gap-4 text-left hover:bg-black/[0.02] transition-colors">
+              <button
+                onClick={() => toggleSection(section.id)}
+                className="w-full p-5 sm:p-6 flex items-center gap-4 text-left hover:bg-black/[0.02] transition-colors"
+              >
                 <div className="w-10 h-10 bg-accent flex items-center justify-center flex-shrink-0">
                   <Icon className="w-5 h-5 text-black" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-mono text-sm font-bold uppercase tracking-wider">{section.title}</h3>
+                  <div className="flex items-center gap-3">
+                    <h3 className="font-mono text-sm font-bold uppercase tracking-wider">{section.title}</h3>
+                  </div>
                   <p className="font-mono text-xs text-black/50 mt-0.5">{section.subtitle}</p>
+                  {/* Section progress bar */}
+                  {!loading && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <div className="flex-1 h-1.5 bg-black/5 overflow-hidden max-w-[200px]">
+                        <div
+                          className="h-full bg-accent transition-all duration-500 ease-out"
+                          style={{ width: `${stats.percent}%` }}
+                        />
+                      </div>
+                      <span className="font-mono text-[10px] text-black/40">
+                        {stats.done}/{stats.total}
+                      </span>
+                    </div>
+                  )}
                 </div>
-                {isOpen ? <ChevronDown className="w-5 h-5 text-black/30" /> : <ChevronRight className="w-5 h-5 text-black/30" />}
+                {isOpen ? (
+                  <ChevronDown className="w-5 h-5 text-black/30 flex-shrink-0" />
+                ) : (
+                  <ChevronRight className="w-5 h-5 text-black/30 flex-shrink-0" />
+                )}
               </button>
 
               {isOpen && (
@@ -274,20 +467,67 @@ export default function ArtistRoadmap() {
                   {section.content.map((item, idx) => {
                     const itemKey = `${section.id}-${idx}`;
                     const isItemOpen = expandedItems.has(itemKey);
+                    const isCompleted = progress[itemKey] === true;
+                    const isSaving = saving === itemKey;
 
                     return (
-                      <div key={idx} className="border-b border-black/5 last:border-0">
-                        <button onClick={() => toggleItem(itemKey)}
-                          className="w-full px-6 py-4 flex items-center gap-3 text-left hover:bg-black/[0.02] transition-colors">
-                          {isItemOpen
-                            ? <ChevronDown className="w-4 h-4 text-accent flex-shrink-0" />
-                            : <ChevronRight className="w-4 h-4 text-black/30 flex-shrink-0" />}
-                          <span className="font-mono text-sm font-semibold">{item.heading}</span>
-                        </button>
+                      <div
+                        key={idx}
+                        className={`border-b border-black/5 last:border-0 transition-colors ${
+                          isCompleted ? 'bg-green-50/60' : ''
+                        }`}
+                      >
+                        <div className="flex items-center">
+                          {/* Checkbox */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleCompletion(itemKey);
+                            }}
+                            disabled={isSaving || loading}
+                            className="ml-4 sm:ml-6 flex-shrink-0 w-6 h-6 border-2 flex items-center justify-center transition-all hover:scale-105 disabled:opacity-50"
+                            style={{
+                              borderColor: isCompleted ? '#16a34a' : 'rgba(0,0,0,0.2)',
+                              backgroundColor: isCompleted ? '#16a34a' : 'transparent',
+                            }}
+                            title={isCompleted ? 'Mark incomplete' : 'Mark complete'}
+                          >
+                            {isSaving ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-black/30" />
+                            ) : isCompleted ? (
+                              <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
+                            ) : null}
+                          </button>
+
+                          {/* Item header */}
+                          <button
+                            onClick={() => toggleItem(itemKey)}
+                            className="flex-1 px-3 py-4 flex items-center gap-3 text-left hover:bg-black/[0.02] transition-colors"
+                          >
+                            {isItemOpen ? (
+                              <ChevronDown className="w-4 h-4 text-accent flex-shrink-0" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4 text-black/30 flex-shrink-0" />
+                            )}
+                            <span
+                              className={`font-mono text-sm font-semibold ${
+                                isCompleted ? 'text-green-700 line-through decoration-green-400/50' : ''
+                              }`}
+                            >
+                              {item.heading}
+                            </span>
+                            {isCompleted && !isSaving && (
+                              <span className="font-mono text-[10px] text-green-600 bg-green-100 px-1.5 py-0.5 uppercase tracking-wider flex-shrink-0">
+                                Done
+                              </span>
+                            )}
+                          </button>
+                        </div>
+
                         {isItemOpen && (
-                          <div className="px-6 pb-5 pl-13 space-y-3">
+                          <div className="px-6 pb-5 pl-[4.5rem] space-y-3">
                             {item.body.map((paragraph, pIdx) => (
-                              <p key={pIdx} className="font-mono text-xs text-black/60 leading-relaxed pl-7">
+                              <p key={pIdx} className="font-mono text-xs text-black/60 leading-relaxed">
                                 {paragraph}
                               </p>
                             ))}
@@ -308,6 +548,11 @@ export default function ArtistRoadmap() {
           This roadmap is a living document. As you grow, new stages and strategies will be added.
           Use the Projects, Goals, and Metrics tabs to put this knowledge into action.
         </p>
+        {!loading && completedCount > 0 && (
+          <p className="font-mono text-xs text-accent mt-2 font-semibold">
+            +10 XP awarded for each completed roadmap item
+          </p>
+        )}
       </div>
     </div>
   );
