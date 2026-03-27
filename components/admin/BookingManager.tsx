@@ -33,6 +33,9 @@ interface Booking {
   admin_notes: string | null;
   created_at: string;
   claimed_at: string | null;
+  reschedule_requested: boolean;
+  reschedule_reason: string | null;
+  reschedule_requested_at: string | null;
 }
 
 type StatusFilter = 'all' | 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'rejected';
@@ -385,7 +388,7 @@ export default function BookingManager() {
     const endM = endDec % 1 >= 0.5 ? '30' : '00';
     const startDateTime = `${dateInput}T${timeInput}:00`;
     const endDateTime = `${dateInput}T${endH}:${endM}:00`;
-    updateBooking(bookingId, { start_time: startDateTime, end_time: endDateTime, duration: durationInput });
+    updateBooking(bookingId, { start_time: startDateTime, end_time: endDateTime, duration: durationInput, reschedule_requested: false, reschedule_reason: null, reschedule_requested_at: null });
     setEditingTime(null);
   }
 
@@ -458,6 +461,11 @@ export default function BookingManager() {
                       <span className={`font-mono text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 ${STATUS_COLORS[b.status] || 'bg-black/5 text-black/50'}`}>
                         {b.status}
                       </span>
+                      {b.reschedule_requested && (
+                        <span className="font-mono text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-amber-200 text-amber-800 animate-pulse">
+                          Reschedule Requested
+                        </span>
+                      )}
                     </div>
                     <p className="font-mono text-xs text-black/50 mt-1">
                       {date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })} · {date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' })} · {b.duration}hr · {roomLabel}
@@ -566,6 +574,51 @@ export default function BookingManager() {
                         )}
                       </div>
                     </div>
+
+                    {/* Reschedule Request Banner */}
+                    {b.reschedule_requested && (
+                      <div className="border-2 border-amber-400 bg-amber-50 p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono text-xs font-bold uppercase tracking-wider text-amber-700">
+                            Reschedule Requested
+                          </span>
+                          <span className="font-mono text-[10px] text-amber-600">
+                            {b.reschedule_requested_at ? new Date(b.reschedule_requested_at).toLocaleString() : ''}
+                          </span>
+                        </div>
+                        <p className="font-mono text-xs text-amber-800">
+                          Reason: {b.reschedule_reason || 'No reason given'}
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setEditingTime(b.id);
+                              const d = new Date(b.start_time);
+                              setDateInput(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`);
+                              setTimeInput(`${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`);
+                              setDurationInput(b.duration || 2);
+                            }}
+                            className="bg-amber-500 text-white font-mono text-[10px] font-bold uppercase px-3 py-1.5 hover:bg-amber-600"
+                          >
+                            Edit Time to Reschedule
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (!confirm('Dismiss this reschedule request?')) return;
+                              await fetch('/api/admin/bookings/update', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ bookingId: b.id, updates: { reschedule_requested: false, reschedule_reason: null, reschedule_requested_at: null } }),
+                              });
+                              fetchBookings();
+                            }}
+                            className="border border-amber-400 text-amber-700 font-mono text-[10px] font-bold uppercase px-3 py-1.5 hover:bg-amber-100"
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Reschedule / Edit Time */}
                     <div className="font-mono text-xs">
