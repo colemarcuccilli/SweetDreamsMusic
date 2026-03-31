@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { Plus, Trash2, DollarSign, Video, Pencil, X, Check } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { Plus, Trash2, DollarSign, Video, Pencil, X, Check, Search, UserPlus } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
 import { ENGINEERS } from '@/lib/constants';
 
@@ -48,7 +48,32 @@ export default function MediaSales() {
   const [clientEmail, setClientEmail] = useState('');
   const [notes, setNotes] = useState('');
 
-  useEffect(() => { fetchSales(); }, []);
+  // Client picker
+  const [clients, setClients] = useState<{ id: string; display_name: string; email: string | null }[]>([]);
+  const [clientSearch, setClientSearch] = useState('');
+  const [showClientPicker, setShowClientPicker] = useState(false);
+  const [manualClientEntry, setManualClientEntry] = useState(false);
+  const clientPickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    fetchSales();
+    fetch('/api/admin/library/clients').then(r => r.json()).then(d => setClients(d.clients || [])).catch(() => {});
+  }, []);
+
+  // Close client picker on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (clientPickerRef.current && !clientPickerRef.current.contains(e.target as Node)) setShowClientPicker(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const filteredClients = useMemo(() => {
+    if (!clientSearch.trim()) return clients.slice(0, 8);
+    const q = clientSearch.toLowerCase();
+    return clients.filter(c => c.display_name?.toLowerCase().includes(q) || c.email?.toLowerCase().includes(q)).slice(0, 8);
+  }, [clients, clientSearch]);
 
   async function fetchSales() {
     setLoading(true);
@@ -61,7 +86,7 @@ export default function MediaSales() {
   function resetForm() {
     setDescription(''); setAmount(''); setSaleType('video'); setSoldBy(''); setFilmedBy(''); setEditedBy('');
     setClientName(''); setClientEmail(''); setNotes('');
-    setEditingId(null);
+    setEditingId(null); setManualClientEntry(false); setClientSearch(''); setShowClientPicker(false);
   }
 
   function startEdit(sale: MediaSale) {
@@ -239,19 +264,68 @@ export default function MediaSales() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block font-mono text-[10px] text-black/40 uppercase tracking-wider mb-1">Client Name</label>
-              <input type="text" value={clientName} onChange={(e) => setClientName(e.target.value)}
-                className="w-full border border-black/20 px-3 py-2 font-mono text-sm focus:border-accent focus:outline-none"
-                placeholder="Client name" />
-            </div>
-            <div>
-              <label className="block font-mono text-[10px] text-black/40 uppercase tracking-wider mb-1">Client Email</label>
-              <input type="email" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)}
-                className="w-full border border-black/20 px-3 py-2 font-mono text-sm focus:border-accent focus:outline-none"
-                placeholder="client@email.com" />
-            </div>
+          {/* Client picker */}
+          <div>
+            <label className="block font-mono text-[10px] text-black/40 uppercase tracking-wider mb-1">Client</label>
+            {clientName && !manualClientEntry ? (
+              <div className="border border-accent px-3 py-2 flex items-center justify-between">
+                <div>
+                  <span className="font-mono text-sm font-semibold">{clientName}</span>
+                  {clientEmail && <span className="font-mono text-xs text-black/40 ml-2">{clientEmail}</span>}
+                </div>
+                <button onClick={() => { setClientName(''); setClientEmail(''); setManualClientEntry(false); }} className="text-black/30 hover:text-red-500">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ) : manualClientEntry ? (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-3">
+                  <input type="text" value={clientName} onChange={(e) => setClientName(e.target.value)}
+                    className="w-full border border-black/20 px-3 py-2 font-mono text-sm focus:border-accent focus:outline-none"
+                    placeholder="Client name" />
+                  <input type="email" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)}
+                    className="w-full border border-black/20 px-3 py-2 font-mono text-sm focus:border-accent focus:outline-none"
+                    placeholder="client@email.com" />
+                </div>
+                <button onClick={() => setManualClientEntry(false)} className="font-mono text-[10px] text-accent hover:underline">
+                  Search from users instead
+                </button>
+              </div>
+            ) : (
+              <div className="relative" ref={clientPickerRef}>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-black/30" />
+                  <input type="text" value={clientSearch}
+                    onChange={(e) => { setClientSearch(e.target.value); setShowClientPicker(true); }}
+                    onFocus={() => setShowClientPicker(true)}
+                    className="w-full border border-black/20 pl-8 pr-3 py-2 font-mono text-sm focus:border-accent focus:outline-none"
+                    placeholder="Search users by name or email..." />
+                </div>
+                {showClientPicker && (
+                  <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white border border-black/20 max-h-48 overflow-y-auto shadow-lg">
+                    {filteredClients.map(c => (
+                      <button key={c.id} onClick={() => {
+                        setClientName(c.display_name); setClientEmail(c.email || '');
+                        setShowClientPicker(false); setClientSearch('');
+                      }} className="w-full px-3 py-2 flex items-center gap-2 hover:bg-accent/10 text-left border-b border-black/5 last:border-0">
+                        <div className="min-w-0">
+                          <p className="font-mono text-xs font-semibold truncate">{c.display_name}</p>
+                          {c.email && <p className="font-mono text-[10px] text-black/40 truncate">{c.email}</p>}
+                        </div>
+                      </button>
+                    ))}
+                    {filteredClients.length === 0 && (
+                      <p className="px-3 py-2 font-mono text-xs text-black/30">No users found</p>
+                    )}
+                    <button onClick={() => { setManualClientEntry(true); setShowClientPicker(false); setClientSearch(''); }}
+                      className="w-full px-3 py-2 flex items-center gap-2 hover:bg-accent/10 text-left border-t border-black/10">
+                      <UserPlus className="w-3 h-3 text-accent" />
+                      <span className="font-mono text-xs text-accent font-bold">Enter manually</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div>
