@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { DollarSign, TrendingUp, Calendar, Music, Users, Filter, ChevronDown } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
-import { PRODUCER_COMMISSION, PLATFORM_COMMISSION, ENGINEER_SESSION_SPLIT, BUSINESS_SESSION_SPLIT, MEDIA_SELLER_COMMISSION, MEDIA_WORKER_RATE } from '@/lib/constants';
+import { PRODUCER_COMMISSION, PLATFORM_COMMISSION, ENGINEER_SESSION_SPLIT, BUSINESS_SESSION_SPLIT, MEDIA_SELLER_COMMISSION, MEDIA_BUSINESS_CUT, MEDIA_WORKER_TOTAL } from '@/lib/constants';
 
 interface Booking {
   id: string;
@@ -294,11 +294,20 @@ export default function Accounting() {
   const mediaStats = useMemo(() => {
     const totalRevenue = mediaSales.reduce((s, m) => s + m.amount, 0);
     const totalSellerCommissions = mediaSales.reduce((s, m) => s + (m.sold_by ? Math.round(m.amount * MEDIA_SELLER_COMMISSION) : 0), 0);
-    const totalFilmerPay = mediaSales.reduce((s, m) => s + (m.filmed_by ? Math.round(m.amount * MEDIA_WORKER_RATE) : 0), 0);
-    const totalEditorPay = mediaSales.reduce((s, m) => s + (m.edited_by ? Math.round(m.amount * MEDIA_WORKER_RATE) : 0), 0);
+    // Workers split 50%: if both filmed_by and edited_by exist, each gets 25%. If only one, they get 50%.
+    const totalFilmerPay = mediaSales.reduce((s, m) => {
+      if (!m.filmed_by) return s;
+      const workerCount = (m.filmed_by ? 1 : 0) + (m.edited_by ? 1 : 0);
+      return s + Math.round(m.amount * MEDIA_WORKER_TOTAL / workerCount);
+    }, 0);
+    const totalEditorPay = mediaSales.reduce((s, m) => {
+      if (!m.edited_by) return s;
+      const workerCount = (m.filmed_by ? 1 : 0) + (m.edited_by ? 1 : 0);
+      return s + Math.round(m.amount * MEDIA_WORKER_TOTAL / workerCount);
+    }, 0);
     const totalWorkerPay = totalFilmerPay + totalEditorPay;
     const totalPayouts = totalSellerCommissions + totalWorkerPay;
-    const businessRevenue = totalRevenue - totalPayouts;
+    const businessRevenue = Math.round(totalRevenue * MEDIA_BUSINESS_CUT);
 
     const byType: Record<string, { count: number; revenue: number }> = {};
     mediaSales.forEach(m => {
@@ -319,17 +328,19 @@ export default function Accounting() {
         personPayouts[m.sold_by].sellerCommission += comm;
         personPayouts[m.sold_by].totalPay += comm;
       }
+      // Workers split 50%: if both exist each gets 25%, if only one they get 50%
+      const workerCount = (m.filmed_by ? 1 : 0) + (m.edited_by ? 1 : 0);
       if (m.filmed_by) {
         if (!personPayouts[m.filmed_by]) personPayouts[m.filmed_by] = initPerson();
         personPayouts[m.filmed_by].filmedCount++;
-        const pay = Math.round(m.amount * MEDIA_WORKER_RATE);
+        const pay = Math.round(m.amount * MEDIA_WORKER_TOTAL / workerCount);
         personPayouts[m.filmed_by].filmedPay += pay;
         personPayouts[m.filmed_by].totalPay += pay;
       }
       if (m.edited_by) {
         if (!personPayouts[m.edited_by]) personPayouts[m.edited_by] = initPerson();
         personPayouts[m.edited_by].editedCount++;
-        const pay = Math.round(m.amount * MEDIA_WORKER_RATE);
+        const pay = Math.round(m.amount * MEDIA_WORKER_TOTAL / workerCount);
         personPayouts[m.edited_by].editedPay += pay;
         personPayouts[m.edited_by].totalPay += pay;
       }
@@ -364,22 +375,23 @@ export default function Accounting() {
       people[eng].sessionHours += b.duration;
     });
 
-    // Media: seller gets 15%, filmed_by/edited_by get 10% each
+    // Media: seller gets 15%, workers split 50% (25% each if both, 50% if solo)
     mediaSales.forEach(m => {
       if (m.sold_by) {
         if (!people[m.sold_by]) people[m.sold_by] = initPerson();
         people[m.sold_by].mediaSoldCount++;
         people[m.sold_by].mediaCommission += Math.round(m.amount * MEDIA_SELLER_COMMISSION);
       }
+      const wCount = (m.filmed_by ? 1 : 0) + (m.edited_by ? 1 : 0);
       if (m.filmed_by) {
         if (!people[m.filmed_by]) people[m.filmed_by] = initPerson();
         people[m.filmed_by].mediaFilmedCount++;
-        people[m.filmed_by].mediaWorkerPay += Math.round(m.amount * MEDIA_WORKER_RATE);
+        people[m.filmed_by].mediaWorkerPay += Math.round(m.amount * MEDIA_WORKER_TOTAL / wCount);
       }
       if (m.edited_by) {
         if (!people[m.edited_by]) people[m.edited_by] = initPerson();
         people[m.edited_by].mediaEditedCount++;
-        people[m.edited_by].mediaWorkerPay += Math.round(m.amount * MEDIA_WORKER_RATE);
+        people[m.edited_by].mediaWorkerPay += Math.round(m.amount * MEDIA_WORKER_TOTAL / wCount);
       }
     });
 
@@ -545,7 +557,7 @@ export default function Accounting() {
                     <span className="font-bold">{formatCents(beatStats.platformCut)}</span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-black/5">
-                    <span className="text-black/60">Media Sales — Business {Math.round((1 - MEDIA_SELLER_COMMISSION) * 100)}%</span>
+                    <span className="text-black/60">Media Sales — Business {Math.round(MEDIA_BUSINESS_CUT * 100)}%</span>
                     <span className="font-bold">{formatCents(mediaStats.businessRevenue)}</span>
                   </div>
                   {payrollData.keptDeposits > 0 && (
@@ -827,7 +839,7 @@ export default function Accounting() {
                               {data.mediaFilmedCount > 0 ? `${data.mediaFilmedCount} filmed` : ''}
                               {data.mediaFilmedCount > 0 && data.mediaEditedCount > 0 ? ' · ' : ''}
                               {data.mediaEditedCount > 0 ? `${data.mediaEditedCount} edited` : ''}
-                              {' · 10% per role'}
+                              {' · 50% worker split'}
                             </p>
                           </div>
                           <p className="font-mono text-sm font-bold">{formatCents(data.mediaWorkerPay)}</p>
@@ -1082,15 +1094,23 @@ export default function Accounting() {
                     <span className="font-bold">{formatCents(mediaStats.totalSellerCommissions)}</span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-black/5">
-                    <span className="text-black/60">Filmed By Pay ({Math.round(MEDIA_WORKER_RATE * 100)}%)</span>
-                    <span className="font-bold">{formatCents(mediaStats.totalFilmerPay)}</span>
+                    <span className="text-black/60">Worker Pay — {Math.round(MEDIA_WORKER_TOTAL * 100)}% total (split if both filmed + edited)</span>
+                    <span className="font-bold">{formatCents(mediaStats.totalWorkerPay)}</span>
                   </div>
-                  <div className="flex justify-between py-1 border-b border-black/5">
-                    <span className="text-black/60">Edited By Pay ({Math.round(MEDIA_WORKER_RATE * 100)}%)</span>
-                    <span className="font-bold">{formatCents(mediaStats.totalEditorPay)}</span>
-                  </div>
+                  {mediaStats.totalFilmerPay > 0 && (
+                    <div className="flex justify-between py-1 border-b border-black/5 pl-4">
+                      <span className="text-black/40">Filmed By</span>
+                      <span className="text-black/60">{formatCents(mediaStats.totalFilmerPay)}</span>
+                    </div>
+                  )}
+                  {mediaStats.totalEditorPay > 0 && (
+                    <div className="flex justify-between py-1 border-b border-black/5 pl-4">
+                      <span className="text-black/40">Edited By</span>
+                      <span className="text-black/60">{formatCents(mediaStats.totalEditorPay)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between py-2 border-t-2 border-black/20">
-                    <span className="font-bold text-accent">Business Keeps ({Math.round((1 - MEDIA_SELLER_COMMISSION - MEDIA_WORKER_RATE * 2) * 100)}%+)</span>
+                    <span className="font-bold text-accent">Business Keeps ({Math.round(MEDIA_BUSINESS_CUT * 100)}%)</span>
                     <span className="font-bold text-accent">{formatCents(mediaStats.businessRevenue)}</span>
                   </div>
                 </div>

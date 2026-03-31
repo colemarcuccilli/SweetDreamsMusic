@@ -148,7 +148,8 @@ export const PLATFORM_COMMISSION = 0.40; // 40% to platform
 export const ENGINEER_SESSION_SPLIT = 0.60; // 60% to engineer for sessions
 export const BUSINESS_SESSION_SPLIT = 0.40; // 40% to business for sessions
 export const MEDIA_SELLER_COMMISSION = 0.15; // 15% to seller for media sales
-export const MEDIA_WORKER_RATE = 0.10; // 10% to filmed_by / edited_by workers each
+export const MEDIA_BUSINESS_CUT = 0.35; // 35% to business for media sales
+export const MEDIA_WORKER_TOTAL = 0.50; // 50% total to workers (split if both filmed_by and edited_by)
 export const EXCLUSIVE_PRICE_FLOOR = 40000; // $400 minimum exclusive price in cents
 
 // Beat store genres with cover art colors
