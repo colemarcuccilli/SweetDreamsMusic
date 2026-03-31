@@ -23,6 +23,7 @@ export default function CreateInvite() {
   const [artistName, setArtistName] = useState('');
   const [notes, setNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'online' | 'cash'>('online');
+  const [chargeFullAmount, setChargeFullAmount] = useState(false);
   const [customPrice, setCustomPrice] = useState('');
   const [creating, setCreating] = useState(false);
   const [inviteUrl, setInviteUrl] = useState('');
@@ -95,7 +96,7 @@ export default function CreateInvite() {
   const useCustomPrice = customPrice.trim() !== '';
   const customPriceCents = useCustomPrice ? Math.round(parseFloat(customPrice) * 100) : 0;
   const finalTotal = useCustomPrice ? customPriceCents : pricing.total;
-  const finalDeposit = Math.round(finalTotal * (PRICING.depositPercent / 100));
+  const finalDeposit = chargeFullAmount ? finalTotal : Math.round(finalTotal * (PRICING.depositPercent / 100));
 
   // Generate 30-min time slots
   const timeSlots: string[] = [];
@@ -215,6 +216,13 @@ export default function CreateInvite() {
             Cash at Studio
           </button>
         </div>
+        {paymentMethod === 'online' && (
+          <label className="flex items-center gap-2 mt-2 cursor-pointer">
+            <input type="checkbox" checked={chargeFullAmount} onChange={(e) => setChargeFullAmount(e.target.checked)}
+              className="w-4 h-4 accent-accent" />
+            <span className="font-mono text-xs text-black/60">Charge full amount upfront (no deposit split)</span>
+          </label>
+        )}
       </div>
 
       {/* Artist Name */}
@@ -437,7 +445,7 @@ export default function CreateInvite() {
         </div>
         {paymentMethod === 'online' ? (
           <div className="flex justify-between font-bold">
-            <span>Client Deposit (50%)</span>
+            <span>{chargeFullAmount ? 'Full Payment Due' : 'Client Deposit (50%)'}</span>
             <span className="text-accent">{formatCents(finalDeposit)}</span>
           </div>
         ) : (

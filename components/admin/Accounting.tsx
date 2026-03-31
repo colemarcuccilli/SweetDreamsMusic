@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { DollarSign, TrendingUp, Calendar, Music, Users, Filter, ChevronDown } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
-import { PRODUCER_COMMISSION, PLATFORM_COMMISSION, ENGINEER_SESSION_SPLIT, BUSINESS_SESSION_SPLIT, MEDIA_SELLER_COMMISSION } from '@/lib/constants';
+import { PRODUCER_COMMISSION, PLATFORM_COMMISSION, ENGINEER_SESSION_SPLIT, BUSINESS_SESSION_SPLIT, MEDIA_SELLER_COMMISSION, MEDIA_WORKER_RATE } from '@/lib/constants';
 
 interface Booking {
   id: string;
@@ -106,6 +106,14 @@ export default function Accounting() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
 
+  // Payout tracking
+  const [payouts, setPayouts] = useState<{ id: string; person_name: string; amount: number; method: string; note: string | null; created_at: string }[]>([]);
+  const [showPayoutForm, setShowPayoutForm] = useState<string | null>(null); // person name
+  const [payoutAmount, setPayoutAmount] = useState('');
+  const [payoutMethod, setPayoutMethod] = useState('cash');
+  const [payoutNote, setPayoutNote] = useState('');
+  const [recordingPayout, setRecordingPayout] = useState(false);
+
   const monthOptions = getMonthOptions();
 
   useEffect(() => {
@@ -122,13 +130,47 @@ export default function Accounting() {
     if (range?.from) params.set('from', range.from);
     if (range?.to) params.set('to', range.to);
 
-    const res = await fetch(`/api/admin/accounting?${params}`);
-    const data = await res.json();
+    const [accountingRes, payoutsRes] = await Promise.all([
+      fetch(`/api/admin/accounting?${params}`),
+      fetch('/api/admin/payouts'),
+    ]);
+    const data = await accountingRes.json();
+    const payoutsData = await payoutsRes.json();
     setBookings(data.bookings || []);
     setBeatPurchases(data.beatPurchases || []);
     setMediaSales(data.mediaSales || []);
     setCancelledBookings(data.cancelledBookings || []);
+    setPayouts(payoutsData.payouts || []);
     setLoading(false);
+  }
+
+  // Payouts by person
+  const payoutsByPerson = useMemo(() => {
+    const map: Record<string, number> = {};
+    payouts.forEach(p => {
+      map[p.person_name] = (map[p.person_name] || 0) + p.amount;
+    });
+    return map;
+  }, [payouts]);
+
+  async function recordPayout(personName: string) {
+    if (!payoutAmount) return;
+    setRecordingPayout(true);
+    const res = await fetch('/api/admin/payouts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ personName, amount: parseFloat(payoutAmount), method: payoutMethod, note: payoutNote || null }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      setPayouts(prev => [data.payout, ...prev]);
+      setShowPayoutForm(null);
+      setPayoutAmount('');
+      setPayoutNote('');
+    } else {
+      alert(`Failed: ${data.error}`);
+    }
+    setRecordingPayout(false);
   }
 
   // Derived data
@@ -251,8 +293,12 @@ export default function Accounting() {
   // Media stats
   const mediaStats = useMemo(() => {
     const totalRevenue = mediaSales.reduce((s, m) => s + m.amount, 0);
-    const totalCommissions = mediaSales.reduce((s, m) => s + (m.sold_by ? Math.round(m.amount * MEDIA_SELLER_COMMISSION) : 0), 0);
-    const businessRevenue = totalRevenue - totalCommissions;
+    const totalSellerCommissions = mediaSales.reduce((s, m) => s + (m.sold_by ? Math.round(m.amount * MEDIA_SELLER_COMMISSION) : 0), 0);
+    const totalFilmerPay = mediaSales.reduce((s, m) => s + (m.filmed_by ? Math.round(m.amount * MEDIA_WORKER_RATE) : 0), 0);
+    const totalEditorPay = mediaSales.reduce((s, m) => s + (m.edited_by ? Math.round(m.amount * MEDIA_WORKER_RATE) : 0), 0);
+    const totalWorkerPay = totalFilmerPay + totalEditorPay;
+    const totalPayouts = totalSellerCommissions + totalWorkerPay;
+    const businessRevenue = totalRevenue - totalPayouts;
 
     const byType: Record<string, { count: number; revenue: number }> = {};
     mediaSales.forEach(m => {
@@ -262,25 +308,37 @@ export default function Accounting() {
       byType[type].revenue += m.amount;
     });
 
-    const personPayouts: Record<string, { soldCount: number; soldRevenue: number; commission: number; filmedCount: number; editedCount: number }> = {};
+    const personPayouts: Record<string, { soldCount: number; soldRevenue: number; sellerCommission: number; filmedCount: number; filmedPay: number; editedCount: number; editedPay: number; totalPay: number }> = {};
+    const initPerson = () => ({ soldCount: 0, soldRevenue: 0, sellerCommission: 0, filmedCount: 0, filmedPay: 0, editedCount: 0, editedPay: 0, totalPay: 0 });
     mediaSales.forEach(m => {
       if (m.sold_by) {
-        if (!personPayouts[m.sold_by]) personPayouts[m.sold_by] = { soldCount: 0, soldRevenue: 0, commission: 0, filmedCount: 0, editedCount: 0 };
+        if (!personPayouts[m.sold_by]) personPayouts[m.sold_by] = initPerson();
         personPayouts[m.sold_by].soldCount++;
         personPayouts[m.sold_by].soldRevenue += m.amount;
-        personPayouts[m.sold_by].commission += Math.round(m.amount * MEDIA_SELLER_COMMISSION);
+        const comm = Math.round(m.amount * MEDIA_SELLER_COMMISSION);
+        personPayouts[m.sold_by].sellerCommission += comm;
+        personPayouts[m.sold_by].totalPay += comm;
       }
       if (m.filmed_by) {
-        if (!personPayouts[m.filmed_by]) personPayouts[m.filmed_by] = { soldCount: 0, soldRevenue: 0, commission: 0, filmedCount: 0, editedCount: 0 };
+        if (!personPayouts[m.filmed_by]) personPayouts[m.filmed_by] = initPerson();
         personPayouts[m.filmed_by].filmedCount++;
+        const pay = Math.round(m.amount * MEDIA_WORKER_RATE);
+        personPayouts[m.filmed_by].filmedPay += pay;
+        personPayouts[m.filmed_by].totalPay += pay;
       }
       if (m.edited_by) {
-        if (!personPayouts[m.edited_by]) personPayouts[m.edited_by] = { soldCount: 0, soldRevenue: 0, commission: 0, filmedCount: 0, editedCount: 0 };
+        if (!personPayouts[m.edited_by]) personPayouts[m.edited_by] = initPerson();
         personPayouts[m.edited_by].editedCount++;
+        const pay = Math.round(m.amount * MEDIA_WORKER_RATE);
+        personPayouts[m.edited_by].editedPay += pay;
+        personPayouts[m.edited_by].totalPay += pay;
       }
     });
 
-    return { total: mediaSales.length, totalRevenue, totalCommissions, businessRevenue, byType, personPayouts: Object.entries(personPayouts).sort((a, b) => b[1].commission - a[1].commission) };
+    return {
+      total: mediaSales.length, totalRevenue, totalSellerCommissions, totalFilmerPay, totalEditorPay, totalWorkerPay, totalPayouts, businessRevenue,
+      byType, personPayouts: Object.entries(personPayouts).sort((a, b) => b[1].totalPay - a[1].totalPay),
+    };
   }, [mediaSales]);
 
   // ===== PAYROLL: Combined per-person earnings across all revenue streams =====
@@ -288,11 +346,12 @@ export default function Accounting() {
     const people: Record<string, {
       sessionCount: number; sessionRevenue: number; sessionPay: number; sessionHours: number;
       mediaCommission: number; mediaSoldCount: number;
+      mediaWorkerPay: number; mediaFilmedCount: number; mediaEditedCount: number;
       beatSales: number; beatProducerPay: number; beatCount: number;
-      totalPay: number;
+      totalPay: number; totalPaid: number;
     }> = {};
 
-    const initPerson = () => ({ sessionCount: 0, sessionRevenue: 0, sessionPay: 0, sessionHours: 0, mediaCommission: 0, mediaSoldCount: 0, beatSales: 0, beatProducerPay: 0, beatCount: 0, totalPay: 0 });
+    const initPerson = () => ({ sessionCount: 0, sessionRevenue: 0, sessionPay: 0, sessionHours: 0, mediaCommission: 0, mediaSoldCount: 0, mediaWorkerPay: 0, mediaFilmedCount: 0, mediaEditedCount: 0, beatSales: 0, beatProducerPay: 0, beatCount: 0, totalPay: 0, totalPaid: 0 });
 
     // Sessions: engineer gets 60%
     bookings.forEach(b => {
@@ -305,12 +364,22 @@ export default function Accounting() {
       people[eng].sessionHours += b.duration;
     });
 
-    // Media: seller gets 15%
+    // Media: seller gets 15%, filmed_by/edited_by get 10% each
     mediaSales.forEach(m => {
       if (m.sold_by) {
         if (!people[m.sold_by]) people[m.sold_by] = initPerson();
         people[m.sold_by].mediaSoldCount++;
         people[m.sold_by].mediaCommission += Math.round(m.amount * MEDIA_SELLER_COMMISSION);
+      }
+      if (m.filmed_by) {
+        if (!people[m.filmed_by]) people[m.filmed_by] = initPerson();
+        people[m.filmed_by].mediaFilmedCount++;
+        people[m.filmed_by].mediaWorkerPay += Math.round(m.amount * MEDIA_WORKER_RATE);
+      }
+      if (m.edited_by) {
+        if (!people[m.edited_by]) people[m.edited_by] = initPerson();
+        people[m.edited_by].mediaEditedCount++;
+        people[m.edited_by].mediaWorkerPay += Math.round(m.amount * MEDIA_WORKER_RATE);
       }
     });
 
@@ -326,7 +395,7 @@ export default function Accounting() {
 
     // Calculate totals
     Object.values(people).forEach(p => {
-      p.totalPay = p.sessionPay + p.mediaCommission + p.beatProducerPay;
+      p.totalPay = p.sessionPay + p.mediaCommission + p.mediaWorkerPay + p.beatProducerPay;
     });
 
     const entries = Object.entries(people).sort((a, b) => b[1].totalPay - a[1].totalPay);
@@ -654,9 +723,10 @@ export default function Accounting() {
                         <th className="text-left font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Person</th>
                         <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Sessions</th>
                         <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Session Pay (60%)</th>
-                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Media Commission</th>
+                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Media Pay</th>
                         <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Beat Payouts</th>
                         <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2 border-l-2 border-black/10">Total Owed</th>
+                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Paid</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -670,23 +740,26 @@ export default function Accounting() {
                             {data.sessionPay > 0 ? formatCents(data.sessionPay) : '—'}
                           </td>
                           <td className="font-mono text-sm text-right">
-                            {data.mediaCommission > 0 ? (
-                              <span>{formatCents(data.mediaCommission)} <span className="text-[10px] text-black/40">({data.mediaSoldCount} sale{data.mediaSoldCount !== 1 ? 's' : ''})</span></span>
+                            {(data.mediaCommission + data.mediaWorkerPay) > 0 ? (
+                              <span>{formatCents(data.mediaCommission + data.mediaWorkerPay)}</span>
                             ) : '—'}
                           </td>
                           <td className="font-mono text-sm text-right">
-                            {data.beatProducerPay > 0 ? (
-                              <span>{formatCents(data.beatProducerPay)} <span className="text-[10px] text-black/40">({data.beatCount} sale{data.beatCount !== 1 ? 's' : ''})</span></span>
-                            ) : '—'}
+                            {data.beatProducerPay > 0 ? formatCents(data.beatProducerPay) : '—'}
                           </td>
                           <td className="font-mono text-sm text-right font-bold text-accent border-l-2 border-black/10">
                             {formatCents(data.totalPay)}
+                          </td>
+                          <td className="font-mono text-sm text-right">
+                            {(payoutsByPerson[name] || 0) > 0 ? (
+                              <span className="text-green-600">{formatCents(payoutsByPerson[name])}</span>
+                            ) : '—'}
                           </td>
                         </tr>
                       ))}
                       {payrollData.people.length === 0 && (
                         <tr>
-                          <td colSpan={6} className="font-mono text-sm text-black/30 text-center py-12">No payroll data for this period</td>
+                          <td colSpan={7} className="font-mono text-sm text-black/30 text-center py-12">No payroll data for this period</td>
                         </tr>
                       )}
                     </tbody>
@@ -716,49 +789,125 @@ export default function Accounting() {
                 </div>
               </div>
 
-              {/* Per-Person Detail Cards */}
-              {payrollData.people.map(([name, data]) => (
-                <BreakdownSection
-                  key={name}
-                  title={`${name} — ${formatCents(data.totalPay)} total`}
-                  expanded={expandedSection === `payroll-${name}`}
-                  onToggle={() => toggleSection(`payroll-${name}`)}
-                >
-                  <div className="space-y-3">
-                    {data.sessionPay > 0 && (
-                      <div className="flex justify-between items-center py-2 border-b border-black/5">
-                        <div>
-                          <p className="font-mono text-sm font-semibold">Session Earnings</p>
-                          <p className="font-mono text-[10px] text-black/40">{data.sessionCount} sessions · {data.sessionHours}hr · {formatCents(data.sessionRevenue)} gross</p>
+              {/* Per-Person Detail Cards with Payout */}
+              {payrollData.people.map(([name, data]) => {
+                const paid = payoutsByPerson[name] || 0;
+                const remaining = Math.max(0, data.totalPay - paid);
+                return (
+                  <BreakdownSection
+                    key={name}
+                    title={`${name} — ${formatCents(data.totalPay)} earned${paid > 0 ? ` · ${formatCents(paid)} paid · ${formatCents(remaining)} remaining` : ''}`}
+                    expanded={expandedSection === `payroll-${name}`}
+                    onToggle={() => toggleSection(`payroll-${name}`)}
+                  >
+                    <div className="space-y-3">
+                      {data.sessionPay > 0 && (
+                        <div className="flex justify-between items-center py-2 border-b border-black/5">
+                          <div>
+                            <p className="font-mono text-sm font-semibold">Session Earnings</p>
+                            <p className="font-mono text-[10px] text-black/40">{data.sessionCount} sessions · {data.sessionHours}hr · {formatCents(data.sessionRevenue)} gross</p>
+                          </div>
+                          <p className="font-mono text-sm font-bold">{formatCents(data.sessionPay)}</p>
                         </div>
-                        <p className="font-mono text-sm font-bold">{formatCents(data.sessionPay)}</p>
-                      </div>
-                    )}
-                    {data.mediaCommission > 0 && (
-                      <div className="flex justify-between items-center py-2 border-b border-black/5">
-                        <div>
-                          <p className="font-mono text-sm font-semibold">Media Sales Commission</p>
-                          <p className="font-mono text-[10px] text-black/40">{data.mediaSoldCount} sale{data.mediaSoldCount !== 1 ? 's' : ''} brought in · 15% commission</p>
+                      )}
+                      {data.mediaCommission > 0 && (
+                        <div className="flex justify-between items-center py-2 border-b border-black/5">
+                          <div>
+                            <p className="font-mono text-sm font-semibold">Media Sales Commission</p>
+                            <p className="font-mono text-[10px] text-black/40">{data.mediaSoldCount} sale{data.mediaSoldCount !== 1 ? 's' : ''} brought in · 15% commission</p>
+                          </div>
+                          <p className="font-mono text-sm font-bold">{formatCents(data.mediaCommission)}</p>
                         </div>
-                        <p className="font-mono text-sm font-bold">{formatCents(data.mediaCommission)}</p>
-                      </div>
-                    )}
-                    {data.beatProducerPay > 0 && (
-                      <div className="flex justify-between items-center py-2 border-b border-black/5">
-                        <div>
-                          <p className="font-mono text-sm font-semibold">Beat Sales</p>
-                          <p className="font-mono text-[10px] text-black/40">{data.beatCount} sale{data.beatCount !== 1 ? 's' : ''} · {formatCents(data.beatSales)} gross · 60% producer cut</p>
+                      )}
+                      {data.mediaWorkerPay > 0 && (
+                        <div className="flex justify-between items-center py-2 border-b border-black/5">
+                          <div>
+                            <p className="font-mono text-sm font-semibold">Media Work Pay</p>
+                            <p className="font-mono text-[10px] text-black/40">
+                              {data.mediaFilmedCount > 0 ? `${data.mediaFilmedCount} filmed` : ''}
+                              {data.mediaFilmedCount > 0 && data.mediaEditedCount > 0 ? ' · ' : ''}
+                              {data.mediaEditedCount > 0 ? `${data.mediaEditedCount} edited` : ''}
+                              {' · 10% per role'}
+                            </p>
+                          </div>
+                          <p className="font-mono text-sm font-bold">{formatCents(data.mediaWorkerPay)}</p>
                         </div>
-                        <p className="font-mono text-sm font-bold">{formatCents(data.beatProducerPay)}</p>
+                      )}
+                      {data.beatProducerPay > 0 && (
+                        <div className="flex justify-between items-center py-2 border-b border-black/5">
+                          <div>
+                            <p className="font-mono text-sm font-semibold">Beat Sales</p>
+                            <p className="font-mono text-[10px] text-black/40">{data.beatCount} sale{data.beatCount !== 1 ? 's' : ''} · {formatCents(data.beatSales)} gross · 60% producer cut</p>
+                          </div>
+                          <p className="font-mono text-sm font-bold">{formatCents(data.beatProducerPay)}</p>
+                        </div>
+                      )}
+
+                      {/* Payout status */}
+                      <div className="flex justify-between items-center py-2 border-t-2 border-black/20">
+                        <div>
+                          <p className="font-mono text-sm font-bold">Total Earned</p>
+                          {paid > 0 && <p className="font-mono text-[10px] text-green-600">Paid: {formatCents(paid)}</p>}
+                        </div>
+                        <div className="text-right">
+                          <p className="font-mono text-lg font-bold text-accent">{formatCents(data.totalPay)}</p>
+                          {paid > 0 && remaining > 0 && (
+                            <p className="font-mono text-xs text-red-600">Still owed: {formatCents(remaining)}</p>
+                          )}
+                          {paid > 0 && remaining === 0 && (
+                            <p className="font-mono text-xs text-green-600 font-bold">PAID IN FULL</p>
+                          )}
+                        </div>
                       </div>
-                    )}
-                    <div className="flex justify-between items-center py-2 border-t-2 border-black/20">
-                      <p className="font-mono text-sm font-bold">Total Owed to {name}</p>
-                      <p className="font-mono text-lg font-bold text-accent">{formatCents(data.totalPay)}</p>
+
+                      {/* Record Payout button */}
+                      {remaining > 0 && (
+                        <>
+                          {showPayoutForm === name ? (
+                            <div className="border border-accent p-3 space-y-2">
+                              <div className="flex gap-2">
+                                <div className="flex-1">
+                                  <label className="font-mono text-[10px] text-black/40">Amount ($)</label>
+                                  <input type="number" step="0.01" value={payoutAmount} onChange={(e) => setPayoutAmount(e.target.value)}
+                                    placeholder={`${(remaining / 100).toFixed(2)}`}
+                                    className="w-full border border-black/20 px-2 py-1.5 font-mono text-sm" />
+                                </div>
+                                <div>
+                                  <label className="font-mono text-[10px] text-black/40">Method</label>
+                                  <select value={payoutMethod} onChange={(e) => setPayoutMethod(e.target.value)}
+                                    className="w-full border border-black/20 px-2 py-1.5 font-mono text-sm bg-white">
+                                    <option value="cash">Cash</option>
+                                    <option value="zelle">Zelle</option>
+                                    <option value="venmo">Venmo</option>
+                                    <option value="cashapp">Cash App</option>
+                                    <option value="check">Check</option>
+                                    <option value="direct_deposit">Direct Deposit</option>
+                                  </select>
+                                </div>
+                              </div>
+                              <input type="text" value={payoutNote} onChange={(e) => setPayoutNote(e.target.value)}
+                                placeholder="Note (optional)" className="w-full border border-black/20 px-2 py-1.5 font-mono text-xs" />
+                              <div className="flex gap-2">
+                                <button onClick={() => recordPayout(name)} disabled={!payoutAmount || recordingPayout}
+                                  className="bg-green-600 text-white font-mono text-xs font-bold px-4 py-2 hover:bg-green-700 disabled:opacity-50">
+                                  {recordingPayout ? 'Recording...' : 'Record Payout'}
+                                </button>
+                                <button onClick={() => setShowPayoutForm(null)}
+                                  className="font-mono text-xs text-black/50 hover:text-black px-3 py-2">Cancel</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button onClick={() => { setShowPayoutForm(name); setPayoutAmount((remaining / 100).toFixed(2)); }}
+                              className="w-full border-2 border-green-600 text-green-700 font-mono text-xs font-bold uppercase py-2 hover:bg-green-50">
+                              Record Payout — {formatCents(remaining)} owed
+                            </button>
+                          )}
+                        </>
+                      )}
                     </div>
-                  </div>
-                </BreakdownSection>
-              ))}
+                  </BreakdownSection>
+                );
+              })}
 
               {/* Business Summary at bottom of payroll */}
               <div className="border-2 border-accent p-4 space-y-2">
@@ -919,9 +1068,32 @@ export default function Accounting() {
               {/* Summary cards */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <MiniStat label="Total Media Revenue" value={formatCents(mediaStats.totalRevenue)} />
-                <MiniStat label="Business Revenue (85%)" value={formatCents(mediaStats.businessRevenue)} />
-                <MiniStat label="Total Commissions Owed" value={formatCents(mediaStats.totalCommissions)} />
+                <MiniStat label="Business Keeps" value={formatCents(mediaStats.businessRevenue)} />
+                <MiniStat label="Total Payouts Owed" value={formatCents(mediaStats.totalPayouts)} />
                 <MiniStat label="Total Sales" value={String(mediaStats.total)} />
+              </div>
+
+              {/* Revenue Split Breakdown */}
+              <div className="border border-black/10 p-4">
+                <h3 className="font-mono text-sm font-bold uppercase tracking-wider mb-3">Revenue Split</h3>
+                <div className="space-y-2 font-mono text-sm">
+                  <div className="flex justify-between py-1 border-b border-black/5">
+                    <span className="text-black/60">Seller Commission ({Math.round(MEDIA_SELLER_COMMISSION * 100)}%)</span>
+                    <span className="font-bold">{formatCents(mediaStats.totalSellerCommissions)}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-black/5">
+                    <span className="text-black/60">Filmed By Pay ({Math.round(MEDIA_WORKER_RATE * 100)}%)</span>
+                    <span className="font-bold">{formatCents(mediaStats.totalFilmerPay)}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-black/5">
+                    <span className="text-black/60">Edited By Pay ({Math.round(MEDIA_WORKER_RATE * 100)}%)</span>
+                    <span className="font-bold">{formatCents(mediaStats.totalEditorPay)}</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-t-2 border-black/20">
+                    <span className="font-bold text-accent">Business Keeps ({Math.round((1 - MEDIA_SELLER_COMMISSION - MEDIA_WORKER_RATE * 2) * 100)}%+)</span>
+                    <span className="font-bold text-accent">{formatCents(mediaStats.businessRevenue)}</span>
+                  </div>
+                </div>
               </div>
 
               {/* By Type */}
@@ -937,31 +1109,39 @@ export default function Accounting() {
               {/* Per-Person Payouts */}
               {mediaStats.personPayouts.length > 0 && (
                 <div className="border border-black/10 p-4">
-                  <h3 className="font-mono text-sm font-bold uppercase tracking-wider mb-3">Team Payouts & Involvement</h3>
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-black/10">
-                        <th className="text-left font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Person</th>
-                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Sales Brought In</th>
-                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Sales Revenue</th>
-                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Commission Owed (15%)</th>
-                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Filmed</th>
-                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Edited</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {mediaStats.personPayouts.map(([name, data]) => (
-                        <tr key={name} className="border-b border-black/5">
-                          <td className="font-mono text-sm font-semibold py-2">{name}</td>
-                          <td className="font-mono text-sm text-right">{data.soldCount}</td>
-                          <td className="font-mono text-sm text-right">{formatCents(data.soldRevenue)}</td>
-                          <td className="font-mono text-sm text-right font-bold text-accent">{formatCents(data.commission)}</td>
-                          <td className="font-mono text-sm text-right text-black/50">{data.filmedCount || '—'}</td>
-                          <td className="font-mono text-sm text-right text-black/50">{data.editedCount || '—'}</td>
+                  <h3 className="font-mono text-sm font-bold uppercase tracking-wider mb-3">Team Payouts</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[600px]">
+                      <thead>
+                        <tr className="border-b border-black/10">
+                          <th className="text-left font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Person</th>
+                          <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Sales (15%)</th>
+                          <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Filmed (10%)</th>
+                          <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Edited (10%)</th>
+                          <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2 border-l-2 border-black/10">Total Owed</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {mediaStats.personPayouts.map(([name, data]) => (
+                          <tr key={name} className="border-b border-black/5">
+                            <td className="font-mono text-sm font-semibold py-2">{name}</td>
+                            <td className="font-mono text-sm text-right">
+                              {data.sellerCommission > 0 ? <>{formatCents(data.sellerCommission)} <span className="text-[10px] text-black/40">({data.soldCount})</span></> : '—'}
+                            </td>
+                            <td className="font-mono text-sm text-right">
+                              {data.filmedPay > 0 ? <>{formatCents(data.filmedPay)} <span className="text-[10px] text-black/40">({data.filmedCount})</span></> : '—'}
+                            </td>
+                            <td className="font-mono text-sm text-right">
+                              {data.editedPay > 0 ? <>{formatCents(data.editedPay)} <span className="text-[10px] text-black/40">({data.editedCount})</span></> : '—'}
+                            </td>
+                            <td className="font-mono text-sm text-right font-bold text-accent border-l-2 border-black/10">
+                              {formatCents(data.totalPay)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               )}
 
