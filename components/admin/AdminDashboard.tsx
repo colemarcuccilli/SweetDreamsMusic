@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Calendar, Music, Users, DollarSign, Clock, Video, Mic } from 'lucide-react';
+import { Calendar, Music, Users, DollarSign, Clock, Video, Mic, FileText } from 'lucide-react';
 import type { SessionUser } from '@/lib/auth';
 import BookingManager from './BookingManager';
 import BeatManager from './BeatManager';
@@ -10,8 +10,9 @@ import Accounting from './Accounting';
 import StudioBlocks from './StudioBlocks';
 import MediaSales from './MediaSales';
 import ProducerApplications from './ProducerApplications';
+import ContractsViewer from './ContractsViewer';
 
-type Tab = 'accounting' | 'bookings' | 'media' | 'blocks' | 'beats' | 'producers' | 'users';
+type Tab = 'accounting' | 'bookings' | 'media' | 'blocks' | 'beats' | 'producers' | 'contracts' | 'users';
 
 export default function AdminDashboard({ user }: { user: SessionUser }) {
   const [tab, setTab] = useState<Tab>('accounting');
@@ -23,6 +24,7 @@ export default function AdminDashboard({ user }: { user: SessionUser }) {
     { key: 'blocks', label: 'Block Off', icon: Clock },
     { key: 'beats', label: 'Beat Store', icon: Music },
     { key: 'producers', label: 'Producers', icon: Mic },
+    { key: 'contracts', label: 'Contracts', icon: FileText },
     { key: 'users', label: 'Users', icon: Users },
   ];
 
@@ -56,6 +58,7 @@ export default function AdminDashboard({ user }: { user: SessionUser }) {
           {tab === 'blocks' && <StudioBlocks />}
           {tab === 'beats' && <BeatManager />}
           {tab === 'producers' && <ProducerApplications />}
+          {tab === 'contracts' && <ContractsViewer />}
           {tab === 'users' && <UserManager />}
         </div>
       </section>
