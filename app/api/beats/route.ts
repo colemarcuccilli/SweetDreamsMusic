@@ -24,7 +24,10 @@ export async function GET(request: NextRequest) {
   if (bpmMin) query = query.gte('bpm', parseInt(bpmMin));
   if (bpmMax) query = query.lte('bpm', parseInt(bpmMax));
   if (producer) query = query.eq('producer_id', producer);
-  if (search) query = query.or(`title.ilike.%${search}%,producer.ilike.%${search}%,genre.ilike.%${search}%`);
+  if (search) {
+    const s = search.replace(/[%_\\(),]/g, '');
+    if (s) query = query.or(`title.ilike.%${s}%,producer.ilike.%${s}%,genre.ilike.%${s}%`);
+  }
 
   switch (sort) {
     case 'popular':

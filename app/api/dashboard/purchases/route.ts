@@ -8,16 +8,27 @@ export async function GET() {
 
   const serviceClient = createServiceClient();
 
-  // Get all purchases by this user (by ID or email)
-  const { data: purchases, error } = await serviceClient
+  // Get purchases by user ID first, then by email as fallback
+  // Using separate queries to avoid string interpolation in .or()
+  const { data: byId } = await serviceClient
     .from('beat_purchases')
     .select('*, beats(id, title, producer, genre, cover_image_url, preview_url, mp3_file_path, trackout_file_path, audio_file_path)')
-    .or(`buyer_id.eq.${user.id},buyer_email.eq.${user.email}`)
+    .eq('buyer_id', user.id)
     .order('created_at', { ascending: false });
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+  const { data: byEmail } = await serviceClient
+    .from('beat_purchases')
+    .select('*, beats(id, title, producer, genre, cover_image_url, preview_url, mp3_file_path, trackout_file_path, audio_file_path)')
+    .eq('buyer_email', user.email || '')
+    .order('created_at', { ascending: false });
 
-  return NextResponse.json({ purchases: purchases || [] });
+  // Merge and deduplicate by ID
+  const seen = new Set<string>();
+  const purchases = [...(byId || []), ...(byEmail || [])].filter(p => {
+    if (seen.has(p.id)) return false;
+    seen.add(p.id);
+    return true;
+  });
+
+  return NextResponse.json({ purchases });
 }

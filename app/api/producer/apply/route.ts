@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 
 export async function POST(request: NextRequest) {
+  try {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -62,4 +63,8 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ application: data });
+  } catch (err) {
+    console.error('Producer apply error:', err);
+    return NextResponse.json({ error: 'Failed to submit application' }, { status: 500 });
+  }
 }

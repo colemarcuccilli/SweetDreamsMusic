@@ -194,9 +194,9 @@ export async function GET() {
       .select('*, beats(title, producer, cover_image_url)')
       .order('created_at', { ascending: false });
 
-    // Producers only see their own sales
+    // Producers only see their own sales (created_by is profiles.id, not auth user.id)
     if (!isAdmin && isProducer && profileId) {
-      query = query.or(`created_by.eq.${user.id},producer_id.eq.${profileId}`);
+      query = query.or(`created_by.eq.${profileId},producer_id.eq.${profileId}`);
     }
 
     const { data, error } = await query;
