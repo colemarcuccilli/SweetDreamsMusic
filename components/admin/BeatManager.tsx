@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Music, X, Upload, TrendingUp, ShoppingCart } from 'lucide-react';
+import { Plus, Trash2, Music, X, Upload, TrendingUp, ShoppingCart, DollarSign } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
 import { BEAT_LICENSES, BEAT_GENRES } from '@/lib/constants';
+import PrivateSaleModal from '@/components/beats/PrivateSaleModal';
 
 interface Producer {
   id: string;
@@ -35,12 +36,43 @@ interface Beat {
   created_at: string;
 }
 
+interface PrivateSale {
+  id: string;
+  beat_title: string;
+  beat_producer: string;
+  buyer_name: string | null;
+  buyer_email: string;
+  license_type: string;
+  amount: number;
+  payment_method: string;
+  status: string;
+  created_at: string;
+}
+
+const STATUS_BADGE: Record<string, { bg: string; text: string }> = {
+  pending: { bg: 'bg-amber-100', text: 'text-amber-700' },
+  signed: { bg: 'bg-blue-100', text: 'text-blue-700' },
+  paid: { bg: 'bg-blue-100', text: 'text-blue-700' },
+  completed: { bg: 'bg-green-100', text: 'text-green-700' },
+  expired: { bg: 'bg-red-100', text: 'text-red-600' },
+  cancelled: { bg: 'bg-black/5', text: 'text-black/40' },
+};
+
 export default function BeatManager() {
   const [beats, setBeats] = useState<Beat[]>([]);
   const [producers, setProducers] = useState<Producer[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [uploading, setUploading] = useState(false);
+
+  // Private sale state
+  const [showPrivateSale, setShowPrivateSale] = useState(false);
+  const [privateSaleBeat, setPrivateSaleBeat] = useState<{
+    id: string; title: string; producer: string; producerId: string;
+    mp3Price: number | null; trackoutPrice: number | null; exclusivePrice: number | null; coverImageUrl: string | null;
+  } | undefined>(undefined);
+  const [privateSales, setPrivateSales] = useState<PrivateSale[]>([]);
+  const [privateSalesLoading, setPrivateSalesLoading] = useState(true);
 
   // Form state
   const [title, setTitle] = useState('');
@@ -68,7 +100,31 @@ export default function BeatManager() {
       setProducers(producersData.producers || []);
       setLoading(false);
     });
+    fetchPrivateSales();
   }, []);
+
+  function fetchPrivateSales() {
+    setPrivateSalesLoading(true);
+    fetch('/api/beats/private-sale')
+      .then(r => r.json())
+      .then(data => setPrivateSales(Array.isArray(data) ? data : data.sales || []))
+      .catch(() => {})
+      .finally(() => setPrivateSalesLoading(false));
+  }
+
+  function openPrivateSaleForBeat(beat: Beat) {
+    setPrivateSaleBeat({
+      id: beat.id,
+      title: beat.title,
+      producer: getProducerName(beat),
+      producerId: beat.producer_id || '',
+      mp3Price: beat.mp3_lease_price,
+      trackoutPrice: beat.trackout_lease_price,
+      exclusivePrice: beat.exclusive_price,
+      coverImageUrl: null,
+    });
+    setShowPrivateSale(true);
+  }
 
   async function handleUpload() {
     if (!previewFile || !title || !producerId) return;
@@ -129,12 +185,20 @@ export default function BeatManager() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-heading-md">BEAT STORE</h2>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="bg-accent text-black font-mono text-xs font-bold uppercase tracking-wider px-4 py-2 hover:bg-accent/90 inline-flex items-center gap-1"
-        >
-          {showForm ? <><X className="w-3 h-3" /> Cancel</> : <><Plus className="w-3 h-3" /> Add Beat</>}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => { setPrivateSaleBeat(undefined); setShowPrivateSale(true); }}
+            className="bg-black text-white font-mono text-xs font-bold uppercase tracking-wider px-4 py-2 hover:bg-black/80 inline-flex items-center gap-1"
+          >
+            <DollarSign className="w-3 h-3" /> Private Sale
+          </button>
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="bg-accent text-black font-mono text-xs font-bold uppercase tracking-wider px-4 py-2 hover:bg-accent/90 inline-flex items-center gap-1"
+          >
+            {showForm ? <><X className="w-3 h-3" /> Cancel</> : <><Plus className="w-3 h-3" /> Add Beat</>}
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -384,6 +448,9 @@ export default function BeatManager() {
                   <source src={beat.preview_url} type="audio/mpeg" />
                 </audio>
               )}
+              <button onClick={() => openPrivateSaleForBeat(beat)} className="text-black/40 hover:text-accent p-2 flex-shrink-0" title="Private Sale">
+                <DollarSign className="w-4 h-4" />
+              </button>
               <button onClick={() => deleteBeat(beat.id)} className="text-red-400 hover:text-red-600 p-2 flex-shrink-0">
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -391,6 +458,55 @@ export default function BeatManager() {
           ))}
         </div>
       )}
+
+      {/* Private Sales Section */}
+      <div className="mt-10">
+        <h3 className="font-mono text-sm font-bold uppercase tracking-wider mb-4">Private Sales</h3>
+        {privateSalesLoading ? (
+          <p className="font-mono text-sm text-black/40">Loading private sales...</p>
+        ) : privateSales.length === 0 ? (
+          <p className="font-mono text-xs text-black/30 border border-black/10 p-6 text-center">No private sales yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {privateSales.map(sale => {
+              const badge = STATUS_BADGE[sale.status] || STATUS_BADGE.pending;
+              return (
+                <div key={sale.id} className="border border-black/10 p-4 flex items-center gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="font-mono text-sm font-bold truncate">{sale.beat_title}</span>
+                      <span className={`${badge.bg} ${badge.text} font-mono text-[10px] font-bold uppercase px-1.5 py-0.5`}>
+                        {sale.status}
+                      </span>
+                    </div>
+                    <p className="font-mono text-xs text-black/50">
+                      {sale.buyer_name || sale.buyer_email}
+                      {sale.beat_producer && ` · ${sale.beat_producer}`}
+                      {' · '}
+                      {BEAT_LICENSES[sale.license_type as keyof typeof BEAT_LICENSES]?.name || sale.license_type}
+                    </p>
+                    <p className="font-mono text-[10px] text-black/30 mt-0.5">
+                      {new Date(sale.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
+                      {sale.payment_method !== 'stripe' && ` · ${sale.payment_method}`}
+                    </p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="font-mono text-sm font-bold">{formatCents(sale.amount)}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Private Sale Modal */}
+      <PrivateSaleModal
+        isOpen={showPrivateSale}
+        onClose={() => { setShowPrivateSale(false); setPrivateSaleBeat(undefined); }}
+        onCreated={fetchPrivateSales}
+        preselectedBeat={privateSaleBeat}
+      />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Music, DollarSign, ShoppingCart, TrendingUp, Plus, X, Upload, Trash2, AlertCircle, CheckCircle, FileText, ImagePlus, Pencil } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
 import { PRODUCER_COMMISSION, PLATFORM_COMMISSION, BEAT_LICENSES, BEAT_AGREEMENT_TEXT, BEAT_AGREEMENT_VERSION, BEAT_GENRES } from '@/lib/constants';
+import PrivateSaleModal from '@/components/beats/PrivateSaleModal';
 
 interface Beat {
   id: string;
@@ -118,10 +119,50 @@ export default function ProducerDashboard({ isAdmin = false }: { isAdmin?: boole
   );
 }
 
+interface PrivateSaleRecord {
+  id: string;
+  beat_title: string;
+  beat_producer: string;
+  buyer_name: string | null;
+  buyer_email: string;
+  license_type: string;
+  amount: number;
+  payment_method: string;
+  status: string;
+  created_at: string;
+}
+
+const PS_STATUS_BADGE: Record<string, { bg: string; text: string }> = {
+  pending: { bg: 'bg-amber-100', text: 'text-amber-700' },
+  signed: { bg: 'bg-blue-100', text: 'text-blue-700' },
+  paid: { bg: 'bg-blue-100', text: 'text-blue-700' },
+  completed: { bg: 'bg-green-100', text: 'text-green-700' },
+  expired: { bg: 'bg-red-100', text: 'text-red-600' },
+  cancelled: { bg: 'bg-black/5', text: 'text-black/40' },
+};
+
 function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; onBeatsChange: (beats: Beat[]) => void; isAdmin?: boolean }) {
   const [showForm, setShowForm] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [reviewBeat, setReviewBeat] = useState<Beat | null>(null);
+
+  // Private sales
+  const [showPrivateSale, setShowPrivateSale] = useState(false);
+  const [privateSales, setPrivateSales] = useState<PrivateSaleRecord[]>([]);
+  const [privateSalesLoading, setPrivateSalesLoading] = useState(true);
+
+  useEffect(() => {
+    fetchPrivateSales();
+  }, []);
+
+  function fetchPrivateSales() {
+    setPrivateSalesLoading(true);
+    fetch('/api/beats/private-sale')
+      .then(r => r.json())
+      .then(data => setPrivateSales(Array.isArray(data) ? data : data.sales || []))
+      .catch(() => {})
+      .finally(() => setPrivateSalesLoading(false));
+  }
 
   // Form state
   const [title, setTitle] = useState('');
@@ -211,14 +252,22 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
     <div>
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-heading-md">MY BEATS</h2>
-        {isAdmin && (
+        <div className="flex gap-2">
           <button
-            onClick={() => setShowForm(!showForm)}
-            className="bg-accent text-black font-mono text-xs font-bold uppercase tracking-wider px-4 py-2 hover:bg-accent/90 inline-flex items-center gap-1"
+            onClick={() => setShowPrivateSale(true)}
+            className="bg-black text-white font-mono text-xs font-bold uppercase tracking-wider px-4 py-2 hover:bg-black/80 inline-flex items-center gap-1"
           >
-            {showForm ? <><X className="w-3 h-3" /> Cancel</> : <><Plus className="w-3 h-3" /> Upload Beat</>}
+            <DollarSign className="w-3 h-3" /> Private Sale
           </button>
-        )}
+          {isAdmin && (
+            <button
+              onClick={() => setShowForm(!showForm)}
+              className="bg-accent text-black font-mono text-xs font-bold uppercase tracking-wider px-4 py-2 hover:bg-accent/90 inline-flex items-center gap-1"
+            >
+              {showForm ? <><X className="w-3 h-3" /> Cancel</> : <><Plus className="w-3 h-3" /> Upload Beat</>}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Upload Form -- admin only */}
@@ -511,6 +560,53 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
           ))}
         </div>
       )}
+
+      {/* Private Sales Section */}
+      <div className="mt-10">
+        <h3 className="font-mono text-sm font-bold uppercase tracking-wider mb-4">Private Sales</h3>
+        {privateSalesLoading ? (
+          <p className="font-mono text-sm text-black/40">Loading private sales...</p>
+        ) : privateSales.length === 0 ? (
+          <p className="font-mono text-xs text-black/30 border border-black/10 p-6 text-center">No private sales yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {privateSales.map(sale => {
+              const badge = PS_STATUS_BADGE[sale.status] || PS_STATUS_BADGE.pending;
+              return (
+                <div key={sale.id} className="border border-black/10 p-4 flex items-center gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="font-mono text-sm font-bold truncate">{sale.beat_title}</span>
+                      <span className={`${badge.bg} ${badge.text} font-mono text-[10px] font-bold uppercase px-1.5 py-0.5`}>
+                        {sale.status}
+                      </span>
+                    </div>
+                    <p className="font-mono text-xs text-black/50">
+                      {sale.buyer_name || sale.buyer_email}
+                      {' · '}
+                      {BEAT_LICENSES[sale.license_type as keyof typeof BEAT_LICENSES]?.name || sale.license_type}
+                    </p>
+                    <p className="font-mono text-[10px] text-black/30 mt-0.5">
+                      {new Date(sale.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
+                      {sale.payment_method !== 'stripe' && ` · ${sale.payment_method}`}
+                    </p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="font-mono text-sm font-bold">{formatCents(sale.amount)}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Private Sale Modal */}
+      <PrivateSaleModal
+        isOpen={showPrivateSale}
+        onClose={() => setShowPrivateSale(false)}
+        onCreated={fetchPrivateSales}
+      />
     </div>
   );
 }

@@ -579,3 +579,83 @@ export async function sendContactForm(details: {
     });
   } catch (e) { console.error('Email error (contact form):', e); }
 }
+
+// ── Private Beat Sale Emails ──────────────────────────────────────────
+
+export async function sendPrivateBeatSaleInvite(to: string, details: {
+  buyerName: string; beatTitle: string; producerName: string;
+  licenseType: string; amount: number; requiresPayment: boolean; token: string;
+}) {
+  try {
+    const actionText = details.requiresPayment ? 'Review & Purchase' : 'Review & Sign';
+    await resend.emails.send({
+      from: FROM, to,
+      subject: `Private Beat Sale — ${details.beatTitle}`,
+      html: wrap(`
+        ${h1('PRIVATE BEAT SALE')}
+        ${p(`Hey ${details.buyerName}, ${details.producerName} has set up a private beat sale for you.`)}
+        ${detailTable(`
+          ${detail('Beat', details.beatTitle)}
+          ${detail('Producer', details.producerName)}
+          ${detail('License', details.licenseType)}
+          ${detail('Price', details.requiresPayment ? formatMoney(details.amount) : 'Included / No Charge')}
+        `)}
+        ${p(details.requiresPayment
+          ? 'Review the details below, sign the license agreement, and complete your payment to receive your files.'
+          : 'Review the details below and sign the license agreement to receive your files.'
+        )}
+        ${btn(actionText, `${SITE_URL}/beats/private/${details.token}`)}
+        ${p('<span style="color:#666;font-size:11px">If you have any questions, reply to this email.</span>')}
+      `),
+    });
+  } catch (e) { console.error('Email error (private beat sale invite):', e); }
+}
+
+export async function sendPrivateBeatSaleComplete(to: string, details: {
+  buyerName: string; beatTitle: string; producerName: string;
+  licenseType: string; amount: number; token: string;
+}) {
+  try {
+    await resend.emails.send({
+      from: FROM, to,
+      subject: `Beat Purchase Complete — ${details.beatTitle}`,
+      html: wrap(`
+        ${h1('PURCHASE COMPLETE')}
+        ${p(`Hey ${details.buyerName}, your beat purchase is complete! You can now download your files.`)}
+        ${detailTable(`
+          ${detail('Beat', details.beatTitle)}
+          ${detail('Producer', details.producerName)}
+          ${detail('License', details.licenseType)}
+          ${detail('Amount Paid', formatMoney(details.amount))}
+        `)}
+        ${btn('Download Files', `${SITE_URL}/beats/private/${details.token}`)}
+        ${p('<span style="color:#666;font-size:11px">Your license agreement is available on your download page.</span>')}
+      `),
+    });
+  } catch (e) { console.error('Email error (private beat sale complete):', e); }
+}
+
+export async function sendPrivateBeatSaleNotification(to: string, details: {
+  buyerName: string; buyerEmail: string; beatTitle: string;
+  licenseType: string; amount: number; paymentMethod: string;
+}) {
+  try {
+    await resend.emails.send({
+      from: FROM, to,
+      subject: `Beat Sale Completed — ${details.beatTitle}`,
+      html: wrap(`
+        ${h1('SALE COMPLETED')}
+        ${p(`${details.buyerName} has completed their private beat purchase.`)}
+        ${detailTable(`
+          ${detail('Buyer', details.buyerName)}
+          ${detail('Email', details.buyerEmail)}
+          ${detail('Beat', details.beatTitle)}
+          ${detail('License', details.licenseType)}
+          ${detail('Amount', formatMoney(details.amount))}
+          ${detail('Payment', details.paymentMethod)}
+        `)}
+        ${p('The buyer now has access to download their files and license agreement.')}
+      `),
+    });
+  } catch (e) { console.error('Email error (private beat sale notification):', e); }
+}

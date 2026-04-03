@@ -290,6 +290,85 @@ export async function POST(request: NextRequest) {
             });
           } catch { /* buyer may not have a profile — skip XP */ }
         }
+      } else if (meta.type === 'private_beat_sale') {
+        // Private beat sale — buyer paid via Stripe after signing agreement
+        const privateSaleId = meta.private_sale_id;
+        const { data: sale } = await supabase
+          .from('private_beat_sales')
+          .select('*')
+          .eq('id', privateSaleId)
+          .single();
+
+        if (sale && sale.status !== 'completed') {
+          // Create beat_purchases record
+          const { data: purchase } = await supabase
+            .from('beat_purchases')
+            .insert({
+              beat_id: sale.beat_id || null,
+              buyer_id: null,
+              buyer_email: session.customer_details?.email || sale.buyer_email,
+              license_type: sale.license_type,
+              amount_paid: session.amount_total,
+              stripe_checkout_session_id: session.id,
+              stripe_payment_intent_id: session.payment_intent as string,
+              payment_method: 'stripe',
+              private_sale_id: sale.id,
+            })
+            .select('id')
+            .single();
+
+          // Update private sale to completed
+          await supabase.from('private_beat_sales').update({
+            status: 'completed',
+            paid_at: new Date().toISOString(),
+            purchase_id: purchase?.id || null,
+          }).eq('id', privateSaleId);
+
+          // If exclusive and has a beat_id, mark beat as sold
+          if (sale.license_type === 'exclusive' && sale.beat_id) {
+            await supabase.from('beats').update({
+              status: 'sold_exclusive',
+              exclusive_sold_at: new Date().toISOString(),
+            }).eq('id', sale.beat_id);
+          }
+
+          // Send completion emails
+          try {
+            const { sendPrivateBeatSaleComplete, sendPrivateBeatSaleNotification } = await import('@/lib/email');
+            await sendPrivateBeatSaleComplete(sale.buyer_email, {
+              buyerName: sale.buyer_name || 'there',
+              beatTitle: sale.beat_title,
+              producerName: sale.beat_producer,
+              licenseType: sale.license_type,
+              amount: sale.amount,
+              token: sale.token,
+            });
+
+            // Notify producer/creator
+            if (sale.created_by) {
+              const { data: creator } = await supabase
+                .from('profiles')
+                .select('user_id')
+                .eq('id', sale.created_by)
+                .single();
+              if (creator?.user_id) {
+                const { data: { user: creatorAuth } } = await supabase.auth.admin.getUserById(creator.user_id);
+                if (creatorAuth?.email) {
+                  await sendPrivateBeatSaleNotification(creatorAuth.email, {
+                    buyerName: sale.buyer_name || 'Unknown',
+                    buyerEmail: sale.buyer_email,
+                    beatTitle: sale.beat_title,
+                    licenseType: sale.license_type,
+                    amount: sale.amount,
+                    paymentMethod: 'stripe',
+                  });
+                }
+              }
+            }
+          } catch (e) {
+            console.error('Private sale email error:', e);
+          }
+        }
       }
       break;
     }
