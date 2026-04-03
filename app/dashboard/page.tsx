@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { Calendar, Music, FileAudio, Download, Heart, PenLine } from 'lucide-react';
+import { Calendar, Music, FileAudio, Download, Heart, PenLine, ShoppingBag } from 'lucide-react';
 import { getSessionUser } from '@/lib/auth';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { formatCents } from '@/lib/utils';
@@ -297,6 +297,20 @@ export default async function DashboardPage() {
               </Link>
             </div>
           )}
+
+          {/* My Purchases quick link */}
+          <div className="mt-12">
+            <Link
+              href="/dashboard/purchases"
+              className="border-2 border-black/10 p-6 flex items-center gap-4 hover:border-accent transition-colors no-underline"
+            >
+              <ShoppingBag className="w-8 h-8 text-accent flex-shrink-0" />
+              <div>
+                <p className="font-mono text-sm font-bold">MY BEAT PURCHASES</p>
+                <p className="font-mono text-xs text-black/40">View licenses, re-download files, and manage your beat purchases</p>
+              </div>
+            </Link>
+          </div>
 
           {/* My Lyrics */}
           {userLyrics && userLyrics.length > 0 && (

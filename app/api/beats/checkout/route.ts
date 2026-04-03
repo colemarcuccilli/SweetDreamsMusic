@@ -7,6 +7,19 @@ export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
+  if (!user) {
+    return NextResponse.json({ error: 'Login required to purchase beats' }, { status: 401 });
+  }
+
+  // Get buyer's full name from profile
+  const { data: buyerProfile } = await supabase
+    .from('profiles')
+    .select('display_name, full_name')
+    .eq('user_id', user.id)
+    .single();
+
+  const buyerName = buyerProfile?.full_name || buyerProfile?.display_name || user.email?.split('@')[0] || 'Buyer';
+
   const { beatId, licenseType } = await request.json();
 
   if (!beatId || !licenseType) {
@@ -60,7 +73,7 @@ export async function POST(request: NextRequest) {
       ],
       success_url: `${SITE_URL}/beats/success?session_id={CHECKOUT_SESSION_ID}&beat=${beatId}`,
       cancel_url: `${SITE_URL}/beats`,
-      customer_email: user?.email || undefined,
+      customer_email: user.email || undefined,
       metadata: {
         type: 'beat_purchase',
         beat_id: beatId,
@@ -68,8 +81,9 @@ export async function POST(request: NextRequest) {
         producer: beat.producer,
         producer_id: beat.producer_id || '',
         license_type: licenseType,
-        buyer_id: user?.id || '',
-        buyer_email: user?.email || '',
+        buyer_id: user.id,
+        buyer_email: user.email || '',
+        buyer_name: buyerName,
       },
     });
 

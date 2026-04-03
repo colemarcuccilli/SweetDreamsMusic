@@ -109,6 +109,11 @@ export default function PrivateBeatSalePage() {
       const data = await res.json();
 
       if (!res.ok) {
+        if (res.status === 401) {
+          // Redirect to login, then back here
+          window.location.href = `/login?redirect=/beats/private/${token}`;
+          return;
+        }
         setError(data.error || 'Failed to sign agreement.');
         setState('agreement');
         return;

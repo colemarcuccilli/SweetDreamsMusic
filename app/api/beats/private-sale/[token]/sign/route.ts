@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServiceClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { generateLicenseText } from '@/lib/license-templates';
 import { sendPrivateBeatSaleComplete } from '@/lib/email';
 import { BEAT_LICENSES, type BeatLicenseType } from '@/lib/constants';
@@ -13,6 +13,22 @@ export async function POST(
   if (!token) {
     return NextResponse.json({ error: 'Token required' }, { status: 400 });
   }
+
+  // Require login
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: 'Login required to sign agreements' }, { status: 401 });
+  }
+
+  // Get buyer profile for real name
+  const { data: buyerProfile } = await supabase
+    .from('profiles')
+    .select('id, display_name, full_name')
+    .eq('user_id', user.id)
+    .single();
+
+  const buyerName = buyerProfile?.full_name || buyerProfile?.display_name || user.email?.split('@')[0] || 'Buyer';
 
   const serviceClient = createServiceClient();
 
@@ -43,8 +59,8 @@ export async function POST(
   const now = new Date();
 
   const agreementText = generateLicenseText({
-    buyerName: sale.buyer_name,
-    buyerEmail: sale.buyer_email,
+    buyerName: buyerName,
+    buyerEmail: user.email || sale.buyer_email,
     beatTitle: sale.beat_title,
     producerName: sale.beat_producer,
     licenseType,
@@ -69,11 +85,12 @@ export async function POST(
       .from('beat_purchases')
       .insert({
         beat_id: sale.beat_id || null,
-        buyer_email: sale.buyer_email,
+        buyer_id: user.id,
+        buyer_email: user.email || sale.buyer_email,
         license_type: sale.license_type,
         amount_paid: sale.amount,
         payment_method: sale.payment_method || 'private_sale',
-        buyer_name: sale.buyer_name,
+        private_sale_id: sale.id,
       })
       .select('id')
       .single();

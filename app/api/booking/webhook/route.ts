@@ -262,15 +262,36 @@ export async function POST(request: NextRequest) {
         }
       } else if (meta.type === 'beat_purchase') {
         // Beat store purchase
-        await supabase.from('beat_purchases').insert({
+        const buyerEmail = session.customer_details?.email || meta.buyer_email;
+        const buyerName = meta.buyer_name || buyerEmail?.split('@')[0] || 'Buyer';
+
+        // Generate license text
+        let licenseText = '';
+        try {
+          const { generateLicenseText } = await import('@/lib/license-templates');
+          licenseText = generateLicenseText({
+            buyerName,
+            buyerEmail,
+            beatTitle: meta.beat_title || 'Unknown',
+            producerName: meta.producer || 'Unknown',
+            licenseType: meta.license_type as 'mp3_lease' | 'trackout_lease' | 'exclusive',
+            amountPaid: session.amount_total || 0,
+            purchaseDate: new Date().toLocaleDateString('en-US'),
+            purchaseId: session.id,
+          });
+        } catch { /* license gen failure shouldn't block purchase */ }
+
+        const { data: purchase } = await supabase.from('beat_purchases').insert({
           beat_id: meta.beat_id,
           buyer_id: meta.buyer_id || null,
-          buyer_email: session.customer_details?.email || meta.buyer_email,
+          buyer_email: buyerEmail,
           license_type: meta.license_type,
           amount_paid: session.amount_total,
           stripe_checkout_session_id: session.id,
           stripe_payment_intent_id: session.payment_intent as string,
-        });
+          payment_method: 'stripe',
+          license_text: licenseText || null,
+        }).select('id').single();
 
         // If exclusive, mark beat as sold
         if (meta.license_type === 'exclusive') {
@@ -280,6 +301,44 @@ export async function POST(request: NextRequest) {
             exclusive_sold_at: new Date().toISOString(),
           }).eq('id', meta.beat_id);
         }
+
+        // Send purchase confirmation email to buyer
+        try {
+          const { sendBeatPurchaseConfirmation } = await import('@/lib/email');
+          await sendBeatPurchaseConfirmation(buyerEmail, {
+            buyerName,
+            beatTitle: meta.beat_title || 'Beat',
+            producerName: meta.producer || 'Unknown',
+            licenseType: meta.license_type,
+            amount: session.amount_total || 0,
+            purchaseId: purchase?.id || session.id,
+          });
+        } catch (e) { console.error('Beat purchase email error:', e); }
+
+        // Notify producer of sale
+        try {
+          if (meta.producer_id) {
+            const { data: producerProfile } = await supabase
+              .from('profiles')
+              .select('user_id')
+              .eq('id', meta.producer_id)
+              .single();
+            if (producerProfile?.user_id) {
+              const { data: { user: producerAuth } } = await supabase.auth.admin.getUserById(producerProfile.user_id);
+              if (producerAuth?.email) {
+                const { sendBeatSaleProducerNotification } = await import('@/lib/email');
+                await sendBeatSaleProducerNotification(producerAuth.email, {
+                  buyerName,
+                  buyerEmail,
+                  beatTitle: meta.beat_title || 'Beat',
+                  licenseType: meta.license_type,
+                  amount: session.amount_total || 0,
+                  producerEarnings: Math.round((session.amount_total || 0) * 0.6),
+                });
+              }
+            }
+          }
+        } catch (e) { console.error('Producer notification error:', e); }
 
         // Award XP for beat purchase
         if (meta.buyer_id) {

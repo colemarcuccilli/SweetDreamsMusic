@@ -233,6 +233,10 @@ function BuyButton({ beatId, licenseType, isExclusive }: { beatId: string; licen
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ beatId, licenseType }),
           });
+          if (res.status === 401) {
+            window.location.href = `/login?redirect=/beats/${beatId}`;
+            return;
+          }
           const data = await res.json();
           if (data.url) window.location.href = data.url;
         }}

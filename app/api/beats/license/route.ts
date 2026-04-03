@@ -28,10 +28,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
   }
 
+  // Get buyer's real name from profile
+  const { data: buyerProfile } = await serviceClient
+    .from('profiles')
+    .select('display_name, full_name')
+    .eq('user_id', user.id)
+    .single();
+
+  const buyerName = buyerProfile?.full_name || buyerProfile?.display_name || user.email?.split('@')[0] || 'Buyer';
+
   const beat = Array.isArray(purchase.beats) ? purchase.beats[0] : purchase.beats;
 
   const licenseText = generateLicenseText({
-    buyerName: user.email?.split('@')[0] || 'Buyer',
+    buyerName,
     buyerEmail: purchase.buyer_email,
     beatTitle: beat?.title || 'Unknown',
     producerName: beat?.producer || 'Unknown',

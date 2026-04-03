@@ -56,54 +56,77 @@ export function generateLicenseText(params: LicenseParams): string {
   const amountFormatted = `$${(amountPaid / 100).toFixed(2)}`;
 
   return `
-BEAT LICENSE AGREEMENT
-======================
+════════════════════════════════════════════════════════
+           SWEET DREAMS MUSIC — BEAT LICENSE AGREEMENT
+════════════════════════════════════════════════════════
 
 License Type: ${license.name}
 Purchase ID: ${purchaseId}
-Date: ${purchaseDate}
+Date of Agreement: ${purchaseDate}
 
+────────────────────────────────────────────────────────
 PARTIES
--------
-Licensor: Sweet Dreams Music (on behalf of producer "${producerName}")
-Licensee: ${buyerName} (${buyerEmail})
+────────────────────────────────────────────────────────
+Licensor: Sweet Dreams Music LLC, Fort Wayne, IN
+          (on behalf of producer "${producerName}")
+Licensee: ${buyerName}
+          Email: ${buyerEmail}
 
+────────────────────────────────────────────────────────
 BEAT INFORMATION
-----------------
+────────────────────────────────────────────────────────
 Title: "${beatTitle}"
 Producer: ${producerName}
 Amount Paid: ${amountFormatted}
+Delivery Format: ${license.deliveryFormat}
 
-DELIVERY FORMAT
----------------
-${license.deliveryFormat}
-
-LICENSE TERMS
--------------
-${terms.exclusive ? 'This is an EXCLUSIVE license. The beat will be removed from the store and no further licenses will be issued.' : 'This is a NON-EXCLUSIVE license. The producer retains the right to license this beat to other parties.'}
+────────────────────────────────────────────────────────
+LICENSE GRANT
+────────────────────────────────────────────────────────
+${terms.exclusive ? 'This is an EXCLUSIVE license. The beat will be removed from the store and no further licenses will be issued. All rights to the beat transfer to the Licensee, except the producer retains credit rights.' : 'This is a NON-EXCLUSIVE license. The producer retains the right to license this beat to other parties.'}
 
 Permitted Use:
-- Streaming: ${terms.streamingLimit}
-- Sales/Distribution: ${terms.salesLimit}
-- Music Videos: ${terms.musicVideos}
-- Live Performances: ${terms.performances}
-- Radio: ${terms.radioStations}
-- Transferable: ${terms.transferable ? 'Yes' : 'No — this license is non-transferable'}
+  • Streaming: ${terms.streamingLimit}
+  • Sales/Distribution: ${terms.salesLimit}
+  • Music Videos: ${terms.musicVideos}
+  • Live Performances: ${terms.performances}
+  • Radio: ${terms.radioStations}
+  • Transferable: ${terms.transferable ? 'Yes' : 'No — this license is non-transferable'}
 
+────────────────────────────────────────────────────────
 RESTRICTIONS
-------------
-1. The Licensee may NOT claim ownership of the underlying composition or production.
-2. The Licensee may NOT resell, sublicense, or redistribute the beat itself.
-3. The Licensee MUST credit the producer ("Prod. by ${producerName}") in all published works.
-4. ${terms.exclusive ? 'Upon exclusive purchase, all rights to the beat transfer to the Licensee, except the producer retains credit rights.' : 'If license limits are exceeded, the Licensee must upgrade their license.'}
+────────────────────────────────────────────────────────
+1. The Licensee may NOT claim ownership of the underlying
+   composition or production.
+2. The Licensee may NOT resell, sublicense, or redistribute
+   the beat itself (only derivative works using the beat).
+3. The Licensee MUST credit the producer as
+   "Prod. by ${producerName}" in all published works.
+4. ${terms.exclusive ? 'The producer retains the right to be credited on all works created using this beat.' : 'If license limits are exceeded, the Licensee must purchase an upgraded license before continued use.'}
 
-DELIVERY
---------
-Files are available for download immediately after purchase. Download links expire after 10 downloads.
+────────────────────────────────────────────────────────
+DELIVERY & ACCESS
+────────────────────────────────────────────────────────
+Files are available for download immediately after purchase
+through the Sweet Dreams Music platform. Downloads are
+limited to 10 per purchase. Files can also be accessed
+from the "My Purchases" section of your dashboard at
+sweetdreamsmusic.com/dashboard/purchases.
 
-This license agreement is legally binding upon purchase. By completing the transaction, the Licensee agrees to all terms above.
+────────────────────────────────────────────────────────
+AGREEMENT
+────────────────────────────────────────────────────────
+This license agreement is legally binding upon completion
+of purchase. By completing the transaction, the Licensee
+acknowledges that they have read, understood, and agree
+to all terms stated in this agreement.
 
-Sweet Dreams Music
+This agreement is governed by the laws of the State of
+Indiana, United States.
+
+════════════════════════════════════════════════════════
+Sweet Dreams Music LLC — Fort Wayne, IN
 sweetdreamsmusic.com
+════════════════════════════════════════════════════════
 `.trim();
 }

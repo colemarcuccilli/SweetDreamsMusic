@@ -659,3 +659,66 @@ export async function sendPrivateBeatSaleNotification(to: string, details: {
     });
   } catch (e) { console.error('Email error (private beat sale notification):', e); }
 }
+
+// Beat purchase confirmation (public store)
+export async function sendBeatPurchaseConfirmation(to: string, details: {
+  buyerName: string;
+  beatTitle: string;
+  producerName: string;
+  licenseType: string;
+  amount: number;
+  purchaseId: string;
+}) {
+  try {
+    await resend.emails.send({
+      from: FROM,
+      to,
+      subject: `Purchase Confirmed — ${details.beatTitle}`,
+      html: wrap(
+        h1('PURCHASE CONFIRMED') +
+        p(`${details.buyerName}, your beat purchase is complete.`) +
+        detailTable(
+          detail('Beat', details.beatTitle) +
+          detail('Producer', details.producerName) +
+          detail('License', details.licenseType) +
+          detail('Amount', formatMoney(details.amount)) +
+          detail('Purchase ID', details.purchaseId)
+        ) +
+        p('Your files are ready for download. You can also access your purchases anytime from your dashboard.') +
+        btn('VIEW MY PURCHASES', `${SITE_URL}/dashboard/purchases`) +
+        p('Your signed license agreement is stored in your account and attached to this purchase. You can view and download it at any time.')
+      ),
+    });
+  } catch (e) { console.error('Email error (beat purchase confirmation):', e); }
+}
+
+// Producer notification when someone buys their beat
+export async function sendBeatSaleProducerNotification(to: string, details: {
+  buyerName: string;
+  buyerEmail: string;
+  beatTitle: string;
+  licenseType: string;
+  amount: number;
+  producerEarnings: number;
+}) {
+  try {
+    await resend.emails.send({
+      from: FROM,
+      to,
+      subject: `Beat Sold — ${details.beatTitle}`,
+      html: wrap(
+        h1('BEAT SOLD') +
+        p(`Someone just purchased your beat "${details.beatTitle}".`) +
+        detailTable(
+          detail('Beat', details.beatTitle) +
+          detail('Buyer', details.buyerName) +
+          detail('Email', details.buyerEmail) +
+          detail('License', details.licenseType) +
+          detail('Sale Amount', formatMoney(details.amount)) +
+          detail('Your Earnings (60%)', formatMoney(details.producerEarnings))
+        ) +
+        btn('VIEW YOUR EARNINGS', `${SITE_URL}/producer`)
+      ),
+    });
+  } catch (e) { console.error('Email error (producer sale notification):', e); }
+}
