@@ -21,20 +21,53 @@ export async function POST(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   try {
-    const body = await request.json();
-    const {
-      beatId,
-      buyerName,
-      buyerEmail,
-      licenseType,
-      amount, // dollars from client
-      paymentMethod,
-      requiresPayment,
-      notes,
-      beatTitle: providedTitle,
-      beatProducer: providedProducer,
-      producerId,
-    } = body;
+    // Handle both JSON and FormData (for file uploads)
+    const contentType = request.headers.get('content-type') || '';
+    let beatId: string | null = null;
+    let buyerName = '';
+    let buyerEmail = '';
+    let licenseType = '';
+    let amount = 0;
+    let paymentMethod = 'stripe';
+    let requiresPayment: boolean | string = true;
+    let notes: string | null = null;
+    let providedTitle = '';
+    let providedProducer = '';
+    let producerId: string | null = null;
+    let beatFile: File | null = null;
+    let stemsFile: File | null = null;
+
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await request.formData();
+      beatId = formData.get('beatId') as string || null;
+      buyerName = formData.get('buyerName') as string || '';
+      buyerEmail = formData.get('buyerEmail') as string || '';
+      licenseType = formData.get('licenseType') as string || '';
+      amount = parseFloat(formData.get('amount') as string || '0');
+      paymentMethod = formData.get('paymentMethod') as string || 'stripe';
+      requiresPayment = formData.get('requiresPayment') as string;
+      notes = formData.get('notes') as string || null;
+      providedTitle = formData.get('beatTitle') as string || '';
+      providedProducer = formData.get('beatProducer') as string || '';
+      producerId = formData.get('producerId') as string || null;
+      beatFile = formData.get('beat_file') as File | null;
+      stemsFile = formData.get('stems_file') as File | null;
+    } else {
+      const body = await request.json();
+      beatId = body.beatId || null;
+      buyerName = body.buyerName || '';
+      buyerEmail = body.buyerEmail || '';
+      licenseType = body.licenseType || '';
+      amount = body.amount || 0;
+      paymentMethod = body.paymentMethod || 'stripe';
+      requiresPayment = body.requiresPayment;
+      notes = body.notes || null;
+      providedTitle = body.beatTitle || '';
+      providedProducer = body.beatProducer || '';
+      producerId = body.producerId || null;
+    }
+
+    const reqPayment = requiresPayment !== false && requiresPayment !== 'false';
 
     if (!buyerName || !buyerEmail || !licenseType) {
       return NextResponse.json({ error: 'buyerName, buyerEmail, and licenseType are required' }, { status: 400 });
@@ -65,6 +98,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Upload beat files if provided (custom beats)
+    let mp3FilePath: string | null = null;
+    let trackoutFilePath: string | null = null;
+    const filePrefix = `private-sales/${Date.now()}`;
+
+    if (beatFile && beatFile.size > 0) {
+      mp3FilePath = `${filePrefix}/beat_${beatFile.name}`;
+      const { error: uploadErr } = await serviceClient.storage.from('media').upload(mp3FilePath, beatFile);
+      if (uploadErr) { console.error('Beat file upload error:', uploadErr); mp3FilePath = null; }
+    }
+    if (stemsFile && stemsFile.size > 0) {
+      trackoutFilePath = `${filePrefix}/stems_${stemsFile.name}`;
+      const { error: uploadErr } = await serviceClient.storage.from('media').upload(trackoutFilePath, stemsFile);
+      if (uploadErr) { console.error('Stems file upload error:', uploadErr); trackoutFilePath = null; }
+    }
+
     const token = crypto.randomUUID();
 
     const { data: sale, error } = await serviceClient
@@ -77,7 +126,9 @@ export async function POST(request: NextRequest) {
         license_type: licenseType,
         amount: amountCents,
         payment_method: paymentMethod || 'stripe',
-        requires_payment: requiresPayment !== false,
+        requires_payment: reqPayment,
+        mp3_file_path: mp3FilePath,
+        trackout_file_path: trackoutFilePath,
         notes: notes || null,
         beat_title: beatTitle,
         beat_producer: beatProducer,
@@ -101,7 +152,7 @@ export async function POST(request: NextRequest) {
       producerName: beatProducer,
       licenseType: license.name,
       amount: amountCents,
-      requiresPayment: requiresPayment !== false,
+      requiresPayment: reqPayment,
       token,
     });
 

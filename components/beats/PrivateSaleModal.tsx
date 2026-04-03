@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { X, Search, UserPlus, DollarSign } from 'lucide-react';
+import { X, Search, UserPlus, DollarSign, Upload } from 'lucide-react';
 import { BEAT_LICENSES, type BeatLicenseType } from '@/lib/constants';
 
 interface PrivateSaleModalProps {
@@ -62,6 +62,10 @@ export default function PrivateSaleModal({
   const [price, setPrice] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('stripe');
   const [notes, setNotes] = useState('');
+
+  // File uploads for custom beats
+  const [beatFile, setBeatFile] = useState<File | null>(null);
+  const [stemsFile, setStemsFile] = useState<File | null>(null);
 
   // Beat list for dropdown (when no preselectedBeat)
   const [producerBeats, setProducerBeats] = useState<{ id: string; title: string; mp3_lease_price: number | null; trackout_lease_price: number | null; exclusive_price: number | null }[]>([]);
@@ -128,6 +132,7 @@ export default function PrivateSaleModal({
     setBuyerName(''); setBuyerEmail(''); setSelectedBeatId(preselectedBeat?.id || '');
     setCustomBeatTitle(''); setIsCustomBeat(false); setLicenseType('mp3_lease');
     setPrice(''); setPaymentMethod('stripe'); setNotes('');
+    setBeatFile(null); setStemsFile(null);
     setManualClientEntry(false); setClientSearch(''); setShowClientPicker(false); setError('');
   }
 
@@ -149,23 +154,47 @@ export default function PrivateSaleModal({
     setError('');
 
     try {
-      const res = await fetch('/api/beats/private-sale', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          beatId: preselectedBeat?.id || (isCustomBeat ? null : selectedBeatId) || null,
-          beatTitle,
-          beatProducer: preselectedBeat?.producer || producerName || '',
-          producerId: preselectedBeat?.producerId || producerId || null,
-          licenseType,
-          amount: parseFloat(price) || 0,
-          paymentMethod: paymentMethod,
-          requiresPayment: pm?.requiresPayment ?? true,
-          buyerName,
-          buyerEmail,
-          notes: notes || null,
-        }),
-      });
+      const beatId = preselectedBeat?.id || (isCustomBeat ? null : selectedBeatId) || null;
+      const hasFiles = (isCustomBeat || !beatId) && (beatFile || stemsFile);
+
+      let res: Response;
+      if (hasFiles) {
+        // Use FormData for file uploads
+        const formData = new FormData();
+        if (beatId) formData.append('beatId', beatId);
+        formData.append('beatTitle', beatTitle);
+        formData.append('beatProducer', preselectedBeat?.producer || producerName || '');
+        if (preselectedBeat?.producerId || producerId) formData.append('producerId', preselectedBeat?.producerId || producerId || '');
+        formData.append('licenseType', licenseType);
+        formData.append('amount', String(parseFloat(price) || 0));
+        formData.append('paymentMethod', paymentMethod);
+        formData.append('requiresPayment', String(pm?.requiresPayment ?? true));
+        formData.append('buyerName', buyerName);
+        formData.append('buyerEmail', buyerEmail);
+        if (notes) formData.append('notes', notes);
+        if (beatFile) formData.append('beat_file', beatFile);
+        if (stemsFile) formData.append('stems_file', stemsFile);
+
+        res = await fetch('/api/beats/private-sale', { method: 'POST', body: formData });
+      } else {
+        res = await fetch('/api/beats/private-sale', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            beatId,
+            beatTitle,
+            beatProducer: preselectedBeat?.producer || producerName || '',
+            producerId: preselectedBeat?.producerId || producerId || null,
+            licenseType,
+            amount: parseFloat(price) || 0,
+            paymentMethod: paymentMethod,
+            requiresPayment: pm?.requiresPayment ?? true,
+            buyerName,
+            buyerEmail,
+            notes: notes || null,
+          }),
+        });
+      }
 
       const data = await res.json();
       if (!res.ok) {
@@ -295,6 +324,36 @@ export default function PrivateSaleModal({
                   </button>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* File Uploads (for custom beats or beats without files) */}
+          {(isCustomBeat || (!preselectedBeat && !selectedBeatId)) && (
+            <div>
+              <label className="block font-mono text-xs text-black/60 uppercase tracking-wider mb-2">Beat Files</label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-mono text-[10px] text-black/40 uppercase mb-1">Beat Audio (MP3/WAV) *</label>
+                  <label className="border border-dashed border-black/20 p-3 flex items-center gap-2 cursor-pointer hover:border-accent transition-colors">
+                    <Upload className="w-4 h-4 text-black/30 flex-shrink-0" />
+                    <span className="font-mono text-[10px] text-black/50 truncate">
+                      {beatFile ? beatFile.name : 'Select file...'}
+                    </span>
+                    <input type="file" accept="audio/*,.wav,.mp3,.flac" onChange={e => setBeatFile(e.target.files?.[0] || null)} className="hidden" />
+                  </label>
+                </div>
+                <div>
+                  <label className="block font-mono text-[10px] text-black/40 uppercase mb-1">Stems/Trackout (ZIP)</label>
+                  <label className="border border-dashed border-black/20 p-3 flex items-center gap-2 cursor-pointer hover:border-accent transition-colors">
+                    <Upload className="w-4 h-4 text-black/30 flex-shrink-0" />
+                    <span className="font-mono text-[10px] text-black/50 truncate">
+                      {stemsFile ? stemsFile.name : 'Select file...'}
+                    </span>
+                    <input type="file" accept=".zip,.rar" onChange={e => setStemsFile(e.target.files?.[0] || null)} className="hidden" />
+                  </label>
+                </div>
+              </div>
+              <p className="font-mono text-[10px] text-black/30 mt-1">Files delivered to buyer after signing the agreement.</p>
             </div>
           )}
 
