@@ -116,6 +116,17 @@ export async function POST(request: NextRequest) {
 
     const token = crypto.randomUUID();
 
+    // Get the profile ID for created_by (FK references profiles.id, not auth.users.id)
+    const { data: creatorProfile } = await serviceClient
+      .from('profiles')
+      .select('id')
+      .eq('user_id', user.id)
+      .single();
+
+    if (!creatorProfile) {
+      return NextResponse.json({ error: 'Profile not found for authenticated user' }, { status: 400 });
+    }
+
     const { data: sale, error } = await serviceClient
       .from('private_beat_sales')
       .insert({
@@ -133,7 +144,7 @@ export async function POST(request: NextRequest) {
         beat_title: beatTitle,
         beat_producer: beatProducer,
         producer_id: producerId || (isProducer ? profileId : null),
-        created_by: user.id,
+        created_by: creatorProfile.id,
         status: 'pending',
       })
       .select()
