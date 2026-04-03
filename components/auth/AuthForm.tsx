@@ -43,7 +43,7 @@ export default function AuthForm() {
         const callbackUrl = redirect
           ? `${window.location.origin}/api/auth/callback?next=${encodeURIComponent(redirect)}`
           : `${window.location.origin}/api/auth/callback`;
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -52,7 +52,18 @@ export default function AuthForm() {
           },
         });
         if (error) throw error;
-        setMessage('Check your email for a confirmation link.');
+        // If session exists, user is auto-confirmed — redirect immediately
+        if (data?.session) {
+          window.location.href = redirect || '/dashboard';
+          return;
+        }
+        // Otherwise email confirmation is required
+        setMessage('Account created! Check your email for a confirmation link, then come back to sign in.');
+        // Switch to sign-in mode after a delay so they can log in
+        setTimeout(() => {
+          setMode('signin');
+          setMessage('Email confirmed? Sign in below.');
+        }, 5000);
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email,

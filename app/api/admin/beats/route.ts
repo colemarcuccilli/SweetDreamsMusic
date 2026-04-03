@@ -149,14 +149,16 @@ export async function POST(request: NextRequest) {
         <rect x="740" y="40" width="24" height="24" fill="${textColor}" opacity="0.15" />
       </svg>`;
 
-      coverImagePath = `covers/${beatPrefix.replace('beats/', '')}_cover.svg`;
+      coverImagePath = `${beatPrefix}/cover.svg`;
       const { error: coverUploadErr } = await serviceClient.storage
-        .from('beats')
+        .from('media')
         .upload(coverImagePath, Buffer.from(svg), { contentType: 'image/svg+xml', upsert: true });
 
       if (!coverUploadErr) {
-        const { data: coverUrlData } = serviceClient.storage.from('beats').getPublicUrl(coverImagePath);
+        const { data: coverUrlData } = serviceClient.storage.from('media').getPublicUrl(coverImagePath);
         coverImageUrl = coverUrlData.publicUrl;
+      } else {
+        console.error('Cover art upload error:', coverUploadErr);
       }
     } catch (e) {
       console.error('Cover art generation error:', e);
