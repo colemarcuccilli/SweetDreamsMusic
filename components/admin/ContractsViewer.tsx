@@ -3,8 +3,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { FileText, Search, ChevronDown, ChevronUp, ShieldCheck, Handshake, Tag } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
+import { BEAT_AGREEMENT_TEXT, BEAT_AGREEMENT_VERSION } from '@/lib/constants';
+import { generateLicenseText } from '@/lib/license-templates';
 
-type SubTab = 'licenses' | 'producer' | 'private';
+type SubTab = 'templates' | 'licenses' | 'producer' | 'private';
 
 interface BeatPurchase {
   id: string;
@@ -66,7 +68,7 @@ function formatDate(d: string | null | undefined) {
 }
 
 export default function ContractsViewer() {
-  const [subTab, setSubTab] = useState<SubTab>('licenses');
+  const [subTab, setSubTab] = useState<SubTab>('templates');
   const [loading, setLoading] = useState(true);
   const [beatPurchases, setBeatPurchases] = useState<BeatPurchase[]>([]);
   const [producerAgreements, setProducerAgreements] = useState<ProducerAgreement[]>([]);
@@ -137,7 +139,15 @@ export default function ContractsViewer() {
     setExpandedId(prev => prev === id ? null : id);
   }
 
+  // Generate sample license previews for the templates tab
+  const sampleLicenses = {
+    mp3_lease: generateLicenseText({ buyerName: 'John Doe', buyerEmail: 'john@example.com', beatTitle: 'Summer Vibes', producerName: 'DJ Producer', licenseType: 'mp3_lease', amountPaid: 2999, purchaseDate: '2026-04-03', purchaseId: 'SAMPLE-MP3-001' }),
+    trackout_lease: generateLicenseText({ buyerName: 'John Doe', buyerEmail: 'john@example.com', beatTitle: 'Summer Vibes', producerName: 'DJ Producer', licenseType: 'trackout_lease', amountPaid: 7499, purchaseDate: '2026-04-03', purchaseId: 'SAMPLE-TRACK-001' }),
+    exclusive: generateLicenseText({ buyerName: 'John Doe', buyerEmail: 'john@example.com', beatTitle: 'Summer Vibes', producerName: 'DJ Producer', licenseType: 'exclusive', amountPaid: 40000, purchaseDate: '2026-04-03', purchaseId: 'SAMPLE-EXCL-001' }),
+  };
+
   const subTabs: { key: SubTab; label: string; count: number; icon: typeof FileText }[] = [
+    { key: 'templates', label: 'Contract Templates', count: 4, icon: FileText },
     { key: 'licenses', label: 'Beat Licenses', count: beatPurchases.length, icon: Tag },
     { key: 'producer', label: 'Producer Agreements', count: producerAgreements.length, icon: Handshake },
     { key: 'private', label: 'Private Sales', count: privateSales.length, icon: ShieldCheck },
@@ -206,6 +216,84 @@ export default function ContractsViewer() {
               placeholder="Search by name, email, beat title..."
             />
           </div>
+
+          {/* Contract Templates Tab */}
+          {subTab === 'templates' && (
+            <div className="space-y-6">
+              <p className="font-mono text-xs text-black/50">These are the actual contract templates that buyers and producers sign. Click to expand each one.</p>
+
+              {/* Producer Agreement */}
+              <div className="border-2 border-black/10">
+                <button onClick={() => setExpandedId(expandedId === 'tpl-producer' ? null : 'tpl-producer')}
+                  className="w-full p-4 flex items-center justify-between text-left hover:bg-black/[0.02]">
+                  <div>
+                    <p className="font-mono text-sm font-bold">Producer Agreement (v{BEAT_AGREEMENT_VERSION})</p>
+                    <p className="font-mono text-[10px] text-black/40 mt-0.5">Signed by producers when their beat is approved to go live on the store</p>
+                  </div>
+                  {expandedId === 'tpl-producer' ? <ChevronUp className="w-4 h-4 text-black/30" /> : <ChevronDown className="w-4 h-4 text-black/30" />}
+                </button>
+                {expandedId === 'tpl-producer' && (
+                  <div className="border-t border-black/10 bg-black/[0.02] p-4">
+                    <pre className="font-mono text-xs text-black/70 whitespace-pre-wrap max-h-[600px] overflow-y-auto border border-black/10 bg-white p-4">{BEAT_AGREEMENT_TEXT}</pre>
+                  </div>
+                )}
+              </div>
+
+              {/* MP3 Lease License */}
+              <div className="border-2 border-black/10">
+                <button onClick={() => setExpandedId(expandedId === 'tpl-mp3' ? null : 'tpl-mp3')}
+                  className="w-full p-4 flex items-center justify-between text-left hover:bg-black/[0.02]">
+                  <div>
+                    <p className="font-mono text-sm font-bold">MP3 Lease License</p>
+                    <p className="font-mono text-[10px] text-black/40 mt-0.5">Non-exclusive MP3 license — 500K streams, 5K sales, 1 music video</p>
+                  </div>
+                  {expandedId === 'tpl-mp3' ? <ChevronUp className="w-4 h-4 text-black/30" /> : <ChevronDown className="w-4 h-4 text-black/30" />}
+                </button>
+                {expandedId === 'tpl-mp3' && (
+                  <div className="border-t border-black/10 bg-black/[0.02] p-4">
+                    <p className="font-mono text-[10px] text-accent mb-2 uppercase tracking-wider">Sample preview with placeholder data</p>
+                    <pre className="font-mono text-xs text-black/70 whitespace-pre-wrap max-h-[600px] overflow-y-auto border border-black/10 bg-white p-4">{sampleLicenses.mp3_lease}</pre>
+                  </div>
+                )}
+              </div>
+
+              {/* Trackout Lease License */}
+              <div className="border-2 border-black/10">
+                <button onClick={() => setExpandedId(expandedId === 'tpl-trackout' ? null : 'tpl-trackout')}
+                  className="w-full p-4 flex items-center justify-between text-left hover:bg-black/[0.02]">
+                  <div>
+                    <p className="font-mono text-sm font-bold">Trackout Lease License</p>
+                    <p className="font-mono text-[10px] text-black/40 mt-0.5">Non-exclusive stems license — 1M streams, 10K sales, monetized video</p>
+                  </div>
+                  {expandedId === 'tpl-trackout' ? <ChevronUp className="w-4 h-4 text-black/30" /> : <ChevronDown className="w-4 h-4 text-black/30" />}
+                </button>
+                {expandedId === 'tpl-trackout' && (
+                  <div className="border-t border-black/10 bg-black/[0.02] p-4">
+                    <p className="font-mono text-[10px] text-accent mb-2 uppercase tracking-wider">Sample preview with placeholder data</p>
+                    <pre className="font-mono text-xs text-black/70 whitespace-pre-wrap max-h-[600px] overflow-y-auto border border-black/10 bg-white p-4">{sampleLicenses.trackout_lease}</pre>
+                  </div>
+                )}
+              </div>
+
+              {/* Exclusive License */}
+              <div className="border-2 border-accent/30">
+                <button onClick={() => setExpandedId(expandedId === 'tpl-exclusive' ? null : 'tpl-exclusive')}
+                  className="w-full p-4 flex items-center justify-between text-left hover:bg-accent/5">
+                  <div>
+                    <p className="font-mono text-sm font-bold">Exclusive Rights License</p>
+                    <p className="font-mono text-[10px] text-black/40 mt-0.5">Full ownership — unlimited everything, transferable, beat removed from store</p>
+                  </div>
+                  {expandedId === 'tpl-exclusive' ? <ChevronUp className="w-4 h-4 text-black/30" /> : <ChevronDown className="w-4 h-4 text-black/30" />}
+                </button>
+                {expandedId === 'tpl-exclusive' && (
+                  <div className="border-t border-black/10 bg-black/[0.02] p-4">
+                    <p className="font-mono text-[10px] text-accent mb-2 uppercase tracking-wider">Sample preview with placeholder data</p>
+                    <pre className="font-mono text-xs text-black/70 whitespace-pre-wrap max-h-[600px] overflow-y-auto border border-black/10 bg-white p-4">{sampleLicenses.exclusive}</pre>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Beat Licenses Tab */}
           {subTab === 'licenses' && (
