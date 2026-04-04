@@ -20,6 +20,7 @@ type BookingData = {
   remainder_amount: number;
   status: string;
   engineer_name: string | null;
+  media_addons: Array<{ type: string; description: string; amount: number }> | null;
 };
 
 export default function InvitePage() {
@@ -275,10 +276,29 @@ export default function InvitePage() {
 
           {/* Pricing */}
           <div className="border-t border-b border-black/10 py-4 mb-6 font-mono text-sm space-y-2">
-            <div className="flex justify-between">
-              <span className="text-black/60">Session Total</span>
-              <span className="font-bold">{formatCents(booking.total_amount)}</span>
-            </div>
+            {booking.media_addons && booking.media_addons.length > 0 ? (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-black/60">Session</span>
+                  <span>{formatCents(booking.total_amount - booking.media_addons.reduce((sum, a) => sum + a.amount, 0))}</span>
+                </div>
+                {booking.media_addons.map((addon, i) => (
+                  <div key={i} className="flex justify-between">
+                    <span className="text-black/60">{addon.description || addon.type}</span>
+                    <span>{formatCents(addon.amount)}</span>
+                  </div>
+                ))}
+                <div className="flex justify-between border-t border-black/10 pt-2">
+                  <span className="text-black/60">Total</span>
+                  <span className="font-bold">{formatCents(booking.total_amount)}</span>
+                </div>
+              </>
+            ) : (
+              <div className="flex justify-between">
+                <span className="text-black/60">Session Total</span>
+                <span className="font-bold">{formatCents(booking.total_amount)}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-black/60">Deposit Due Now (50%)</span>
               <span className="font-bold text-accent">{formatCents(booking.deposit_amount)}</span>

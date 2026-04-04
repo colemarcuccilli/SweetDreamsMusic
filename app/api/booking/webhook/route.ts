@@ -167,6 +167,25 @@ export async function POST(request: NextRequest) {
             updated_at: new Date().toISOString(),
           }).eq('id', bookingId);
 
+          // Create media_sales records if booking has media add-ons
+          const mediaAddons = existingBooking.media_addons;
+          if (mediaAddons && Array.isArray(mediaAddons) && mediaAddons.length > 0) {
+            for (const addon of mediaAddons) {
+              await supabase.from('media_sales').insert({
+                description: addon.description || addon.type,
+                amount: addon.amount,
+                sale_type: addon.type,
+                sold_by: addon.sold_by || null,
+                filmed_by: addon.filmed_by || null,
+                edited_by: addon.edited_by || null,
+                client_name: existingBooking.customer_name,
+                client_email: existingBooking.customer_email,
+                booking_id: bookingId,
+                notes: `From session invite`,
+              });
+            }
+          }
+
           // Send confirmation emails
           const startDate = new Date(existingBooking.start_time);
           const dateStr = startDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
@@ -541,6 +560,25 @@ export async function POST(request: NextRequest) {
             stripe_payment_intent_id: asyncSession.payment_intent as string,
             updated_at: new Date().toISOString(),
           }).eq('id', bookingId);
+
+          // Create media_sales records if booking has media add-ons
+          const asyncMediaAddons = existingBooking.media_addons;
+          if (asyncMediaAddons && Array.isArray(asyncMediaAddons) && asyncMediaAddons.length > 0) {
+            for (const addon of asyncMediaAddons) {
+              await supabase.from('media_sales').insert({
+                description: addon.description || addon.type,
+                amount: addon.amount,
+                sale_type: addon.type,
+                sold_by: addon.sold_by || null,
+                filmed_by: addon.filmed_by || null,
+                edited_by: addon.edited_by || null,
+                client_name: existingBooking.customer_name,
+                client_email: existingBooking.customer_email,
+                booking_id: bookingId,
+                notes: `From session invite`,
+              });
+            }
+          }
 
           const startDate = new Date(existingBooking.start_time);
           const dateStr = startDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });

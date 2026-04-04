@@ -86,14 +86,43 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create Stripe Checkout Session for the deposit
-    // NOTE: setup_future_usage is card-only. Cash App Pay, Venmo, etc. do NOT support
-    // saving for future charges. Setting it at the payment_intent_data level breaks
-    // non-card payment methods (checkout never completes, webhook never fires).
-    const session = await stripe.checkout.sessions.create({
-      customer: customerId,
-      mode: 'payment',
-      line_items: [
+    // Build line items — split session vs media if add-ons exist
+    const mediaAddons = booking.media_addons;
+    let lineItems: Array<{ price_data: { currency: string; product_data: { name: string; description?: string }; unit_amount: number }; quantity: number }>;
+
+    if (mediaAddons && Array.isArray(mediaAddons) && mediaAddons.length > 0) {
+      const mediaTotal = mediaAddons.reduce((sum: number, a: { amount: number }) => sum + a.amount, 0);
+      const sessionTotal = booking.total_amount - mediaTotal;
+      // Proportional deposit split
+      const sessionDeposit = Math.round((sessionTotal / booking.total_amount) * booking.deposit_amount);
+      const mediaDeposit = booking.deposit_amount - sessionDeposit;
+
+      lineItems = [
+        {
+          price_data: {
+            currency: PRICING.currency,
+            product_data: {
+              name: `Recording Session Deposit — ${roomLabel}`,
+              description: `${booking.duration}hr session on ${dateStr} at ${timeStr}`,
+            },
+            unit_amount: sessionDeposit,
+          },
+          quantity: 1,
+        },
+        {
+          price_data: {
+            currency: PRICING.currency,
+            product_data: {
+              name: `Media Add-ons Deposit`,
+              description: mediaAddons.map((a: { description?: string; type: string }) => a.description || a.type).join(', '),
+            },
+            unit_amount: mediaDeposit,
+          },
+          quantity: 1,
+        },
+      ];
+    } else {
+      lineItems = [
         {
           price_data: {
             currency: PRICING.currency,
@@ -105,7 +134,17 @@ export async function POST(request: NextRequest) {
           },
           quantity: 1,
         },
-      ],
+      ];
+    }
+
+    // Create Stripe Checkout Session for the deposit
+    // NOTE: setup_future_usage is card-only. Cash App Pay, Venmo, etc. do NOT support
+    // saving for future charges. Setting it at the payment_intent_data level breaks
+    // non-card payment methods (checkout never completes, webhook never fires).
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      mode: 'payment',
+      line_items: lineItems,
       payment_method_options: {
         card: {
           setup_future_usage: 'off_session',

@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { Copy, Check, Link as LinkIcon, Search, UserPlus, X } from 'lucide-react';
-import { ROOMS, ROOM_LABELS, ROOM_RATES, ROOM_RATES_SINGLE, PRICING, type Room } from '@/lib/constants';
+import { Copy, Check, Link as LinkIcon, Search, UserPlus, X, Video, Trash2, ChevronDown, ChevronUp, Plus } from 'lucide-react';
+import { ROOMS, ROOM_LABELS, ROOM_RATES, ROOM_RATES_SINGLE, PRICING, ENGINEERS, type Room } from '@/lib/constants';
 import { formatCents, formatTime, calculateSessionTotal, parseTimeSlot } from '@/lib/utils';
 
 interface Client {
@@ -28,6 +28,10 @@ export default function CreateInvite() {
   const [creating, setCreating] = useState(false);
   const [inviteUrl, setInviteUrl] = useState('');
   const [copied, setCopied] = useState(false);
+
+  // Media service state
+  const [showMediaSection, setShowMediaSection] = useState(false);
+  const [mediaAddons, setMediaAddons] = useState<Array<{ type: string; description: string; amount: string; soldBy: string; filmedBy: string; editedBy: string }>>([]);
 
   // Client picker state
   const [clients, setClients] = useState<Client[]>([]);
@@ -96,7 +100,9 @@ export default function CreateInvite() {
   const useCustomPrice = customPrice.trim() !== '';
   const customPriceCents = useCustomPrice ? Math.round(parseFloat(customPrice) * 100) : 0;
   const finalTotal = useCustomPrice ? customPriceCents : pricing.total;
-  const finalDeposit = chargeFullAmount ? finalTotal : Math.round(finalTotal * (PRICING.depositPercent / 100));
+  const mediaTotalCents = mediaAddons.reduce((s, a) => s + Math.round(parseFloat(a.amount || '0') * 100), 0);
+  const combinedTotal = finalTotal + mediaTotalCents;
+  const finalDeposit = chargeFullAmount ? combinedTotal : Math.round(combinedTotal * (PRICING.depositPercent / 100));
 
   // Generate 30-min time slots
   const timeSlots: string[] = [];
@@ -118,7 +124,7 @@ export default function CreateInvite() {
           startTime,
           duration,
           room,
-          totalAmount: finalTotal,
+          totalAmount: combinedTotal,
           depositAmount: paymentMethod === 'cash' ? 0 : finalDeposit,
           clientEmail,
           clientName,
@@ -126,6 +132,16 @@ export default function CreateInvite() {
           notes,
           paymentMethod,
           customPrice: useCustomPrice ? customPriceCents : null,
+          mediaAddons: mediaAddons.filter(a => a.amount && parseFloat(a.amount) > 0).length > 0
+            ? mediaAddons.filter(a => a.amount && parseFloat(a.amount) > 0).map(a => ({
+                type: a.type,
+                description: a.description || (a.type === 'video' ? 'Music Video' : a.type === 'photo' ? 'Photo Shoot' : 'Content Creation'),
+                amount: Math.round(parseFloat(a.amount) * 100),
+                sold_by: a.soldBy || null,
+                filmed_by: a.filmedBy || null,
+                edited_by: a.editedBy || null,
+              }))
+            : null,
         }),
       });
 
@@ -179,7 +195,7 @@ export default function CreateInvite() {
             </button>
           </div>
           <button
-            onClick={() => { setInviteUrl(''); setDate(''); clearClient(); setArtistName(''); setNotes(''); setCustomPrice(''); }}
+            onClick={() => { setInviteUrl(''); setDate(''); clearClient(); setArtistName(''); setNotes(''); setCustomPrice(''); setShowMediaSection(false); setMediaAddons([]); }}
             className="font-mono text-xs text-accent hover:underline mt-4"
           >
             Create another invite
@@ -412,6 +428,172 @@ export default function CreateInvite() {
           placeholder="Session details..." />
       </div>
 
+      {/* Media Service */}
+      <div>
+        <button
+          type="button"
+          onClick={() => {
+            setShowMediaSection(!showMediaSection);
+            if (!showMediaSection && mediaAddons.length === 0) {
+              setMediaAddons([{ type: 'video', description: '', amount: '', soldBy: '', filmedBy: '', editedBy: '' }]);
+            }
+          }}
+          className={`w-full flex items-center justify-between p-3 border-2 font-mono text-xs font-bold uppercase tracking-wider transition-colors ${
+            showMediaSection ? 'border-accent bg-accent/5' : 'border-black/20 hover:border-black'
+          }`}
+        >
+          <span className="flex items-center gap-2">
+            <Video className="w-4 h-4" />
+            Add Media Service
+          </span>
+          {showMediaSection ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </button>
+
+        {showMediaSection && (
+          <div className="border-2 border-t-0 border-black/20 p-4 space-y-4">
+            {mediaAddons.map((addon, idx) => (
+              <div key={idx} className="space-y-3 pb-4 border-b border-black/10 last:border-0 last:pb-0">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-black/60">Service {idx + 1}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updated = mediaAddons.filter((_, i) => i !== idx);
+                      setMediaAddons(updated);
+                      if (updated.length === 0) setShowMediaSection(false);
+                    }}
+                    className="text-black/30 hover:text-red-500 p-1"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Type */}
+                  <div>
+                    <label className="block font-mono text-[10px] text-black/60 uppercase tracking-wider mb-1">Type</label>
+                    <select
+                      value={addon.type}
+                      onChange={(e) => {
+                        const updated = [...mediaAddons];
+                        updated[idx] = { ...updated[idx], type: e.target.value };
+                        setMediaAddons(updated);
+                      }}
+                      className="w-full border border-black/20 px-3 py-2 font-mono text-xs focus:border-accent focus:outline-none"
+                    >
+                      <option value="video">Music Video</option>
+                      <option value="photo">Photo Shoot</option>
+                      <option value="content">Content Creation</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+
+                  {/* Amount */}
+                  <div>
+                    <label className="block font-mono text-[10px] text-black/60 uppercase tracking-wider mb-1">Amount</label>
+                    <div className="flex items-center">
+                      <span className="font-mono text-xs px-2 py-2 border border-r-0 border-black/20 bg-black/5">$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={addon.amount}
+                        onChange={(e) => {
+                          const updated = [...mediaAddons];
+                          updated[idx] = { ...updated[idx], amount: e.target.value };
+                          setMediaAddons(updated);
+                        }}
+                        className="w-full border border-black/20 px-3 py-2 font-mono text-xs focus:border-accent focus:outline-none"
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label className="block font-mono text-[10px] text-black/60 uppercase tracking-wider mb-1">Description</label>
+                  <input
+                    type="text"
+                    value={addon.description}
+                    onChange={(e) => {
+                      const updated = [...mediaAddons];
+                      updated[idx] = { ...updated[idx], description: e.target.value };
+                      setMediaAddons(updated);
+                    }}
+                    className="w-full border border-black/20 px-3 py-2 font-mono text-xs focus:border-accent focus:outline-none"
+                    placeholder={addon.type === 'video' ? 'Music Video Package' : addon.type === 'photo' ? 'Photo Shoot Package' : 'Content Creation Package'}
+                  />
+                </div>
+
+                {/* Sold By / Filmed By / Edited By */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-mono text-[10px] text-black/60 uppercase tracking-wider mb-1">Sold By</label>
+                    <select
+                      value={addon.soldBy}
+                      onChange={(e) => {
+                        const updated = [...mediaAddons];
+                        updated[idx] = { ...updated[idx], soldBy: e.target.value };
+                        setMediaAddons(updated);
+                      }}
+                      className="w-full border border-black/20 px-3 py-2 font-mono text-xs focus:border-accent focus:outline-none"
+                    >
+                      <option value="">--</option>
+                      {ENGINEERS.map((eng) => (
+                        <option key={eng.name} value={eng.name}>{eng.displayName}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-mono text-[10px] text-black/60 uppercase tracking-wider mb-1">Filmed By</label>
+                    <select
+                      value={addon.filmedBy}
+                      onChange={(e) => {
+                        const updated = [...mediaAddons];
+                        updated[idx] = { ...updated[idx], filmedBy: e.target.value };
+                        setMediaAddons(updated);
+                      }}
+                      className="w-full border border-black/20 px-3 py-2 font-mono text-xs focus:border-accent focus:outline-none"
+                    >
+                      <option value="">--</option>
+                      {ENGINEERS.map((eng) => (
+                        <option key={eng.name} value={eng.name}>{eng.displayName}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-mono text-[10px] text-black/60 uppercase tracking-wider mb-1">Edited By</label>
+                    <select
+                      value={addon.editedBy}
+                      onChange={(e) => {
+                        const updated = [...mediaAddons];
+                        updated[idx] = { ...updated[idx], editedBy: e.target.value };
+                        setMediaAddons(updated);
+                      }}
+                      className="w-full border border-black/20 px-3 py-2 font-mono text-xs focus:border-accent focus:outline-none"
+                    >
+                      <option value="">--</option>
+                      {ENGINEERS.map((eng) => (
+                        <option key={eng.name} value={eng.name}>{eng.displayName}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            <button
+              type="button"
+              onClick={() => setMediaAddons([...mediaAddons, { type: 'video', description: '', amount: '', soldBy: '', filmedBy: '', editedBy: '' }])}
+              className="w-full flex items-center justify-center gap-2 p-2.5 border border-dashed border-black/20 font-mono text-xs text-black/60 hover:border-accent hover:text-accent transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add Another Service
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Price Summary */}
       <div className="border-2 border-black p-4 font-mono text-sm space-y-2">
         {useCustomPrice ? (
@@ -441,8 +623,22 @@ export default function CreateInvite() {
         )}
         <div className="flex justify-between border-t border-black/10 pt-2">
           <span>Session Total</span>
-          <span className="font-bold">{formatCents(finalTotal)}</span>
+          <span className={mediaTotalCents > 0 ? '' : 'font-bold'}>{formatCents(finalTotal)}</span>
         </div>
+        {mediaTotalCents > 0 && (
+          <>
+            {mediaAddons.filter(a => a.amount && parseFloat(a.amount) > 0).map((a, i) => (
+              <div key={i} className="flex justify-between text-purple-700">
+                <span>{a.description || (a.type === 'video' ? 'Music Video' : a.type === 'photo' ? 'Photo Shoot' : a.type === 'content' ? 'Content Creation' : 'Media Service')}</span>
+                <span>+{formatCents(Math.round(parseFloat(a.amount) * 100))}</span>
+              </div>
+            ))}
+            <div className="flex justify-between border-t border-black/10 pt-2 font-bold">
+              <span>Combined Total</span>
+              <span>{formatCents(combinedTotal)}</span>
+            </div>
+          </>
+        )}
         {paymentMethod === 'online' ? (
           <div className="flex justify-between font-bold">
             <span>{chargeFullAmount ? 'Full Payment Due' : 'Client Deposit (50%)'}</span>
@@ -451,7 +647,7 @@ export default function CreateInvite() {
         ) : (
           <div className="flex justify-between font-bold text-green-700">
             <span>Cash — Collected at Studio</span>
-            <span>{formatCents(finalTotal)}</span>
+            <span>{formatCents(combinedTotal)}</span>
           </div>
         )}
       </div>

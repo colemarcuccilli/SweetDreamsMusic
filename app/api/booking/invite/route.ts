@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
       date, startTime, duration, room,
       totalAmount, depositAmount,
       clientEmail, clientName, artistName, notes,
-      paymentMethod, customPrice,
+      paymentMethod, customPrice, mediaAddons,
     } = body;
 
     if (!date || !startTime || !duration || !room || !totalAmount) {
@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
           deposit_amount: 0,
           remainder_amount: totalAmount,
           actual_deposit_paid: 0,
+          media_addons: mediaAddons || null,
           status: 'confirmed',
           admin_notes: `Cash session created by ${user.email}. Token: ${inviteToken}. ${customPrice ? `Custom price: $${(customPrice / 100).toFixed(2)}. ` : ''}${notes || ''}`,
         })
@@ -76,6 +77,24 @@ export async function POST(request: NextRequest) {
       if (error) {
         console.error('Failed to create cash booking:', JSON.stringify(error));
         return NextResponse.json({ error: `Failed to create booking: ${error.message}` }, { status: 500 });
+      }
+
+      // Create media_sales records for cash bookings with media add-ons
+      if (mediaAddons && Array.isArray(mediaAddons) && mediaAddons.length > 0) {
+        for (const addon of mediaAddons) {
+          await serviceClient.from('media_sales').insert({
+            description: addon.description || addon.type,
+            amount: addon.amount,
+            sale_type: addon.type,
+            sold_by: addon.sold_by || null,
+            filmed_by: addon.filmed_by || null,
+            edited_by: addon.edited_by || null,
+            client_name: clientName,
+            client_email: clientEmail,
+            booking_id: booking.id,
+            notes: `From session invite (cash)`,
+          });
+        }
       }
 
       const inviteUrl = `${SITE_URL}/book/invite/${inviteToken}?booking=${booking.id}`;
@@ -123,6 +142,7 @@ export async function POST(request: NextRequest) {
         total_amount: totalAmount,
         deposit_amount: depositAmount,
         remainder_amount: totalAmount - depositAmount,
+        media_addons: mediaAddons || null,
         status: 'pending_deposit',
         admin_notes: `Invite created by ${user.email}. Token: ${inviteToken}. ${customPrice ? `Custom price: $${(customPrice / 100).toFixed(2)}. ` : ''}${notes || ''}`,
       })
