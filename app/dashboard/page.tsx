@@ -9,6 +9,7 @@ import DashboardNav from '@/components/layout/DashboardNav';
 import RescheduleButton from '@/components/dashboard/RescheduleButton';
 import XPWidget from '@/components/dashboard/XPWidget';
 import FileShowcaseToggle from '@/components/dashboard/FileShowcaseToggle';
+import PricingCalculator from '@/components/dashboard/PricingCalculator';
 
 export const metadata: Metadata = {
   title: 'Dashboard',
@@ -311,6 +312,9 @@ export default async function DashboardPage() {
               </div>
             </Link>
           </div>
+
+          {/* Session Price Calculator */}
+          <PricingCalculator />
 
           {/* My Lyrics */}
           {userLyrics && userLyrics.length > 0 && (

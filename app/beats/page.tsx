@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { SITE_URL, BEAT_LICENSES } from '@/lib/constants';
 import { createClient } from '@/lib/supabase/server';
@@ -38,11 +39,13 @@ export default async function BeatsPage() {
       {/* Beat Grid */}
       <section className="bg-white text-black py-12 sm:py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <BeatStoreClient initialBeats={(beats || []).map((b) => ({
-            ...b,
-            // Supabase returns joined relations as arrays; normalize to single object
-            profiles: Array.isArray(b.profiles) ? b.profiles[0] || null : b.profiles,
-          }))} />
+          <Suspense fallback={<p className="font-mono text-sm text-black/40">Loading beats...</p>}>
+            <BeatStoreClient initialBeats={(beats || []).map((b) => ({
+              ...b,
+              // Supabase returns joined relations as arrays; normalize to single object
+              profiles: Array.isArray(b.profiles) ? b.profiles[0] || null : b.profiles,
+            }))} />
+          </Suspense>
         </div>
       </section>
 

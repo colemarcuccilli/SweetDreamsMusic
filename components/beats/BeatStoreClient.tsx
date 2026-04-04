@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Search, SlidersHorizontal, Music, X } from 'lucide-react';
 import BeatCard, { type BeatData } from './BeatCard';
 import { BEAT_GENRES } from '@/lib/constants';
@@ -18,13 +19,32 @@ const SORT_OPTIONS = [
 ];
 
 export default function BeatStoreClient({ initialBeats }: BeatStoreClientProps) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
   const [beats, setBeats] = useState<BeatData[]>(initialBeats);
-  const [search, setSearch] = useState('');
-  const [genre, setGenre] = useState('');
-  const [sampleFilter, setSampleFilter] = useState<'all' | 'original' | 'samples'>('all');
-  const [sort, setSort] = useState('newest');
-  const [showFilters, setShowFilters] = useState(false);
+  const [search, setSearch] = useState(searchParams.get('q') || '');
+  const [genre, setGenre] = useState(searchParams.get('genre') || '');
+  const [sampleFilter, setSampleFilter] = useState<'all' | 'original' | 'samples'>((searchParams.get('samples') as 'all' | 'original' | 'samples') || 'all');
+  const [sort, setSort] = useState(searchParams.get('sort') || 'newest');
+  const [showFilters, setShowFilters] = useState(!!(searchParams.get('genre') || searchParams.get('samples')));
   const [savedBeatIds, setSavedBeatIds] = useState<Set<string>>(new Set());
+
+  // Sync filter state to URL (without page reload)
+  const syncUrl = useCallback((q: string, g: string, s: string, sf: string) => {
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (g) params.set('genre', g);
+    if (sf && sf !== 'all') params.set('samples', sf);
+    if (s && s !== 'newest') params.set('sort', s);
+    const qs = params.toString();
+    router.replace(qs ? `/beats?${qs}` : '/beats', { scroll: false });
+  }, [router]);
+
+  // Sync filters to URL
+  useEffect(() => {
+    syncUrl(search, genre, sort, sampleFilter);
+  }, [search, genre, sort, sampleFilter, syncUrl]);
 
   // Fetch saved beats for logged-in users
   useEffect(() => {

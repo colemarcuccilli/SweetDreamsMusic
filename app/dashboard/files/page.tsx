@@ -6,6 +6,7 @@ import { getSessionUser } from '@/lib/auth';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import DashboardNav from '@/components/layout/DashboardNav';
 import FileShowcaseToggle from '@/components/dashboard/FileShowcaseToggle';
+import FilesFilter from '@/components/dashboard/FilesFilter';
 
 export const metadata: Metadata = { title: 'My Files' };
 
@@ -97,57 +98,88 @@ export default async function FilesPage() {
               <p className="font-mono text-xs text-black/30">Files from your recording sessions will appear here for download.</p>
             </div>
           ) : (
-            <div className="space-y-8">
-              {Object.entries(filesByDate).map(([date, files]) => (
-                <div key={date}>
-                  <h3 className="font-mono text-xs text-black/40 uppercase tracking-wider mb-3 border-b border-black/10 pb-2">
-                    {date} — {files.length} file{files.length > 1 ? 's' : ''}
-                  </h3>
-                  <div className="space-y-2">
-                    {files.map(file => (
-                      <div key={file.id} className="border-2 border-black/10 p-4 hover:border-black/30 transition-colors">
-                        <div className="flex items-center justify-between gap-4">
-                          <div className="min-w-0 flex-1">
-                            <p className="font-mono text-sm font-bold truncate">
-                              {file.display_name || file.file_name}
-                            </p>
-                            <div className="font-mono text-xs text-black/40 mt-1 flex items-center gap-3 flex-wrap">
-                              <span>by {file.uploaded_by_name}</span>
-                              <span className="uppercase">{file.file_type?.split('/')[1] || 'file'}</span>
-                              {file.file_size > 0 && <span>{formatFileSize(file.file_size)}</span>}
-                            </div>
-                            {file.description && (
-                              <p className="font-mono text-[10px] text-black/30 mt-1">{file.description}</p>
-                            )}
-                          </div>
-                          {file.downloadUrl ? (
-                            <a
-                              href={file.downloadUrl}
-                              download={file.file_name}
-                              className="bg-accent text-black font-mono text-xs font-bold uppercase tracking-wider px-4 py-2.5 hover:bg-accent/90 transition-colors inline-flex items-center gap-2 flex-shrink-0 no-underline"
-                            >
-                              <Download className="w-4 h-4" /> Download
-                            </a>
-                          ) : (
-                            <span className="font-mono text-xs text-black/30">Unavailable</span>
-                          )}
+            <FilesFilter files={filesWithUrls}>
+              {(filtered) => {
+                // Build a map of download URLs and public status by ID
+                const urlMap = new Map(filesWithUrls.map(f => [f.id, { downloadUrl: f.downloadUrl, isPublic: f.isPublic }]));
+
+                // Group filtered files by date
+                const grouped: Record<string, typeof filtered> = {};
+                filtered.forEach(file => {
+                  const dateKey = new Date(file.created_at).toLocaleDateString('en-US', {
+                    month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC',
+                  });
+                  if (!grouped[dateKey]) grouped[dateKey] = [];
+                  grouped[dateKey].push(file);
+                });
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="border-2 border-black/10 p-8 text-center">
+                      <p className="font-mono text-sm text-black/40">No files match your search</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-8">
+                    {Object.entries(grouped).map(([date, files]) => (
+                      <div key={date}>
+                        <h3 className="font-mono text-xs text-black/40 uppercase tracking-wider mb-3 border-b border-black/10 pb-2">
+                          {date} — {files.length} file{files.length > 1 ? 's' : ''}
+                        </h3>
+                        <div className="space-y-2">
+                          {files.map(file => {
+                            const extra = urlMap.get(file.id);
+                            const downloadUrl = (extra as { downloadUrl?: string })?.downloadUrl;
+                            const isPublic = (extra as { isPublic?: boolean })?.isPublic || false;
+                            return (
+                              <div key={file.id} className="border-2 border-black/10 p-4 hover:border-black/30 transition-colors">
+                                <div className="flex items-center justify-between gap-4">
+                                  <div className="min-w-0 flex-1">
+                                    <p className="font-mono text-sm font-bold truncate">
+                                      {file.display_name || file.file_name}
+                                    </p>
+                                    <div className="font-mono text-xs text-black/40 mt-1 flex items-center gap-3 flex-wrap">
+                                      <span>by {file.uploaded_by_name}</span>
+                                      <span className="uppercase">{file.file_type?.split('/')[1] || 'file'}</span>
+                                      {file.file_size > 0 && <span>{formatFileSize(file.file_size)}</span>}
+                                    </div>
+                                    {file.description && (
+                                      <p className="font-mono text-[10px] text-black/30 mt-1">{file.description}</p>
+                                    )}
+                                  </div>
+                                  {downloadUrl ? (
+                                    <a
+                                      href={downloadUrl}
+                                      download={file.file_name}
+                                      className="bg-accent text-black font-mono text-xs font-bold uppercase tracking-wider px-4 py-2.5 hover:bg-accent/90 transition-colors inline-flex items-center gap-2 flex-shrink-0 no-underline"
+                                    >
+                                      <Download className="w-4 h-4" /> Download
+                                    </a>
+                                  ) : (
+                                    <span className="font-mono text-xs text-black/30">Unavailable</span>
+                                  )}
+                                </div>
+                                {file.file_type?.startsWith('audio/') && (
+                                  <div className="mt-3 pt-3 border-t border-black/5">
+                                    <FileShowcaseToggle
+                                      deliverableId={file.id}
+                                      initialEnabled={isPublic}
+                                      profileSlug={profileSlug}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
                         </div>
-                        {/* Public profile toggle */}
-                        {file.file_type?.startsWith('audio/') && (
-                          <div className="mt-3 pt-3 border-t border-black/5">
-                            <FileShowcaseToggle
-                              deliverableId={file.id}
-                              initialEnabled={file.isPublic}
-                              profileSlug={profileSlug}
-                            />
-                          </div>
-                        )}
                       </div>
                     ))}
                   </div>
-                </div>
-              ))}
-            </div>
+                );
+              }}
+            </FilesFilter>
           )}
         </div>
       </section>

@@ -60,6 +60,9 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
   const [calMonth, setCalMonth] = useState(today.getMonth());
   const [calYear, setCalYear] = useState(today.getFullYear());
 
+  // Month-level availability heat map data
+  const [monthAvailability, setMonthAvailability] = useState<Record<string, { booked: number; total: number }>>({});
+
   const timeSlots = useMemo(() => generateTimeSlots(), []);
 
   const startHour = selectedTime ? parseTimeSlot(selectedTime) : 0;
@@ -68,6 +71,30 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
   const pricing = useMemo(() => {
     return calculateSessionTotal(room, duration, startHour, isSameDayBooking);
   }, [room, duration, startHour, isSameDayBooking]);
+
+  // Fetch month-level availability for heat map coloring
+  useEffect(() => {
+    fetch(`/api/booking/availability/month?year=${calYear}&month=${calMonth}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.days) {
+          setMonthAvailability(data.days);
+        }
+      })
+      .catch(() => {});
+  }, [calYear, calMonth]);
+
+  // Determine heat map status for a given day number in the current calendar month
+  function getDayAvailability(day: number): 'past' | 'green' | 'yellow' | 'red' | 'none' {
+    if (isPastDate(day)) return 'past';
+    const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const info = monthAvailability[dateStr];
+    if (!info) return 'none';
+    const pctBooked = info.booked / info.total;
+    if (pctBooked >= 0.85) return 'red';      // 85%+ booked = fully booked
+    if (pctBooked >= 0.5) return 'yellow';     // 50-84% booked = limited
+    return 'green';                             // <50% booked = plenty available
+  }
 
   // Fetch availability when date changes (checks ALL studios since they can't overlap)
   useEffect(() => {
@@ -256,22 +283,46 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
               const day = i + 1;
               const past = isPastDate(day);
               const selected = isSelectedDate(day);
+              const avail = getDayAvailability(day);
               return (
                 <button
                   key={day}
                   disabled={past}
                   onClick={() => setSelectedDate(new Date(calYear, calMonth, day))}
                   className={cn(
-                    'aspect-square flex items-center justify-center font-mono text-sm transition-colors',
+                    'aspect-square flex flex-col items-center justify-center font-mono text-sm transition-colors relative',
                     past && 'text-black/20 cursor-not-allowed',
                     !past && !selected && 'hover:bg-black/5 cursor-pointer',
-                    selected && 'bg-black text-white'
+                    selected && 'bg-black text-white',
+                    // Heat map border coloring (not applied when selected or past)
+                    !past && !selected && avail === 'green' && 'ring-2 ring-inset ring-emerald-400/60',
+                    !past && !selected && avail === 'yellow' && 'ring-2 ring-inset ring-amber-400/60',
+                    !past && !selected && avail === 'red' && 'ring-2 ring-inset ring-red-400/60',
                   )}
                 >
                   {day}
+                  {/* Availability dot indicator */}
+                  {!past && avail !== 'none' && (
+                    <span
+                      className={cn(
+                        'absolute bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full',
+                        avail === 'green' && 'bg-emerald-500',
+                        avail === 'yellow' && 'bg-amber-500',
+                        avail === 'red' && 'bg-red-500',
+                        selected && 'opacity-80',
+                      )}
+                    />
+                  )}
                 </button>
               );
             })}
+          </div>
+
+          {/* Availability heat map legend */}
+          <div className="flex flex-wrap gap-4 mb-4 font-mono text-[10px] uppercase tracking-wider text-black/50">
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> Available</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" /> Limited</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" /> Fully Booked</span>
           </div>
 
           {selectedDate && (

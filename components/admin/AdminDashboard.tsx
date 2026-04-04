@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Calendar, Music, Users, DollarSign, Clock, Video, Mic, FileText } from 'lucide-react';
+import { Calendar, Music, Users, DollarSign, Clock, Video, Mic, FileText, LayoutDashboard } from 'lucide-react';
 import type { SessionUser } from '@/lib/auth';
+import AdminOverview from './AdminOverview';
 import BookingManager from './BookingManager';
 import BeatManager from './BeatManager';
 import UserManager from './UserManager';
@@ -12,12 +13,13 @@ import MediaSales from './MediaSales';
 import ProducerApplications from './ProducerApplications';
 import ContractsViewer from './ContractsViewer';
 
-type Tab = 'accounting' | 'bookings' | 'media' | 'blocks' | 'beats' | 'producers' | 'contracts' | 'users';
+type Tab = 'overview' | 'accounting' | 'bookings' | 'media' | 'blocks' | 'beats' | 'producers' | 'contracts' | 'users';
 
 export default function AdminDashboard({ user }: { user: SessionUser }) {
-  const [tab, setTab] = useState<Tab>('accounting');
+  const [tab, setTab] = useState<Tab>('overview');
 
   const tabs: { key: Tab; label: string; icon: typeof Calendar }[] = [
+    { key: 'overview', label: 'Overview', icon: LayoutDashboard },
     { key: 'accounting', label: 'Accounting', icon: DollarSign },
     { key: 'bookings', label: 'Bookings', icon: Calendar },
     { key: 'media', label: 'Media Sales', icon: Video },
@@ -52,6 +54,7 @@ export default function AdminDashboard({ user }: { user: SessionUser }) {
 
       <section className="bg-white text-black py-8 sm:py-12 min-h-[60vh]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          {tab === 'overview' && <AdminOverview />}
           {tab === 'accounting' && <Accounting />}
           {tab === 'bookings' && <BookingManager />}
           {tab === 'media' && <MediaSales />}
