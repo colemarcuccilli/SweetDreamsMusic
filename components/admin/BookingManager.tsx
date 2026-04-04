@@ -36,6 +36,7 @@ interface Booking {
   reschedule_requested: boolean;
   reschedule_reason: string | null;
   reschedule_requested_at: string | null;
+  media_addons: Array<{ type: string; description: string; amount: number; sold_by?: string; filmed_by?: string; edited_by?: string }> | null;
 }
 
 type StatusFilter = 'all' | 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'rejected';
@@ -550,6 +551,19 @@ export default function BookingManager() {
                         </p>
                       </div>
                     </div>
+
+                    {/* Media Add-ons */}
+                    {b.media_addons && b.media_addons.length > 0 && (
+                      <div className="font-mono text-xs col-span-2 border-t border-black/5 pt-2 mt-1">
+                        <p className="text-black/60 uppercase tracking-wider mb-1">Bundled Media Services</p>
+                        {b.media_addons.map((addon, i) => (
+                          <div key={i} className="flex justify-between items-center py-0.5">
+                            <span>{addon.description || addon.type}{addon.sold_by ? ` · ${addon.sold_by}` : ''}</span>
+                            <span className="font-semibold text-purple-700">{formatCents(addon.amount)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     {/* Engineer Assignment */}
                     <div className="font-mono text-xs">

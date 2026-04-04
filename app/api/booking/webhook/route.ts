@@ -167,22 +167,30 @@ export async function POST(request: NextRequest) {
             updated_at: new Date().toISOString(),
           }).eq('id', bookingId);
 
-          // Create media_sales records if booking has media add-ons
+          // Create media_sales records if booking has media add-ons (with dedup check)
           const mediaAddons = existingBooking.media_addons;
           if (mediaAddons && Array.isArray(mediaAddons) && mediaAddons.length > 0) {
-            for (const addon of mediaAddons) {
-              await supabase.from('media_sales').insert({
-                description: addon.description || addon.type,
-                amount: addon.amount,
-                sale_type: addon.type,
-                sold_by: addon.sold_by || null,
-                filmed_by: addon.filmed_by || null,
-                edited_by: addon.edited_by || null,
-                client_name: existingBooking.customer_name,
-                client_email: existingBooking.customer_email,
-                booking_id: bookingId,
-                notes: `From session invite`,
-              });
+            const { data: existingMediaSales } = await supabase
+              .from('media_sales')
+              .select('id')
+              .eq('booking_id', bookingId)
+              .limit(1);
+
+            if (!existingMediaSales?.length) {
+              for (const addon of mediaAddons) {
+                await supabase.from('media_sales').insert({
+                  description: addon.description || addon.type,
+                  amount: addon.amount,
+                  sale_type: addon.type,
+                  sold_by: addon.sold_by || null,
+                  filmed_by: addon.filmed_by || null,
+                  edited_by: addon.edited_by || null,
+                  client_name: existingBooking.customer_name,
+                  client_email: existingBooking.customer_email,
+                  booking_id: bookingId,
+                  notes: `From session invite`,
+                });
+              }
             }
           }
 
@@ -561,22 +569,30 @@ export async function POST(request: NextRequest) {
             updated_at: new Date().toISOString(),
           }).eq('id', bookingId);
 
-          // Create media_sales records if booking has media add-ons
+          // Create media_sales records if booking has media add-ons (with dedup check)
           const asyncMediaAddons = existingBooking.media_addons;
           if (asyncMediaAddons && Array.isArray(asyncMediaAddons) && asyncMediaAddons.length > 0) {
-            for (const addon of asyncMediaAddons) {
-              await supabase.from('media_sales').insert({
-                description: addon.description || addon.type,
-                amount: addon.amount,
-                sale_type: addon.type,
-                sold_by: addon.sold_by || null,
-                filmed_by: addon.filmed_by || null,
-                edited_by: addon.edited_by || null,
-                client_name: existingBooking.customer_name,
-                client_email: existingBooking.customer_email,
-                booking_id: bookingId,
-                notes: `From session invite`,
-              });
+            const { data: existingAsyncSales } = await supabase
+              .from('media_sales')
+              .select('id')
+              .eq('booking_id', bookingId)
+              .limit(1);
+
+            if (!existingAsyncSales?.length) {
+              for (const addon of asyncMediaAddons) {
+                await supabase.from('media_sales').insert({
+                  description: addon.description || addon.type,
+                  amount: addon.amount,
+                  sale_type: addon.type,
+                  sold_by: addon.sold_by || null,
+                  filmed_by: addon.filmed_by || null,
+                  edited_by: addon.edited_by || null,
+                  client_name: existingBooking.customer_name,
+                  client_email: existingBooking.customer_email,
+                  booking_id: bookingId,
+                  notes: `From session invite`,
+                });
+              }
             }
           }
 

@@ -280,7 +280,7 @@ export default function InvitePage() {
               <>
                 <div className="flex justify-between">
                   <span className="text-black/60">Session</span>
-                  <span>{formatCents(booking.total_amount - booking.media_addons.reduce((sum, a) => sum + a.amount, 0))}</span>
+                  <span>{formatCents(Math.max(0, booking.total_amount - booking.media_addons.reduce((sum: number, a: { amount: number }) => sum + a.amount, 0)))}</span>
                 </div>
                 {booking.media_addons.map((addon, i) => (
                   <div key={i} className="flex justify-between">

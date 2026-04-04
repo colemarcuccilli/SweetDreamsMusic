@@ -94,7 +94,9 @@ export async function POST(request: NextRequest) {
       const mediaTotal = mediaAddons.reduce((sum: number, a: { amount: number }) => sum + a.amount, 0);
       const sessionTotal = booking.total_amount - mediaTotal;
       // Proportional deposit split
-      const sessionDeposit = Math.round((sessionTotal / booking.total_amount) * booking.deposit_amount);
+      const sessionDeposit = booking.total_amount > 0
+        ? Math.round((sessionTotal / booking.total_amount) * booking.deposit_amount)
+        : 0;
       const mediaDeposit = booking.deposit_amount - sessionDeposit;
 
       lineItems = [
