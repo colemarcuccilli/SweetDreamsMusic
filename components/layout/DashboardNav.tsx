@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Shield, Wrench, User, Music, Rocket } from 'lucide-react';
+import { LayoutDashboard, Shield, Wrench, User, Music, Rocket, Bell } from 'lucide-react';
 import type { UserRole } from '@/lib/constants';
 import SignOutButton from '@/components/auth/SignOutButton';
 
@@ -35,6 +35,15 @@ export default function DashboardNav({ role, isProducer, displayName, email, pro
             <p className="font-mono text-white/50 text-sm mt-1">{email}</p>
           </div>
           <div className="flex flex-wrap gap-3">
+            <Link
+              href="/dashboard/updates"
+              className={`border border-white/20 text-white font-mono text-xs font-bold uppercase tracking-wider px-3 py-2 hover:border-accent hover:text-accent transition-colors no-underline inline-flex items-center gap-1.5 ${
+                pathname === '/dashboard/updates' ? 'border-accent text-accent' : ''
+              }`}
+              title="Platform Updates"
+            >
+              <Bell className="w-4 h-4" /> Updates
+            </Link>
             {profileSlug && (
               <Link
                 href={`/u/${profileSlug}`}
