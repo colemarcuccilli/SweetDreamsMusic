@@ -195,14 +195,14 @@ export default function EngineerAccounting() {
         <div className="flex gap-3 items-center">
           <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)}
             className="border border-black/20 px-3 py-2 font-mono text-xs focus:border-accent focus:outline-none" />
-          <span className="font-mono text-xs text-black/40">to</span>
+          <span className="font-mono text-xs text-black/60">to</span>
           <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)}
             className="border border-black/20 px-3 py-2 font-mono text-xs focus:border-accent focus:outline-none" />
         </div>
       )}
 
       {loading ? (
-        <p className="font-mono text-sm text-black/40">Loading accounting...</p>
+        <p className="font-mono text-sm text-black/70">Loading accounting...</p>
       ) : (
         <>
           {/* Overview Stats */}
@@ -222,7 +222,7 @@ export default function EngineerAccounting() {
 
           {/* Split Explanation */}
           <div className="border border-black/10 p-4">
-            <p className="font-mono text-xs text-black/50">
+            <p className="font-mono text-xs text-black/70">
               <strong className="text-black">Revenue Split:</strong> You earn 60% of session revenue. Business retains 40%.
               Media sales you bring in earn a 15% commission.
             </p>
@@ -267,12 +267,12 @@ export default function EngineerAccounting() {
                   <div key={sale.id} className="flex justify-between items-center py-3 px-3 border-b border-black/5 font-mono text-xs">
                     <div>
                       <span className="font-semibold">{sale.description}</span>
-                      <span className="text-black/40 ml-3">
+                      <span className="text-black/60 ml-3">
                         {new Date(sale.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                       </span>
                     </div>
                     <div className="text-right">
-                      <span className="text-black/50">{formatCents(sale.amount)}</span>
+                      <span className="text-black/70">{formatCents(sale.amount)}</span>
                       <span className="font-bold ml-3 text-accent">{formatCents(Math.round(sale.amount * MEDIA_COMMISSION))}</span>
                     </div>
                   </div>
@@ -331,7 +331,7 @@ function StatCard({ icon: Icon, label, value, accent }: { icon: typeof DollarSig
     <div className={`border-2 p-4 ${accent ? 'border-accent' : 'border-black/10'}`}>
       <Icon className={`w-4 h-4 mb-2 ${accent ? 'text-accent' : 'text-black/30'}`} />
       <p className={`font-heading text-xl ${accent ? 'text-accent' : ''}`}>{value}</p>
-      <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">{label}</p>
+      <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider">{label}</p>
     </div>
   );
 }

@@ -273,7 +273,7 @@ export default function SessionPrepPage() {
       {/* Header */}
       <div className="border-b-2 border-black/5">
         <div className="max-w-3xl mx-auto px-4 py-6">
-          <button onClick={() => router.push('/dashboard')} className="font-mono text-xs text-black/40 hover:text-black flex items-center gap-1 mb-4">
+          <button onClick={() => router.push('/dashboard')} className="font-mono text-xs text-black/60 hover:text-black flex items-center gap-1 mb-4">
             <ArrowLeft className="w-3 h-3" /> Back to Dashboard
           </button>
           <h1 className="text-heading-md">PREPARE FOR YOUR SESSION</h1>
@@ -292,7 +292,7 @@ export default function SessionPrepPage() {
           {/* Progress */}
           <div className="mt-4">
             <div className="flex items-center justify-between mb-2">
-              <span className="font-mono text-xs text-black/40 uppercase tracking-wider">Preparation Progress</span>
+              <span className="font-mono text-xs text-black/60 uppercase tracking-wider">Preparation Progress</span>
               <span className="font-mono text-xs font-bold text-accent">{completionPct}%</span>
             </div>
             <div className="h-1.5 bg-black/5 rounded-full overflow-hidden">
@@ -307,7 +307,7 @@ export default function SessionPrepPage() {
                 key={i}
                 onClick={() => setStep(i)}
                 className={`flex-1 py-2 font-mono text-[10px] uppercase tracking-wider border-b-2 transition-colors ${
-                  step === i ? 'border-accent text-accent font-bold' : 'border-transparent text-black/30 hover:text-black/60'
+                  step === i ? 'border-accent text-accent font-bold' : 'border-transparent text-black/60 hover:text-black/80'
                 }`}
               >
                 {s}
@@ -341,10 +341,10 @@ export default function SessionPrepPage() {
                         : 'border-black/10 hover:border-black/30'
                     }`}
                   >
-                    <Icon className={`w-6 h-6 mt-0.5 flex-shrink-0 ${prep.session_type === type.key ? 'text-accent' : 'text-black/30'}`} />
+                    <Icon className={`w-6 h-6 mt-0.5 flex-shrink-0 ${prep.session_type === type.key ? 'text-accent' : 'text-black/60'}`} />
                     <div>
                       <p className="font-mono text-sm font-bold">{type.label}</p>
-                      <p className="font-mono text-xs text-black/50 mt-0.5">{type.desc}</p>
+                      <p className="font-mono text-xs text-black/70 mt-0.5">{type.desc}</p>
                     </div>
                     {prep.session_type === type.key && (
                       <Check className="w-5 h-5 text-accent ml-auto flex-shrink-0 mt-0.5" />
@@ -443,7 +443,7 @@ export default function SessionPrepPage() {
                       }`}
                     >
                       <p className="font-mono text-sm font-bold">{src.label}</p>
-                      <p className="font-mono text-xs text-black/50 mt-0.5">{src.desc}</p>
+                      <p className="font-mono text-xs text-black/70 mt-0.5">{src.desc}</p>
                     </button>
                   ))}
                 </div>
@@ -466,7 +466,7 @@ export default function SessionPrepPage() {
                         ) : (
                           <Upload className="w-8 h-8 text-black/30" />
                         )}
-                        <span className="font-mono text-xs text-black/50">
+                        <span className="font-mono text-xs text-black/70">
                           {uploading ? 'Uploading...' : 'Click to upload your beat (MP3, WAV, FLAC — max 50MB)'}
                         </span>
                         <input type="file" accept="audio/*" onChange={handleBeatUpload} className="hidden" disabled={uploading} />
@@ -537,7 +537,7 @@ export default function SessionPrepPage() {
                       }`}
                     >
                       <p className="font-mono text-sm font-bold">{ls.label}</p>
-                      <p className="font-mono text-[11px] text-black/50">{ls.desc}</p>
+                      <p className="font-mono text-[11px] text-black/70">{ls.desc}</p>
                     </button>
                   ))}
                 </div>
@@ -545,7 +545,7 @@ export default function SessionPrepPage() {
                 {(prep.lyrics_status === 'written' || prep.lyrics_status === 'partial') && (
                   <div className="mt-4">
                     <label className="block font-mono text-xs font-semibold uppercase tracking-wider mb-2">
-                      Paste your lyrics <span className="font-normal text-black/40">(optional — you can also bring them to the session)</span>
+                      Paste your lyrics <span className="font-normal text-black/60">(optional — you can also bring them to the session)</span>
                     </label>
                     <textarea
                       value={prep.lyrics_text}
@@ -560,7 +560,7 @@ export default function SessionPrepPage() {
             )}
 
             <div className="flex justify-between">
-              <button onClick={() => setStep(0)} className="font-mono text-sm text-black/40 hover:text-black">
+              <button onClick={() => setStep(0)} className="font-mono text-sm text-black/60 hover:text-black">
                 ← Back
               </button>
               <button
@@ -602,7 +602,7 @@ export default function SessionPrepPage() {
               <div className="flex items-center justify-between mb-3">
                 <label className="font-mono text-xs font-semibold uppercase tracking-wider">
                   Reference Tracks
-                  <span className="font-normal text-black/40 ml-1">(songs that sound like what you want)</span>
+                  <span className="font-normal text-black/60 ml-1">(songs that sound like what you want)</span>
                 </label>
                 <button
                   onClick={() => setShowRefForm(true)}
@@ -621,7 +621,7 @@ export default function SessionPrepPage() {
                         <p className="font-mono text-sm font-semibold truncate">
                           {ref.title}{ref.artist ? ` — ${ref.artist}` : ''}
                         </p>
-                        {ref.notes && <p className="font-mono text-[11px] text-black/50 mt-0.5">{ref.notes}</p>}
+                        {ref.notes && <p className="font-mono text-[11px] text-black/70 mt-0.5">{ref.notes}</p>}
                         {ref.link && (
                           <a href={ref.link} target="_blank" rel="noopener noreferrer" className="font-mono text-[10px] text-accent hover:underline flex items-center gap-1 mt-1">
                             <ExternalLink className="w-3 h-3" /> {ref.link.substring(0, 40)}...
@@ -639,7 +639,7 @@ export default function SessionPrepPage() {
               {prep.reference_tracks.length === 0 && !showRefForm && (
                 <div className="border-2 border-dashed border-black/10 p-6 text-center">
                   <Music className="w-6 h-6 text-black/20 mx-auto mb-2" />
-                  <p className="font-mono text-xs text-black/40">
+                  <p className="font-mono text-xs text-black/60">
                     Adding reference tracks helps your engineer understand your sound instantly.
                   </p>
                   <button
@@ -687,7 +687,7 @@ export default function SessionPrepPage() {
                     <button onClick={addReference} className="bg-accent text-black font-mono text-xs font-bold px-4 py-2">
                       Add
                     </button>
-                    <button onClick={() => { setShowRefForm(false); setNewRef({ title: '', artist: '', link: '', notes: '' }); }} className="font-mono text-xs text-black/40 px-4 py-2">
+                    <button onClick={() => { setShowRefForm(false); setNewRef({ title: '', artist: '', link: '', notes: '' }); }} className="font-mono text-xs text-black/60 px-4 py-2">
                       Cancel
                     </button>
                   </div>
@@ -710,7 +710,7 @@ export default function SessionPrepPage() {
             </div>
 
             <div className="flex justify-between">
-              <button onClick={() => setStep(1)} className="font-mono text-sm text-black/40 hover:text-black">
+              <button onClick={() => setStep(1)} className="font-mono text-sm text-black/60 hover:text-black">
                 ← Back
               </button>
               <button
@@ -739,19 +739,19 @@ export default function SessionPrepPage() {
             <div className="space-y-3">
               {/* Session type */}
               <div className="border-2 border-black/10 p-4">
-                <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider mb-1">Session Type</p>
+                <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider mb-1">Session Type</p>
                 <p className="font-mono text-sm font-bold">
                   {SESSION_TYPES.find(t => t.key === prep.session_type)?.label || prep.session_type}
                 </p>
                 {prep.num_songs > 1 && (
-                  <p className="font-mono text-xs text-black/50 mt-1">{prep.num_songs}+ songs planned</p>
+                  <p className="font-mono text-xs text-black/70 mt-1">{prep.num_songs}+ songs planned</p>
                 )}
               </div>
 
               {/* Goals */}
               {prep.session_goals && (
                 <div className="border-2 border-black/10 p-4">
-                  <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider mb-1">Session Goals</p>
+                  <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider mb-1">Session Goals</p>
                   <p className="font-mono text-sm">{prep.session_goals}</p>
                 </div>
               )}
@@ -759,7 +759,7 @@ export default function SessionPrepPage() {
               {/* Beat info */}
               {needsBeat && prep.beat_source && (
                 <div className="border-2 border-black/10 p-4">
-                  <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider mb-1">Beat / Instrumental</p>
+                  <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider mb-1">Beat / Instrumental</p>
                   <p className="font-mono text-sm font-bold">
                     {BEAT_SOURCES.find(s => s.key === prep.beat_source)?.label || prep.beat_source}
                   </p>
@@ -780,7 +780,7 @@ export default function SessionPrepPage() {
               {/* Lyrics */}
               {needsLyrics && prep.lyrics_status && (
                 <div className="border-2 border-black/10 p-4">
-                  <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider mb-1">Lyrics</p>
+                  <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider mb-1">Lyrics</p>
                   <p className="font-mono text-sm font-bold">
                     {LYRICS_STATUSES.find(l => l.key === prep.lyrics_status)?.label || prep.lyrics_status}
                   </p>
@@ -793,7 +793,7 @@ export default function SessionPrepPage() {
               {/* Style */}
               {prep.vocal_style && (
                 <div className="border-2 border-black/10 p-4">
-                  <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider mb-1">Genre / Style</p>
+                  <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider mb-1">Genre / Style</p>
                   <p className="font-mono text-sm">{prep.vocal_style}</p>
                 </div>
               )}
@@ -801,7 +801,7 @@ export default function SessionPrepPage() {
               {/* References */}
               {prep.reference_tracks.length > 0 && (
                 <div className="border-2 border-black/10 p-4">
-                  <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider mb-2">Reference Tracks</p>
+                  <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider mb-2">Reference Tracks</p>
                   <div className="space-y-2">
                     {prep.reference_tracks.map((ref, idx) => (
                       <div key={idx} className="flex items-center gap-2">
@@ -818,7 +818,7 @@ export default function SessionPrepPage() {
               {/* Special requests */}
               {prep.special_requests && (
                 <div className="border-2 border-black/10 p-4">
-                  <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider mb-1">Special Requests</p>
+                  <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider mb-1">Special Requests</p>
                   <p className="font-mono text-sm">{prep.special_requests}</p>
                 </div>
               )}
@@ -826,7 +826,7 @@ export default function SessionPrepPage() {
 
             {/* Submit / Edit */}
             <div className="flex justify-between items-center">
-              <button onClick={() => setStep(2)} className="font-mono text-sm text-black/40 hover:text-black">
+              <button onClick={() => setStep(2)} className="font-mono text-sm text-black/60 hover:text-black">
                 ← Edit
               </button>
 
@@ -837,7 +837,7 @@ export default function SessionPrepPage() {
                   </span>
                   <button
                     onClick={() => { setPrep(p => ({ ...p, completed: false })); save(false); }}
-                    className="font-mono text-xs text-black/40 hover:text-black"
+                    className="font-mono text-xs text-black/60 hover:text-black"
                   >
                     Edit & Resubmit
                   </button>

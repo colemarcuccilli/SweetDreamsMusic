@@ -62,7 +62,7 @@ export default function AudioPlayerBar() {
           {/* Track info */}
           <div className="flex-1 min-w-0">
             <p className="font-mono text-sm font-semibold truncate">{currentTrack.title}</p>
-            <p className="font-mono text-xs text-white/40 truncate">
+            <p className="font-mono text-xs text-white/70 truncate">
               {currentTrack.producerSlug ? (
                 <Link href={`/u/${currentTrack.producerSlug}`} className="hover:text-accent no-underline">
                   {currentTrack.producer}
@@ -76,7 +76,7 @@ export default function AudioPlayerBar() {
           </div>
 
           {/* Time */}
-          <span className="font-mono text-[10px] text-white/30 hidden sm:block flex-shrink-0">
+          <span className="font-mono text-[10px] text-white/60 hidden sm:block flex-shrink-0">
             {formatTime(currentTime)} / {formatTime(duration)}
           </span>
 

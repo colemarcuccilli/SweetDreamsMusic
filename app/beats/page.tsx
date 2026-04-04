@@ -57,7 +57,7 @@ export default async function BeatsPage() {
             {Object.entries(BEAT_LICENSES).map(([key, license]) => (
               <div key={key} className="border border-white/10 p-6 sm:p-8 hover:border-accent/50 transition-colors">
                 <h3 className="text-heading-sm mb-3">{license.name}</h3>
-                <p className="font-mono text-white/50 text-xs mb-4">{license.description}</p>
+                <p className="font-mono text-white/80 text-xs mb-4">{license.description}</p>
                 <div className="border-t border-white/10 pt-4">
                   <p className="font-mono text-xs text-accent uppercase tracking-wider">Delivery</p>
                   <p className="font-mono text-sm text-white/70">{license.deliveryFormat}</p>

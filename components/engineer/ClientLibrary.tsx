@@ -208,11 +208,11 @@ export default function ClientLibrary() {
               className="w-full border-2 border-black/20 pl-10 pr-4 py-3 font-mono text-sm focus:border-accent focus:outline-none"
             />
           </div>
-          <span className="font-mono text-xs text-black/40">{filtered.length} clients</span>
+          <span className="font-mono text-xs text-black/60">{filtered.length} clients</span>
         </div>
 
         {loading ? (
-          <p className="font-mono text-sm text-black/40">Loading clients...</p>
+          <p className="font-mono text-sm text-black/70">Loading clients...</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {filtered.map((client) => (
@@ -230,7 +230,7 @@ export default function ClientLibrary() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-mono text-sm font-semibold truncate">{client.display_name}</p>
-                  <p className="font-mono text-xs text-black/40">
+                  <p className="font-mono text-xs text-black/60">
                     {client.files_count} files · {client.notes_count} notes
                   </p>
                 </div>

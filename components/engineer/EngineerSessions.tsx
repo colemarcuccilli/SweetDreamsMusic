@@ -99,7 +99,7 @@ export default function EngineerSessions({ userEmail }: { userEmail: string }) {
     return respondToSession(bookingId, 'accept');
   }
 
-  if (loading) return <p className="font-mono text-sm text-black/40">Loading sessions...</p>;
+  if (loading) return <p className="font-mono text-sm text-black/70">Loading sessions...</p>;
 
   const pendingInvites = mySessions.filter((b) =>
     b.status === 'pending_deposit' && b.engineer_name
@@ -118,11 +118,11 @@ export default function EngineerSessions({ userEmail }: { userEmail: string }) {
           className="font-mono text-sm font-semibold uppercase tracking-wider mb-4 flex items-center gap-2 hover:text-accent transition-colors"
         >
           Studio Schedule ({allBookings.length} upcoming)
-          <span className="text-xs font-normal text-black/40">{showAllBookings ? '▲ Hide' : '▼ Show'}</span>
+          <span className="text-xs font-normal text-black/60">{showAllBookings ? '▲ Hide' : '▼ Show'}</span>
         </button>
         {showAllBookings && (
           allBookings.length === 0 ? (
-            <p className="font-mono text-xs text-black/30 border border-black/10 p-6 text-center">
+            <p className="font-mono text-xs text-black/60 border border-black/10 p-6 text-center">
               No upcoming bookings
             </p>
           ) : (
@@ -152,7 +152,7 @@ export default function EngineerSessions({ userEmail }: { userEmail: string }) {
                         </td>
                         <td className="px-3 py-2">
                           <span className="font-semibold">{b.customer_name}</span>
-                          {b.artist_name && <span className="text-black/40 ml-1">({b.artist_name})</span>}
+                          {b.artist_name && <span className="text-black/60 ml-1">({b.artist_name})</span>}
                         </td>
                         <td className="px-3 py-2 hidden sm:table-cell">
                           {b.room === 'studio_a' ? 'Studio A' : b.room === 'studio_b' ? 'Studio B' : b.room || '—'}
@@ -162,7 +162,7 @@ export default function EngineerSessions({ userEmail }: { userEmail: string }) {
                           <span className={`font-bold uppercase text-[10px] px-1.5 py-0.5 ${
                             b.status === 'confirmed' ? 'bg-accent/20 text-amber-700' :
                             b.status === 'pending_deposit' ? 'bg-blue-100 text-blue-700' :
-                            'bg-black/5 text-black/50'
+                            'bg-black/5 text-black/70'
                           }`}>
                             {b.status === 'pending_deposit' ? 'Pending' : b.status}
                           </span>
@@ -197,7 +197,7 @@ export default function EngineerSessions({ userEmail }: { userEmail: string }) {
           Available Sessions ({unclaimed.length})
         </h3>
         {unclaimed.length === 0 ? (
-          <p className="font-mono text-xs text-black/30 border border-black/10 p-6 text-center">
+          <p className="font-mono text-xs text-black/60 border border-black/10 p-6 text-center">
             No available sessions right now
           </p>
         ) : (
@@ -224,7 +224,7 @@ export default function EngineerSessions({ userEmail }: { userEmail: string }) {
           My Sessions ({myActive.length})
         </h3>
         {myActive.length === 0 ? (
-          <p className="font-mono text-xs text-black/30 border border-black/10 p-6 text-center">No active sessions</p>
+          <p className="font-mono text-xs text-black/60 border border-black/10 p-6 text-center">No active sessions</p>
         ) : (
           <div className="space-y-3">
             {myActive.map((b) => (
@@ -240,7 +240,7 @@ export default function EngineerSessions({ userEmail }: { userEmail: string }) {
           Completed ({myCompleted.length})
         </h3>
         {myCompleted.length === 0 ? (
-          <p className="font-mono text-xs text-black/30 border border-black/10 p-6 text-center">No completed sessions</p>
+          <p className="font-mono text-xs text-black/60 border border-black/10 p-6 text-center">No completed sessions</p>
         ) : (
           <div className="space-y-3">
             {myCompleted.map((b) => (
@@ -324,16 +324,16 @@ function PendingInviteCard({ booking, onUpdate }: { booking: Booking; onUpdate: 
           <div className="flex items-center gap-2">
             <p className="font-mono text-sm font-bold">{booking.customer_name}</p>
             {booking.artist_name && (
-              <span className="font-mono text-xs text-black/40">({booking.artist_name})</span>
+              <span className="font-mono text-xs text-black/60">({booking.artist_name})</span>
             )}
             <span className="font-mono text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 px-2 py-0.5">
               Awaiting Payment
             </span>
           </div>
           {booking.customer_email && (
-            <p className="font-mono text-xs text-black/50">{booking.customer_email}</p>
+            <p className="font-mono text-xs text-black/70">{booking.customer_email}</p>
           )}
-          <p className="font-mono text-xs text-black/40 mt-1">
+          <p className="font-mono text-xs text-black/60 mt-1">
             {date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })}
             {' · '}
             {date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' })}
@@ -341,7 +341,7 @@ function PendingInviteCard({ booking, onUpdate }: { booking: Booking; onUpdate: 
             {booking.duration}hr
             {booking.room && ` · ${booking.room === 'studio_a' ? 'Studio A' : 'Studio B'}`}
           </p>
-          <p className="font-mono text-[10px] text-black/30 mt-1">
+          <p className="font-mono text-[10px] text-black/60 mt-1">
             Created {new Date(booking.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
             {' · '}Deposit: {formatCents(booking.deposit_amount)} of {formatCents(booking.total_amount)}
           </p>
@@ -607,10 +607,10 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
         <div>
           <p className="font-mono text-sm font-bold">
             {booking.customer_name}
-            {booking.artist_name && <span className="font-normal text-black/40 ml-1">({booking.artist_name})</span>}
+            {booking.artist_name && <span className="font-normal text-black/60 ml-1">({booking.artist_name})</span>}
           </p>
           {booking.customer_email && (
-            <p className="font-mono text-xs text-black/50">{booking.customer_email}</p>
+            <p className="font-mono text-xs text-black/70">{booking.customer_email}</p>
           )}
           {booking.requested_engineer && (
             <div className="flex items-center gap-2 mt-0.5">
@@ -634,7 +634,7 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
               ⚠ Reschedule Requested
             </p>
           )}
-          <p className="font-mono text-xs text-black/40 mt-1">
+          <p className="font-mono text-xs text-black/60 mt-1">
             {date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })}
             {' · '}
             {date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' })}
@@ -648,7 +648,7 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
             booking.status === 'completed' ? 'bg-green-100 text-green-700' :
             booking.status === 'confirmed' ? 'bg-accent/20 text-amber-700' :
             booking.status === 'cancelled' ? 'bg-red-100 text-red-600' :
-            'bg-black/5 text-black/50'
+            'bg-black/5 text-black/70'
           }`}>
             {booking.status}
           </span>
@@ -656,7 +656,7 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
             {formatCents(booking.total_amount)}
           </p>
           {booking.actual_deposit_paid != null && booking.actual_deposit_paid > 0 && (
-            <p className="font-mono text-[10px] text-black/40">
+            <p className="font-mono text-[10px] text-black/60">
               Deposit: {formatCents(booking.actual_deposit_paid)}
               {remainder > 0 && ` · Remainder: ${formatCents(remainder)}`}
             </p>
@@ -688,36 +688,36 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
           >
             🎤 {showPrep ? 'Hide' : 'View'} Session Prep
           </button>
-          {showPrep && prepLoading && <p className="font-mono text-[10px] text-black/40 mt-1">Loading...</p>}
+          {showPrep && prepLoading && <p className="font-mono text-[10px] text-black/60 mt-1">Loading...</p>}
           {showPrep && !prepLoading && !prepData && (
-            <p className="font-mono text-[10px] text-black/40 mt-1 italic">Client hasn&apos;t filled out their session prep yet.</p>
+            <p className="font-mono text-[10px] text-black/60 mt-1 italic">Client hasn&apos;t filled out their session prep yet.</p>
           )}
           {showPrep && prepData && (
             <div className="mt-2 space-y-1.5 bg-black/[.02] p-3 border border-black/5">
               {prepData.session_type && (
-                <p className="font-mono text-[11px]"><span className="text-black/40 uppercase">Type:</span> <span className="font-semibold">{String(prepData.session_type).replace('_', ' + ')}</span></p>
+                <p className="font-mono text-[11px]"><span className="text-black/60 uppercase">Type:</span> <span className="font-semibold">{String(prepData.session_type).replace('_', ' + ')}</span></p>
               )}
               {prepData.session_goals && (
-                <p className="font-mono text-[11px]"><span className="text-black/40 uppercase">Goals:</span> {String(prepData.session_goals)}</p>
+                <p className="font-mono text-[11px]"><span className="text-black/60 uppercase">Goals:</span> {String(prepData.session_goals)}</p>
               )}
               {prepData.beat_source && (
-                <p className="font-mono text-[11px]"><span className="text-black/40 uppercase">Beat:</span> {String(prepData.beat_source).replace('_', ' ')}{prepData.beat_file_name ? ` — ${prepData.beat_file_name}` : ''}{prepData.beat_link ? ` — ${prepData.beat_link}` : ''}</p>
+                <p className="font-mono text-[11px]"><span className="text-black/60 uppercase">Beat:</span> {String(prepData.beat_source).replace('_', ' ')}{prepData.beat_file_name ? ` — ${prepData.beat_file_name}` : ''}{prepData.beat_link ? ` — ${prepData.beat_link}` : ''}</p>
               )}
               {prepData.beat_notes && (
-                <p className="font-mono text-[11px]"><span className="text-black/40 uppercase">Beat Notes:</span> {String(prepData.beat_notes)}</p>
+                <p className="font-mono text-[11px]"><span className="text-black/60 uppercase">Beat Notes:</span> {String(prepData.beat_notes)}</p>
               )}
               {prepData.lyrics_status && (
-                <p className="font-mono text-[11px]"><span className="text-black/40 uppercase">Lyrics:</span> {String(prepData.lyrics_status)}</p>
+                <p className="font-mono text-[11px]"><span className="text-black/60 uppercase">Lyrics:</span> {String(prepData.lyrics_status)}</p>
               )}
               {prepData.vocal_style && (
-                <p className="font-mono text-[11px]"><span className="text-black/40 uppercase">Style:</span> {String(prepData.vocal_style)}</p>
+                <p className="font-mono text-[11px]"><span className="text-black/60 uppercase">Style:</span> {String(prepData.vocal_style)}</p>
               )}
               {prepData.num_songs && Number(prepData.num_songs) > 1 && (
-                <p className="font-mono text-[11px]"><span className="text-black/40 uppercase">Songs:</span> {String(prepData.num_songs)}+</p>
+                <p className="font-mono text-[11px]"><span className="text-black/60 uppercase">Songs:</span> {String(prepData.num_songs)}+</p>
               )}
               {Array.isArray(prepData.reference_tracks) && prepData.reference_tracks.length > 0 && (
                 <div>
-                  <p className="font-mono text-[10px] text-black/40 uppercase">References:</p>
+                  <p className="font-mono text-[10px] text-black/60 uppercase">References:</p>
                   {prepData.reference_tracks.map((ref: { title?: string; artist?: string; link?: string }, i: number) => (
                     <p key={i} className="font-mono text-[11px] ml-2">
                       • {ref.title || 'Untitled'}{ref.artist ? ` — ${ref.artist}` : ''}
@@ -727,7 +727,7 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
                 </div>
               )}
               {prepData.special_requests && (
-                <p className="font-mono text-[11px]"><span className="text-black/40 uppercase">Requests:</span> {String(prepData.special_requests)}</p>
+                <p className="font-mono text-[11px]"><span className="text-black/60 uppercase">Requests:</span> {String(prepData.special_requests)}</p>
               )}
               {!prepData.completed && (
                 <p className="font-mono text-[10px] text-amber-600 italic mt-1">⚠ Client started prep but hasn&apos;t submitted yet</p>
@@ -777,7 +777,7 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
 
                 {/* Priority info */}
                 {isInPriority && booking.requested_engineer && (
-                  <span className="font-mono text-[10px] text-black/40">
+                  <span className="font-mono text-[10px] text-black/60">
                     Requested: <span className="font-bold text-accent">{booking.requested_engineer}</span>
                     {booking.priority_expires_at && (
                       <> · Priority until {new Date(booking.priority_expires_at).toLocaleString('en-US', {
@@ -807,7 +807,7 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
               </button>
               <button
                 onClick={() => { setShowChargeEdit(!showChargeEdit); setChargeAmountInput((remainder / 100).toFixed(2)); }}
-                className="font-mono text-[10px] text-black/40 hover:text-black underline"
+                className="font-mono text-[10px] text-black/60 hover:text-black underline"
               >
                 Edit
               </button>
@@ -863,7 +863,7 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
           </button>
           <button
             onClick={() => setShowDebug(!showDebug)}
-            className="font-mono text-xs uppercase tracking-wider text-black/30 px-3 py-2 hover:text-black/60 transition-colors"
+            className="font-mono text-xs uppercase tracking-wider text-black/60 px-3 py-2 hover:text-black/60 transition-colors"
           >
             {showDebug ? 'Hide Details' : 'Debug'}
           </button>
@@ -874,12 +874,12 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
       {showChargeEdit && canCharge && (
         <div className="mt-3 p-3 bg-black/5 border border-black/10 space-y-2">
           <p className="font-mono text-xs font-semibold uppercase tracking-wider">Adjust Charge Amount</p>
-          <p className="font-mono text-[10px] text-black/50">
+          <p className="font-mono text-[10px] text-black/70">
             Default remainder is {formatCents(remainder)}. Change the amount if the session was adjusted (e.g. switched studios).
           </p>
           <div className="flex flex-wrap gap-2 items-end">
             <div>
-              <label className="font-mono text-[10px] text-black/40 block">Amount ($)</label>
+              <label className="font-mono text-[10px] text-black/60 block">Amount ($)</label>
               <input
                 type="number"
                 step="0.01"
@@ -910,7 +910,7 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
           <p className="font-mono text-xs font-semibold uppercase tracking-wider">Record Cash Payment</p>
           <div className="flex flex-wrap gap-2 items-end">
             <div>
-              <label className="font-mono text-[10px] text-black/40 block">Amount ($)</label>
+              <label className="font-mono text-[10px] text-black/60 block">Amount ($)</label>
               <input
                 type="number"
                 step="0.01"
@@ -921,7 +921,7 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
               />
             </div>
             <div className="flex-1 min-w-[120px]">
-              <label className="font-mono text-[10px] text-black/40 block">Note (optional)</label>
+              <label className="font-mono text-[10px] text-black/60 block">Note (optional)</label>
               <input
                 type="text"
                 value={cashNote}
@@ -947,7 +947,7 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
           <p className="font-mono text-xs font-semibold uppercase tracking-wider">Reschedule Session</p>
           <div className="flex flex-wrap gap-2 items-end">
             <div>
-              <label className="font-mono text-[10px] text-black/40 block">Date</label>
+              <label className="font-mono text-[10px] text-black/60 block">Date</label>
               <input
                 type="date"
                 value={newDate}
@@ -956,7 +956,7 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
               />
             </div>
             <div>
-              <label className="font-mono text-[10px] text-black/40 block">Time</label>
+              <label className="font-mono text-[10px] text-black/60 block">Time</label>
               <input
                 type="time"
                 value={newTime}
@@ -965,7 +965,7 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
               />
             </div>
             <div>
-              <label className="font-mono text-[10px] text-black/40 block">Duration</label>
+              <label className="font-mono text-[10px] text-black/60 block">Duration</label>
               <select
                 value={newDuration}
                 onChange={(e) => setNewDuration(Number(e.target.value))}
@@ -991,12 +991,12 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
       {showChangeEngineer && (
         <div className="mt-3 p-3 bg-black/5 border border-black/10 space-y-2">
           <p className="font-mono text-xs font-semibold uppercase tracking-wider">Change Engineer</p>
-          <p className="font-mono text-[10px] text-black/50">
+          <p className="font-mono text-[10px] text-black/70">
             Current: <span className="font-bold">{booking.engineer_name || 'Unassigned'}</span>
           </p>
           <div className="flex flex-wrap gap-2 items-end">
             <div>
-              <label className="font-mono text-[10px] text-black/40 block">Engineer</label>
+              <label className="font-mono text-[10px] text-black/60 block">Engineer</label>
               <select
                 value={selectedEngineer}
                 onChange={(e) => setSelectedEngineer(e.target.value)}
@@ -1047,7 +1047,7 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
                 </button>
                 <button
                   onClick={() => setShowDebug(!showDebug)}
-                  className="font-mono text-xs uppercase tracking-wider text-black/30 px-3 py-2 hover:text-black/60 transition-colors"
+                  className="font-mono text-xs uppercase tracking-wider text-black/60 px-3 py-2 hover:text-black/60 transition-colors"
                 >
                   {showDebug ? 'Hide Details' : 'Debug'}
                 </button>
@@ -1055,7 +1055,7 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
               {showFileUpload && (
                 <div className="mt-3 p-4 bg-black/5 border border-black/10 space-y-3">
                   <p className="font-mono text-xs font-semibold uppercase tracking-wider">Upload Session Files</p>
-                  <p className="font-mono text-[10px] text-black/50">
+                  <p className="font-mono text-[10px] text-black/70">
                     Drag and drop files or click to select. Upload all files for {booking.customer_name} — they&apos;ll get one email with a download link.
                   </p>
                   <div
@@ -1075,7 +1075,7 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
                       <p className="font-mono text-xs font-bold uppercase tracking-wider mb-1">
                         {isDragging ? 'Drop files here' : 'Drag & drop files here'}
                       </p>
-                      <p className="font-mono text-[10px] text-black/40">or click to browse — WAV, MP3, FLAC, ZIP</p>
+                      <p className="font-mono text-[10px] text-black/60">or click to browse — WAV, MP3, FLAC, ZIP</p>
                       <input
                         type="file"
                         accept="audio/*,.wav,.mp3,.flac,.aiff,.m4a,.zip"
@@ -1102,7 +1102,7 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
                           </button>
                         </div>
                       ))}
-                      <p className="font-mono text-[10px] text-black/40">{uploadFiles.length} file{uploadFiles.length > 1 ? 's' : ''} selected</p>
+                      <p className="font-mono text-[10px] text-black/60">{uploadFiles.length} file{uploadFiles.length > 1 ? 's' : ''} selected</p>
                     </div>
                   )}
                   <button
@@ -1124,7 +1124,7 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
 
       {/* Debug info */}
       {showDebug && (
-        <div className="mt-3 p-3 bg-black/5 border border-black/10 font-mono text-[10px] text-black/50 space-y-1">
+        <div className="mt-3 p-3 bg-black/5 border border-black/10 font-mono text-[10px] text-black/70 space-y-1">
           <p>ID: {booking.id}</p>
           <p>Status: {booking.status}</p>
           <p>Created: {new Date(booking.created_at).toLocaleString()}</p>

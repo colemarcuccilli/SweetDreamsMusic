@@ -463,7 +463,7 @@ export default function Accounting() {
               key={v.key}
               onClick={() => setView(v.key)}
               className={`font-mono text-xs font-bold uppercase tracking-wider px-4 py-2 transition-colors ${
-                view === v.key ? 'bg-black text-white' : 'bg-black/5 text-black/50 hover:bg-black/10'
+                view === v.key ? 'bg-black text-white' : 'bg-black/5 text-black/70 hover:bg-black/10'
               }`}
             >
               {v.label}
@@ -485,7 +485,7 @@ export default function Accounting() {
               key={p.key}
               onClick={() => setDatePreset(p.key)}
               className={`font-mono text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 transition-colors ${
-                datePreset === p.key ? 'bg-accent text-black' : 'bg-black/5 text-black/40 hover:bg-black/10'
+                datePreset === p.key ? 'bg-accent text-black' : 'bg-black/5 text-black/70 hover:bg-black/10'
               }`}
             >
               {p.label}
@@ -513,14 +513,14 @@ export default function Accounting() {
         <div className="flex gap-3 mb-6 items-center">
           <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)}
             className="border border-black/20 px-3 py-2 font-mono text-xs focus:border-accent focus:outline-none" />
-          <span className="font-mono text-xs text-black/40">to</span>
+          <span className="font-mono text-xs text-black/60">to</span>
           <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)}
             className="border border-black/20 px-3 py-2 font-mono text-xs focus:border-accent focus:outline-none" />
         </div>
       )}
 
       {loading ? (
-        <p className="font-mono text-sm text-black/40">Loading accounting data...</p>
+        <p className="font-mono text-sm text-black/70">Loading accounting data...</p>
       ) : (
         <>
           {/* ========= OVERVIEW ========= */}
@@ -599,10 +599,10 @@ export default function Accounting() {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-black/10">
-                        <th className="text-left font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Month</th>
-                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Sessions</th>
-                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Hours</th>
-                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Revenue</th>
+                        <th className="text-left font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Month</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Sessions</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Hours</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Revenue</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -629,11 +629,11 @@ export default function Accounting() {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-black/10">
-                        <th className="text-left font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Engineer</th>
-                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Sessions</th>
-                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Hours</th>
-                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Deposits</th>
-                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Total</th>
+                        <th className="text-left font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Engineer</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Sessions</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Hours</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Deposits</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Total</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -642,7 +642,7 @@ export default function Accounting() {
                           <td className="font-mono text-sm font-semibold py-2">{name}</td>
                           <td className="font-mono text-sm text-right">{data.count}</td>
                           <td className="font-mono text-sm text-right">{data.hours}hr</td>
-                          <td className="font-mono text-sm text-right text-black/50">{formatCents(data.deposits)}</td>
+                          <td className="font-mono text-sm text-right text-black/70">{formatCents(data.deposits)}</td>
                           <td className="font-mono text-sm font-bold text-right">{formatCents(data.revenue)}</td>
                         </tr>
                       ))}
@@ -662,8 +662,8 @@ export default function Accounting() {
                     <div key={room} className="flex justify-between items-center py-2 border-b border-black/5">
                       <span className="font-mono text-sm font-semibold">{ROOM_LABELS[room] || room}</span>
                       <div className="flex gap-6 font-mono text-sm">
-                        <span className="text-black/50">{data.count} sessions</span>
-                        <span className="text-black/50">{data.hours}hr</span>
+                        <span className="text-black/70">{data.count} sessions</span>
+                        <span className="text-black/70">{data.hours}hr</span>
                         <span className="font-bold">{formatCents(data.revenue)}</span>
                       </div>
                     </div>
@@ -681,11 +681,11 @@ export default function Accounting() {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-black/10">
-                        <th className="text-left font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Producer</th>
-                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Sales</th>
-                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Gross</th>
-                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Producer ({Math.round(PRODUCER_COMMISSION * 100)}%)</th>
-                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Platform ({Math.round(PLATFORM_COMMISSION * 100)}%)</th>
+                        <th className="text-left font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Producer</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Sales</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Gross</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Producer ({Math.round(PRODUCER_COMMISSION * 100)}%)</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Platform ({Math.round(PLATFORM_COMMISSION * 100)}%)</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -694,7 +694,7 @@ export default function Accounting() {
                           <td className="font-mono text-sm font-semibold py-2">{name}</td>
                           <td className="font-mono text-sm text-right">{data.count}</td>
                           <td className="font-mono text-sm text-right">{formatCents(data.revenue)}</td>
-                          <td className="font-mono text-sm text-right text-black/50">{formatCents(data.producerCut)}</td>
+                          <td className="font-mono text-sm text-right text-black/70">{formatCents(data.producerCut)}</td>
                           <td className="font-mono text-sm font-bold text-right text-accent">{formatCents(data.platformCut)}</td>
                         </tr>
                       ))}
@@ -703,7 +703,7 @@ export default function Accounting() {
                           <td className="font-mono text-sm font-bold py-2">TOTAL</td>
                           <td className="font-mono text-sm text-right font-bold">{beatStats.total}</td>
                           <td className="font-mono text-sm text-right font-bold">{formatCents(beatStats.totalRevenue)}</td>
-                          <td className="font-mono text-sm text-right font-bold text-black/50">{formatCents(beatStats.producerCut)}</td>
+                          <td className="font-mono text-sm text-right font-bold text-black/70">{formatCents(beatStats.producerCut)}</td>
                           <td className="font-mono text-sm text-right font-bold text-accent">{formatCents(beatStats.platformCut)}</td>
                         </tr>
                       )}
@@ -732,20 +732,20 @@ export default function Accounting() {
                   <table className="w-full min-w-[700px]">
                     <thead>
                       <tr className="border-b-2 border-black/20">
-                        <th className="text-left font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Person</th>
-                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Sessions</th>
-                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Session Pay (60%)</th>
-                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Media Pay</th>
-                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Beat Payouts</th>
-                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2 border-l-2 border-black/10">Total Owed</th>
-                        <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Paid</th>
+                        <th className="text-left font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Person</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Sessions</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Session Pay (60%)</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Media Pay</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Beat Payouts</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2 border-l-2 border-black/10">Total Owed</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Paid</th>
                       </tr>
                     </thead>
                     <tbody>
                       {payrollData.people.map(([name, data]) => (
                         <tr key={name} className="border-b border-black/5 hover:bg-black/[0.02]">
                           <td className="font-mono text-sm font-semibold py-3">{name}</td>
-                          <td className="font-mono text-xs text-right text-black/50">
+                          <td className="font-mono text-xs text-right text-black/70">
                             {data.sessionCount > 0 ? `${data.sessionCount} · ${data.sessionHours}hr` : '—'}
                           </td>
                           <td className="font-mono text-sm text-right">
@@ -771,7 +771,7 @@ export default function Accounting() {
                       ))}
                       {payrollData.people.length === 0 && (
                         <tr>
-                          <td colSpan={7} className="font-mono text-sm text-black/30 text-center py-12">No payroll data for this period</td>
+                          <td colSpan={7} className="font-mono text-sm text-black/60 text-center py-12">No payroll data for this period</td>
                         </tr>
                       )}
                     </tbody>
@@ -779,7 +779,7 @@ export default function Accounting() {
                       <tfoot>
                         <tr className="border-t-2 border-black/20">
                           <td className="font-mono text-sm font-bold py-3">TOTAL</td>
-                          <td className="font-mono text-xs text-right text-black/50">
+                          <td className="font-mono text-xs text-right text-black/70">
                             {payrollData.people.reduce((s, [, d]) => s + d.sessionCount, 0)} sessions
                           </td>
                           <td className="font-mono text-sm text-right font-bold">
@@ -817,7 +817,7 @@ export default function Accounting() {
                         <div className="flex justify-between items-center py-2 border-b border-black/5">
                           <div>
                             <p className="font-mono text-sm font-semibold">Session Earnings</p>
-                            <p className="font-mono text-[10px] text-black/40">{data.sessionCount} sessions · {data.sessionHours}hr · {formatCents(data.sessionRevenue)} gross</p>
+                            <p className="font-mono text-[10px] text-black/60">{data.sessionCount} sessions · {data.sessionHours}hr · {formatCents(data.sessionRevenue)} gross</p>
                           </div>
                           <p className="font-mono text-sm font-bold">{formatCents(data.sessionPay)}</p>
                         </div>
@@ -826,7 +826,7 @@ export default function Accounting() {
                         <div className="flex justify-between items-center py-2 border-b border-black/5">
                           <div>
                             <p className="font-mono text-sm font-semibold">Media Sales Commission</p>
-                            <p className="font-mono text-[10px] text-black/40">{data.mediaSoldCount} sale{data.mediaSoldCount !== 1 ? 's' : ''} brought in · 15% commission</p>
+                            <p className="font-mono text-[10px] text-black/60">{data.mediaSoldCount} sale{data.mediaSoldCount !== 1 ? 's' : ''} brought in · 15% commission</p>
                           </div>
                           <p className="font-mono text-sm font-bold">{formatCents(data.mediaCommission)}</p>
                         </div>
@@ -835,7 +835,7 @@ export default function Accounting() {
                         <div className="flex justify-between items-center py-2 border-b border-black/5">
                           <div>
                             <p className="font-mono text-sm font-semibold">Media Work Pay</p>
-                            <p className="font-mono text-[10px] text-black/40">
+                            <p className="font-mono text-[10px] text-black/60">
                               {data.mediaFilmedCount > 0 ? `${data.mediaFilmedCount} filmed` : ''}
                               {data.mediaFilmedCount > 0 && data.mediaEditedCount > 0 ? ' · ' : ''}
                               {data.mediaEditedCount > 0 ? `${data.mediaEditedCount} edited` : ''}
@@ -849,7 +849,7 @@ export default function Accounting() {
                         <div className="flex justify-between items-center py-2 border-b border-black/5">
                           <div>
                             <p className="font-mono text-sm font-semibold">Beat Sales</p>
-                            <p className="font-mono text-[10px] text-black/40">{data.beatCount} sale{data.beatCount !== 1 ? 's' : ''} · {formatCents(data.beatSales)} gross · 60% producer cut</p>
+                            <p className="font-mono text-[10px] text-black/60">{data.beatCount} sale{data.beatCount !== 1 ? 's' : ''} · {formatCents(data.beatSales)} gross · 60% producer cut</p>
                           </div>
                           <p className="font-mono text-sm font-bold">{formatCents(data.beatProducerPay)}</p>
                         </div>
@@ -879,13 +879,13 @@ export default function Accounting() {
                             <div className="border border-accent p-3 space-y-2">
                               <div className="flex gap-2">
                                 <div className="flex-1">
-                                  <label className="font-mono text-[10px] text-black/40">Amount ($)</label>
+                                  <label className="font-mono text-[10px] text-black/60">Amount ($)</label>
                                   <input type="number" step="0.01" value={payoutAmount} onChange={(e) => setPayoutAmount(e.target.value)}
                                     placeholder={`${(remaining / 100).toFixed(2)}`}
                                     className="w-full border border-black/20 px-2 py-1.5 font-mono text-sm" />
                                 </div>
                                 <div>
-                                  <label className="font-mono text-[10px] text-black/40">Method</label>
+                                  <label className="font-mono text-[10px] text-black/60">Method</label>
                                   <select value={payoutMethod} onChange={(e) => setPayoutMethod(e.target.value)}
                                     className="w-full border border-black/20 px-2 py-1.5 font-mono text-sm bg-white">
                                     <option value="cash">Cash</option>
@@ -905,7 +905,7 @@ export default function Accounting() {
                                   {recordingPayout ? 'Recording...' : 'Record Payout'}
                                 </button>
                                 <button onClick={() => setShowPayoutForm(null)}
-                                  className="font-mono text-xs text-black/50 hover:text-black px-3 py-2">Cancel</button>
+                                  className="font-mono text-xs text-black/60 hover:text-black px-3 py-2">Cancel</button>
                               </div>
                             </div>
                           ) : (
@@ -957,7 +957,7 @@ export default function Accounting() {
                   <option value="completed">Completed</option>
                   <option value="cancelled">Cancelled</option>
                 </select>
-                <span className="font-mono text-xs text-black/40 self-center">
+                <span className="font-mono text-xs text-black/60 self-center">
                   {filteredBookings.length} sessions · {formatCents(filteredBookings.reduce((s, b) => s + b.total_amount, 0))} total
                 </span>
               </div>
@@ -973,7 +973,7 @@ export default function Accounting() {
 
               {/* Session list */}
               <div className="space-y-1">
-                <div className="hidden md:grid grid-cols-12 gap-2 font-mono text-[10px] text-black/40 uppercase tracking-wider py-2 px-3 border-b border-black/10">
+                <div className="hidden md:grid grid-cols-12 gap-2 font-mono text-[10px] text-black/60 uppercase tracking-wider py-2 px-3 border-b border-black/10">
                   <div className="col-span-2">Date</div>
                   <div className="col-span-2">Client</div>
                   <div className="col-span-2">Engineer</div>
@@ -994,8 +994,8 @@ export default function Accounting() {
                     <div className="col-span-1 text-black/60">{ROOM_LABELS[b.room || ''] || b.room || '—'}</div>
                     <div className="col-span-1">{b.duration}hr</div>
                     <div className="col-span-1 text-right font-semibold">{formatCents(b.total_amount)}</div>
-                    <div className="col-span-1 text-right text-black/50">{formatCents(b.actual_deposit_paid || 0)}</div>
-                    <div className="col-span-1 text-right text-black/50">{formatCents(b.remainder_amount)}</div>
+                    <div className="col-span-1 text-right text-black/70">{formatCents(b.actual_deposit_paid || 0)}</div>
+                    <div className="col-span-1 text-right text-black/70">{formatCents(b.remainder_amount)}</div>
                     <div className="col-span-1 text-right">
                       <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 ${STATUS_COLORS[b.status] || 'bg-black/5 text-black/50'}`}>
                         {b.status}
@@ -1004,7 +1004,7 @@ export default function Accounting() {
                   </div>
                 ))}
                 {filteredBookings.length === 0 && (
-                  <p className="font-mono text-sm text-black/30 text-center py-12">No sessions found</p>
+                  <p className="font-mono text-sm text-black/60 text-center py-12">No sessions found</p>
                 )}
               </div>
             </div>
@@ -1020,7 +1020,7 @@ export default function Accounting() {
                   <option value="all">All Producers</option>
                   {producers.map((p) => <option key={p} value={p}>{p}</option>)}
                 </select>
-                <span className="font-mono text-xs text-black/40 self-center">
+                <span className="font-mono text-xs text-black/60 self-center">
                   {filteredPurchases.length} sales · {formatCents(beatStats.totalRevenue)} total
                 </span>
               </div>
@@ -1045,7 +1045,7 @@ export default function Accounting() {
 
               {/* Purchase list */}
               <div className="space-y-1">
-                <div className="hidden md:grid grid-cols-12 gap-2 font-mono text-[10px] text-black/40 uppercase tracking-wider py-2 px-3 border-b border-black/10">
+                <div className="hidden md:grid grid-cols-12 gap-2 font-mono text-[10px] text-black/60 uppercase tracking-wider py-2 px-3 border-b border-black/10">
                   <div className="col-span-2">Date</div>
                   <div className="col-span-3">Beat</div>
                   <div className="col-span-2">Producer</div>
@@ -1068,7 +1068,7 @@ export default function Accounting() {
                   </div>
                 ))}
                 {filteredPurchases.length === 0 && (
-                  <p className="font-mono text-sm text-black/30 text-center py-12">No beat sales found</p>
+                  <p className="font-mono text-sm text-black/60 text-center py-12">No beat sales found</p>
                 )}
               </div>
             </div>
@@ -1099,13 +1099,13 @@ export default function Accounting() {
                   </div>
                   {mediaStats.totalFilmerPay > 0 && (
                     <div className="flex justify-between py-1 border-b border-black/5 pl-4">
-                      <span className="text-black/40">Filmed By</span>
+                      <span className="text-black/60">Filmed By</span>
                       <span className="text-black/60">{formatCents(mediaStats.totalFilmerPay)}</span>
                     </div>
                   )}
                   {mediaStats.totalEditorPay > 0 && (
                     <div className="flex justify-between py-1 border-b border-black/5 pl-4">
-                      <span className="text-black/40">Edited By</span>
+                      <span className="text-black/60">Edited By</span>
                       <span className="text-black/60">{formatCents(mediaStats.totalEditorPay)}</span>
                     </div>
                   )}
@@ -1134,11 +1134,11 @@ export default function Accounting() {
                     <table className="w-full min-w-[600px]">
                       <thead>
                         <tr className="border-b border-black/10">
-                          <th className="text-left font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Person</th>
-                          <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Sales (15%)</th>
-                          <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Filmed (10%)</th>
-                          <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2">Edited (10%)</th>
-                          <th className="text-right font-mono text-[10px] text-black/40 uppercase tracking-wider py-2 border-l-2 border-black/10">Total Owed</th>
+                          <th className="text-left font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Person</th>
+                          <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Sales (15%)</th>
+                          <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Filmed (10%)</th>
+                          <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Edited (10%)</th>
+                          <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2 border-l-2 border-black/10">Total Owed</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1146,13 +1146,13 @@ export default function Accounting() {
                           <tr key={name} className="border-b border-black/5">
                             <td className="font-mono text-sm font-semibold py-2">{name}</td>
                             <td className="font-mono text-sm text-right">
-                              {data.sellerCommission > 0 ? <>{formatCents(data.sellerCommission)} <span className="text-[10px] text-black/40">({data.soldCount})</span></> : '—'}
+                              {data.sellerCommission > 0 ? <>{formatCents(data.sellerCommission)} <span className="text-[10px] text-black/60">({data.soldCount})</span></> : '—'}
                             </td>
                             <td className="font-mono text-sm text-right">
-                              {data.filmedPay > 0 ? <>{formatCents(data.filmedPay)} <span className="text-[10px] text-black/40">({data.filmedCount})</span></> : '—'}
+                              {data.filmedPay > 0 ? <>{formatCents(data.filmedPay)} <span className="text-[10px] text-black/60">({data.filmedCount})</span></> : '—'}
                             </td>
                             <td className="font-mono text-sm text-right">
-                              {data.editedPay > 0 ? <>{formatCents(data.editedPay)} <span className="text-[10px] text-black/40">({data.editedCount})</span></> : '—'}
+                              {data.editedPay > 0 ? <>{formatCents(data.editedPay)} <span className="text-[10px] text-black/60">({data.editedCount})</span></> : '—'}
                             </td>
                             <td className="font-mono text-sm text-right font-bold text-accent border-l-2 border-black/10">
                               {formatCents(data.totalPay)}
@@ -1167,7 +1167,7 @@ export default function Accounting() {
 
               {/* Sales List */}
               <div className="space-y-1">
-                <div className="hidden md:grid grid-cols-12 gap-2 font-mono text-[10px] text-black/40 uppercase tracking-wider py-2 px-3 border-b border-black/10">
+                <div className="hidden md:grid grid-cols-12 gap-2 font-mono text-[10px] text-black/60 uppercase tracking-wider py-2 px-3 border-b border-black/10">
                   <div className="col-span-2">Date</div>
                   <div className="col-span-3">Description</div>
                   <div className="col-span-1">Type</div>
@@ -1186,7 +1186,7 @@ export default function Accounting() {
                       <span className="text-[10px] font-bold uppercase bg-black/5 px-1.5 py-0.5">{SALE_TYPE_LABELS[m.sale_type] || m.sale_type}</span>
                     </div>
                     <div className="col-span-2 text-black/60 truncate">{m.client_name || '—'}</div>
-                    <div className="col-span-2 text-black/50 truncate">
+                    <div className="col-span-2 text-black/70 truncate">
                       {[m.sold_by && `S: ${m.sold_by}`, m.filmed_by && `F: ${m.filmed_by}`, m.edited_by && `E: ${m.edited_by}`].filter(Boolean).join(' · ') || '—'}
                     </div>
                     <div className="col-span-1 text-right font-bold">{formatCents(m.amount)}</div>
@@ -1196,7 +1196,7 @@ export default function Accounting() {
                   </div>
                 ))}
                 {mediaSales.length === 0 && (
-                  <p className="font-mono text-sm text-black/30 text-center py-12">No media sales found</p>
+                  <p className="font-mono text-sm text-black/60 text-center py-12">No media sales found</p>
                 )}
               </div>
             </div>
@@ -1214,7 +1214,7 @@ function StatCard({ icon: Icon, label, value, accent }: { icon: typeof DollarSig
     <div className={`border-2 p-4 ${accent ? 'border-accent' : 'border-black/10'}`}>
       <Icon className={`w-4 h-4 mb-2 ${accent ? 'text-accent' : 'text-black/30'}`} />
       <p className={`font-heading text-xl ${accent ? 'text-accent' : ''}`}>{value}</p>
-      <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">{label}</p>
+      <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider">{label}</p>
     </div>
   );
 }
@@ -1223,7 +1223,7 @@ function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="border border-black/10 px-3 py-2">
       <p className="font-mono text-sm font-bold">{value}</p>
-      <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">{label}</p>
+      <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider">{label}</p>
     </div>
   );
 }

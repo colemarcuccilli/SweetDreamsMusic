@@ -86,7 +86,7 @@ export default function ProducerDashboard({ isAdmin = false }: { isAdmin?: boole
                 key={t.key}
                 onClick={() => setTab(t.key)}
                 className={`font-mono text-sm font-semibold uppercase tracking-wider px-5 py-4 border-b-2 transition-colors inline-flex items-center gap-2 flex-shrink-0 ${
-                  tab === t.key ? 'border-accent text-black' : 'border-transparent text-black/40 hover:text-black/70'
+                  tab === t.key ? 'border-accent text-black' : 'border-transparent text-black/60 hover:text-black/80'
                 }`}
               >
                 <t.icon className="w-4 h-4" />
@@ -105,7 +105,7 @@ export default function ProducerDashboard({ isAdmin = false }: { isAdmin?: boole
       <section className="bg-white text-black py-8 sm:py-12 min-h-[60vh]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {loading ? (
-            <p className="font-mono text-sm text-black/40">Loading...</p>
+            <p className="font-mono text-sm text-black/70">Loading...</p>
           ) : (
             <>
               {tab === 'beats' && <BeatsTab beats={beats} onBeatsChange={setBeats} isAdmin={isAdmin} />}
@@ -138,7 +138,7 @@ const PS_STATUS_BADGE: Record<string, { bg: string; text: string }> = {
   paid: { bg: 'bg-blue-100', text: 'text-blue-700' },
   completed: { bg: 'bg-green-100', text: 'text-green-700' },
   expired: { bg: 'bg-red-100', text: 'text-red-600' },
-  cancelled: { bg: 'bg-black/5', text: 'text-black/40' },
+  cancelled: { bg: 'bg-black/5', text: 'text-black/60' },
 };
 
 function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; onBeatsChange: (beats: Beat[]) => void; isAdmin?: boolean }) {
@@ -315,30 +315,30 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
             <p className="font-mono text-xs text-black/60 uppercase tracking-wider">Files</p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
-                <label className="block font-mono text-[10px] text-black/40 uppercase mb-1">Preview Audio (tagged/watermarked) *</label>
+                <label className="block font-mono text-[10px] text-black/60 uppercase mb-1">Preview Audio (tagged/watermarked) *</label>
                 <label className="border border-dashed border-black/20 p-3 flex items-center gap-2 cursor-pointer hover:border-accent transition-colors">
                   <Upload className="w-4 h-4 text-black/30 flex-shrink-0" />
-                  <span className="font-mono text-[10px] text-black/50 truncate">
+                  <span className="font-mono text-[10px] text-black/70 truncate">
                     {previewFile ? previewFile.name : 'Select file...'}
                   </span>
                   <input type="file" accept="audio/*" onChange={(e) => setPreviewFile(e.target.files?.[0] || null)} className="hidden" />
                 </label>
               </div>
               <div>
-                <label className="block font-mono text-[10px] text-black/40 uppercase mb-1">MP3 Master (for MP3 lease delivery)</label>
+                <label className="block font-mono text-[10px] text-black/60 uppercase mb-1">MP3 Master (for MP3 lease delivery)</label>
                 <label className="border border-dashed border-black/20 p-3 flex items-center gap-2 cursor-pointer hover:border-accent transition-colors">
                   <Upload className="w-4 h-4 text-black/30 flex-shrink-0" />
-                  <span className="font-mono text-[10px] text-black/50 truncate">
+                  <span className="font-mono text-[10px] text-black/70 truncate">
                     {mp3File ? mp3File.name : 'Select file...'}
                   </span>
                   <input type="file" accept=".mp3,audio/mpeg" onChange={(e) => setMp3File(e.target.files?.[0] || null)} className="hidden" />
                 </label>
               </div>
               <div>
-                <label className="block font-mono text-[10px] text-black/40 uppercase mb-1">Trackout / Stems (ZIP)</label>
+                <label className="block font-mono text-[10px] text-black/60 uppercase mb-1">Trackout / Stems (ZIP)</label>
                 <label className="border border-dashed border-black/20 p-3 flex items-center gap-2 cursor-pointer hover:border-accent transition-colors">
                   <Upload className="w-4 h-4 text-black/30 flex-shrink-0" />
-                  <span className="font-mono text-[10px] text-black/50 truncate">
+                  <span className="font-mono text-[10px] text-black/70 truncate">
                     {trackoutFile ? trackoutFile.name : 'Select file...'}
                   </span>
                   <input type="file" accept=".zip,.rar" onChange={(e) => setTrackoutFile(e.target.files?.[0] || null)} className="hidden" />
@@ -352,7 +352,7 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
             <label className="block font-mono text-xs text-black/60 uppercase tracking-wider mb-2">License Prices ($)</label>
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="font-mono text-[10px] text-black/40">{BEAT_LICENSES.mp3_lease.name}</label>
+                <label className="font-mono text-[10px] text-black/60">{BEAT_LICENSES.mp3_lease.name}</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-sm text-black/30">$</span>
                   <input type="text" inputMode="decimal" value={mp3Price} onChange={(e) => setMp3Price(e.target.value)}
@@ -360,7 +360,7 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
                 </div>
               </div>
               <div>
-                <label className="font-mono text-[10px] text-black/40">{BEAT_LICENSES.trackout_lease.name}</label>
+                <label className="font-mono text-[10px] text-black/60">{BEAT_LICENSES.trackout_lease.name}</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-sm text-black/30">$</span>
                   <input type="text" inputMode="decimal" value={trackoutPrice} onChange={(e) => setTrackoutPrice(e.target.value)}
@@ -368,7 +368,7 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
                 </div>
               </div>
               <div>
-                <label className="font-mono text-[10px] text-black/40">{BEAT_LICENSES.exclusive.name}</label>
+                <label className="font-mono text-[10px] text-black/60">{BEAT_LICENSES.exclusive.name}</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-sm text-black/30">$</span>
                   <input type="text" inputMode="decimal" value={exclusivePrice} onChange={(e) => setExclusivePrice(e.target.value)}
@@ -439,12 +439,12 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
                         Pending Review
                       </span>
                     </div>
-                    <p className="font-mono text-xs text-black/50 mt-0.5">
+                    <p className="font-mono text-xs text-black/70 mt-0.5">
                       {beat.genre}{beat.bpm && ` · ${beat.bpm} BPM`}{beat.musical_key && ` · ${beat.musical_key}`}
                     </p>
                     <div className="flex flex-wrap gap-3 mt-1">
-                      {beat.mp3_lease_price && <span className="font-mono text-[10px] text-black/40">MP3: {formatCents(beat.mp3_lease_price)}</span>}
-                      {beat.trackout_lease_price && <span className="font-mono text-[10px] text-black/40">Trackout: {formatCents(beat.trackout_lease_price)}</span>}
+                      {beat.mp3_lease_price && <span className="font-mono text-[10px] text-black/60">MP3: {formatCents(beat.mp3_lease_price)}</span>}
+                      {beat.trackout_lease_price && <span className="font-mono text-[10px] text-black/60">Trackout: {formatCents(beat.trackout_lease_price)}</span>}
                       {beat.exclusive_price && beat.has_exclusive && <span className="font-mono text-[10px] text-accent font-bold">EXCL: {formatCents(beat.exclusive_price)}</span>}
                     </div>
                   </div>
@@ -479,19 +479,19 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
       {beats.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
           <div className="border-2 border-accent p-4">
-            <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Active Beats</p>
+            <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider">Active Beats</p>
             <p className="text-heading-sm">{beats.filter((b) => b.status === 'active').length}</p>
           </div>
           <div className="border-2 border-black/10 p-4">
-            <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Total Leases</p>
+            <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider">Total Leases</p>
             <p className="text-heading-sm">{beats.reduce((sum, b) => sum + (b.lease_count || 0), 0)}</p>
           </div>
           <div className="border-2 border-black/10 p-4">
-            <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Revenue</p>
+            <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider">Revenue</p>
             <p className="text-heading-sm">{formatCents(beats.reduce((sum, b) => sum + (b.total_lease_revenue || 0), 0))}</p>
           </div>
           <div className="border-2 border-black/10 p-4">
-            <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Exclusives Sold</p>
+            <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider">Exclusives Sold</p>
             <p className="text-heading-sm">{beats.filter((b) => b.status === 'sold_exclusive').length}</p>
           </div>
         </div>
@@ -501,7 +501,7 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
       {activeBeats.length === 0 && pendingBeats.length === 0 && !showForm ? (
         <div className="border-2 border-black/10 p-12 text-center">
           <Music className="w-12 h-12 text-black/10 mx-auto mb-4" />
-          <p className="font-mono text-sm text-black/40 mb-4">{isAdmin ? 'No beats yet. Upload your first beat!' : 'No beats yet.'}</p>
+          <p className="font-mono text-sm text-black/70 mb-4">{isAdmin ? 'No beats yet. Upload your first beat!' : 'No beats yet.'}</p>
           {isAdmin && (
             <button
               onClick={() => setShowForm(true)}
@@ -528,12 +528,12 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
                       <span className="bg-green-100 text-green-700 font-mono text-[10px] font-bold uppercase px-1.5 py-0.5">Live</span>
                     )}
                   </div>
-                  <p className="font-mono text-xs text-black/50 mt-0.5">
+                  <p className="font-mono text-xs text-black/70 mt-0.5">
                     {beat.genre}{beat.bpm && ` · ${beat.bpm} BPM`}{beat.musical_key && ` · ${beat.musical_key}`}
                   </p>
                   <div className="flex flex-wrap gap-3 mt-1">
-                    {beat.mp3_lease_price && <span className="font-mono text-[10px] text-black/40">MP3: {formatCents(beat.mp3_lease_price)}</span>}
-                    {beat.trackout_lease_price && <span className="font-mono text-[10px] text-black/40">Trackout: {formatCents(beat.trackout_lease_price)}</span>}
+                    {beat.mp3_lease_price && <span className="font-mono text-[10px] text-black/60">MP3: {formatCents(beat.mp3_lease_price)}</span>}
+                    {beat.trackout_lease_price && <span className="font-mono text-[10px] text-black/60">Trackout: {formatCents(beat.trackout_lease_price)}</span>}
                     {beat.exclusive_price && beat.has_exclusive && <span className="font-mono text-[10px] text-accent font-bold">EXCL: {formatCents(beat.exclusive_price)}</span>}
                   </div>
                 </div>
@@ -541,7 +541,7 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
                   <p className="font-mono text-xs text-green-600 inline-flex items-center gap-1">
                     <ShoppingCart className="w-3 h-3" /> {beat.lease_count} leases
                   </p>
-                  <p className="font-mono text-xs text-black/40 mt-0.5">
+                  <p className="font-mono text-xs text-black/60 mt-0.5">
                     {formatCents(beat.total_lease_revenue)} gross
                   </p>
                 </div>
@@ -565,9 +565,9 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
       <div className="mt-10">
         <h3 className="font-mono text-sm font-bold uppercase tracking-wider mb-4">Private Sales</h3>
         {privateSalesLoading ? (
-          <p className="font-mono text-sm text-black/40">Loading private sales...</p>
+          <p className="font-mono text-sm text-black/70">Loading private sales...</p>
         ) : privateSales.length === 0 ? (
-          <p className="font-mono text-xs text-black/30 border border-black/10 p-6 text-center">No private sales yet.</p>
+          <p className="font-mono text-xs text-black/60 border border-black/10 p-6 text-center">No private sales yet.</p>
         ) : (
           <div className="space-y-2">
             {privateSales.map(sale => {
@@ -581,12 +581,12 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
                         {sale.status}
                       </span>
                     </div>
-                    <p className="font-mono text-xs text-black/50">
+                    <p className="font-mono text-xs text-black/70">
                       {sale.buyer_name || sale.buyer_email}
                       {' · '}
                       {BEAT_LICENSES[sale.license_type as keyof typeof BEAT_LICENSES]?.name || sale.license_type}
                     </p>
-                    <p className="font-mono text-[10px] text-black/30 mt-0.5">
+                    <p className="font-mono text-[10px] text-black/60 mt-0.5">
                       {new Date(sale.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
                       {sale.payment_method !== 'stripe' && ` · ${sale.payment_method}`}
                     </p>
@@ -711,7 +711,7 @@ function AgreementModal({ beat, onClose, onSigned }: { beat: Beat; onClose: () =
         <div className="flex items-center justify-between p-6 border-b border-black/10">
           <div>
             <h3 className="font-mono text-lg font-bold uppercase">Beat Agreement</h3>
-            <p className="font-mono text-xs text-black/50 mt-1">Review, edit, and sign to make &quot;{localBeat.title}&quot; live</p>
+            <p className="font-mono text-xs text-black/70 mt-1">Review, edit, and sign to make &quot;{localBeat.title}&quot; live</p>
           </div>
           <button onClick={onClose} className="text-black/30 hover:text-black p-1">
             <X className="w-5 h-5" />
@@ -724,12 +724,12 @@ function AgreementModal({ beat, onClose, onSigned }: { beat: Beat; onClose: () =
             <div className="space-y-3">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="col-span-2">
-                  <label className="block font-mono text-[10px] text-black/40 uppercase tracking-wider mb-1">Title</label>
+                  <label className="block font-mono text-[10px] text-black/60 uppercase tracking-wider mb-1">Title</label>
                   <input type="text" value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
                     className="w-full border border-black/20 px-2 py-1.5 font-mono text-sm focus:border-accent focus:outline-none" />
                 </div>
                 <div>
-                  <label className="block font-mono text-[10px] text-black/40 uppercase tracking-wider mb-1">Genre</label>
+                  <label className="block font-mono text-[10px] text-black/60 uppercase tracking-wider mb-1">Genre</label>
                   <select value={editGenre} onChange={(e) => setEditGenre(e.target.value)}
                     className="w-full border border-black/20 px-2 py-1.5 font-mono text-sm focus:border-accent focus:outline-none bg-white">
                     <option value="">Select genre...</option>
@@ -740,19 +740,19 @@ function AgreementModal({ beat, onClose, onSigned }: { beat: Beat; onClose: () =
                 </div>
                 <div className="flex gap-2">
                   <div className="flex-1">
-                    <label className="block font-mono text-[10px] text-black/40 uppercase tracking-wider mb-1">BPM</label>
+                    <label className="block font-mono text-[10px] text-black/60 uppercase tracking-wider mb-1">BPM</label>
                     <input type="number" value={editBpm} onChange={(e) => setEditBpm(e.target.value)}
                       className="w-full border border-black/20 px-2 py-1.5 font-mono text-sm focus:border-accent focus:outline-none" />
                   </div>
                   <div className="flex-1">
-                    <label className="block font-mono text-[10px] text-black/40 uppercase tracking-wider mb-1">Key</label>
+                    <label className="block font-mono text-[10px] text-black/60 uppercase tracking-wider mb-1">Key</label>
                     <input type="text" value={editKey} onChange={(e) => setEditKey(e.target.value)}
                       className="w-full border border-black/20 px-2 py-1.5 font-mono text-sm focus:border-accent focus:outline-none" />
                   </div>
                 </div>
               </div>
               <div>
-                <label className="block font-mono text-[10px] text-black/40 uppercase tracking-wider mb-1">Tags (comma separated)</label>
+                <label className="block font-mono text-[10px] text-black/60 uppercase tracking-wider mb-1">Tags (comma separated)</label>
                 <input type="text" value={editTags} onChange={(e) => setEditTags(e.target.value)}
                   className="w-full border border-black/20 px-2 py-1.5 font-mono text-sm focus:border-accent focus:outline-none" placeholder="dark, trap, melodic" />
               </div>
@@ -772,23 +772,23 @@ function AgreementModal({ beat, onClose, onSigned }: { beat: Beat; onClose: () =
               <div className="flex items-start justify-between">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1">
                   <div>
-                    <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Beat</p>
+                    <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider">Beat</p>
                     <p className="font-mono text-sm font-bold">{localBeat.title}</p>
                   </div>
                   {localBeat.genre && (
                     <div>
-                      <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Genre</p>
+                      <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider">Genre</p>
                       <p className="font-mono text-sm">{localBeat.genre}</p>
                     </div>
                   )}
                   {localBeat.bpm && (
                     <div>
-                      <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">BPM</p>
+                      <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider">BPM</p>
                       <p className="font-mono text-sm">{localBeat.bpm}</p>
                     </div>
                   )}
                   <div>
-                    <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Revenue Split</p>
+                    <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider">Revenue Split</p>
                     <p className="font-mono text-sm font-bold text-accent">You keep 60%</p>
                   </div>
                 </div>
@@ -800,13 +800,13 @@ function AgreementModal({ beat, onClose, onSigned }: { beat: Beat; onClose: () =
               {localBeat.tags && localBeat.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {localBeat.tags.map((tag, i) => (
-                    <span key={i} className="font-mono text-[10px] text-black/40 border border-black/10 px-1.5 py-0.5">{tag}</span>
+                    <span key={i} className="font-mono text-[10px] text-black/60 border border-black/10 px-1.5 py-0.5">{tag}</span>
                   ))}
                 </div>
               )}
               <div className="flex flex-wrap gap-3 mt-2">
-                {localBeat.mp3_lease_price && <span className="font-mono text-[10px] text-black/50">MP3 Lease: {formatCents(localBeat.mp3_lease_price)}</span>}
-                {localBeat.trackout_lease_price && <span className="font-mono text-[10px] text-black/50">Trackout: {formatCents(localBeat.trackout_lease_price)}</span>}
+                {localBeat.mp3_lease_price && <span className="font-mono text-[10px] text-black/70">MP3 Lease: {formatCents(localBeat.mp3_lease_price)}</span>}
+                {localBeat.trackout_lease_price && <span className="font-mono text-[10px] text-black/70">Trackout: {formatCents(localBeat.trackout_lease_price)}</span>}
                 {localBeat.exclusive_price && localBeat.has_exclusive && <span className="font-mono text-[10px] text-accent font-bold">Exclusive: {formatCents(localBeat.exclusive_price)}</span>}
               </div>
             </>
@@ -817,7 +817,7 @@ function AgreementModal({ beat, onClose, onSigned }: { beat: Beat; onClose: () =
         <div className="px-6 py-4 border-b border-black/10">
           <div className="flex items-center gap-2 mb-3">
             <ImagePlus className="w-4 h-4 text-black/40" />
-            <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">
+            <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider">
               Cover Image <span className="text-red-500">*</span> — Required to go live
             </p>
           </div>
@@ -833,11 +833,11 @@ function AgreementModal({ beat, onClose, onSigned }: { beat: Beat; onClose: () =
             ) : (
               <label className="w-24 h-24 border-2 border-dashed border-black/20 flex flex-col items-center justify-center cursor-pointer hover:border-accent transition-colors flex-shrink-0">
                 <ImagePlus className="w-6 h-6 text-black/20 mb-1" />
-                <span className="font-mono text-[9px] text-black/30 uppercase">Upload</span>
+                <span className="font-mono text-[9px] text-black/60 uppercase">Upload</span>
                 <input type="file" accept="image/*" onChange={handleCoverSelect} className="hidden" />
               </label>
             )}
-            <div className="font-mono text-xs text-black/40 space-y-1">
+            <div className="font-mono text-xs text-black/60 space-y-1">
               <p>Upload artwork for this beat. This will show in the store and on your profile.</p>
               <p className="text-[10px]">Recommended: square image, at least 500×500px. JPG or PNG.</p>
             </div>
@@ -852,7 +852,7 @@ function AgreementModal({ beat, onClose, onSigned }: { beat: Beat; onClose: () =
         >
           <div className="flex items-center gap-2 mb-3">
             <FileText className="w-4 h-4 text-black/40" />
-            <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">
+            <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider">
               Agreement v{BEAT_AGREEMENT_VERSION} — scroll to read full terms
             </p>
           </div>
@@ -919,7 +919,7 @@ function SalesTab({ sales }: { sales: Sale[] }) {
     return (
       <div className="border-2 border-black/10 p-12 text-center">
         <ShoppingCart className="w-12 h-12 text-black/10 mx-auto mb-4" />
-        <p className="font-mono text-sm text-black/40">No sales yet.</p>
+        <p className="font-mono text-sm text-black/70">No sales yet.</p>
       </div>
     );
   }
@@ -934,22 +934,22 @@ function SalesTab({ sales }: { sales: Sale[] }) {
     <div className="space-y-2">
       {/* Header */}
       <div className="grid grid-cols-5 gap-4 px-4 py-2 border-b border-black/10">
-        <span className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Date</span>
-        <span className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Beat</span>
-        <span className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Buyer</span>
-        <span className="font-mono text-[10px] text-black/40 uppercase tracking-wider">License</span>
-        <span className="font-mono text-[10px] text-black/40 uppercase tracking-wider text-right">Amount</span>
+        <span className="font-mono text-[10px] text-black/60 uppercase tracking-wider">Date</span>
+        <span className="font-mono text-[10px] text-black/60 uppercase tracking-wider">Beat</span>
+        <span className="font-mono text-[10px] text-black/60 uppercase tracking-wider">Buyer</span>
+        <span className="font-mono text-[10px] text-black/60 uppercase tracking-wider">License</span>
+        <span className="font-mono text-[10px] text-black/60 uppercase tracking-wider text-right">Amount</span>
       </div>
       {sales.map((sale) => {
         const beatTitle = Array.isArray(sale.beats) ? sale.beats[0]?.title : sale.beats?.title;
         return (
           <div key={sale.id} className="grid grid-cols-5 gap-4 px-4 py-3 border-b border-black/5 hover:bg-black/[0.02]">
-            <span className="font-mono text-xs text-black/50">
+            <span className="font-mono text-xs text-black/70">
               {new Date(sale.created_at).toLocaleDateString()}
             </span>
             <span className="font-mono text-xs font-semibold truncate">{beatTitle || 'Unknown'}</span>
             <span className="font-mono text-xs text-black/50 truncate">{sale.buyer_email}</span>
-            <span className="font-mono text-xs text-black/50">{LICENSE_LABELS[sale.license_type] || sale.license_type}</span>
+            <span className="font-mono text-xs text-black/70">{LICENSE_LABELS[sale.license_type] || sale.license_type}</span>
             <span className="font-mono text-xs font-bold text-right">{formatCents(sale.amount_paid)}</span>
           </div>
         );
@@ -964,16 +964,16 @@ function EarningsTab({ earnings }: { earnings: Earnings }) {
       {/* Earnings overview */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
         <div className="border-2 border-accent p-6">
-          <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Your Earnings ({Math.round(PRODUCER_COMMISSION * 100)}%)</p>
+          <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider">Your Earnings ({Math.round(PRODUCER_COMMISSION * 100)}%)</p>
           <p className="text-display-sm text-accent">{formatCents(earnings.netEarnings)}</p>
         </div>
         <div className="border-2 border-black/10 p-6">
-          <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Gross Sales</p>
+          <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider">Gross Sales</p>
           <p className="text-heading-lg">{formatCents(earnings.totalGross)}</p>
         </div>
         <div className="border-2 border-black/10 p-6">
-          <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Platform Fee ({Math.round(PLATFORM_COMMISSION * 100)}%)</p>
-          <p className="text-heading-lg text-black/40">{formatCents(earnings.platformFee)}</p>
+          <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider">Platform Fee ({Math.round(PLATFORM_COMMISSION * 100)}%)</p>
+          <p className="text-heading-lg text-black/60">{formatCents(earnings.platformFee)}</p>
         </div>
       </div>
 
@@ -982,15 +982,15 @@ function EarningsTab({ earnings }: { earnings: Earnings }) {
         <h3 className="font-mono text-sm font-bold uppercase mb-4">Payout Status</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <div>
-            <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Total Paid Out</p>
+            <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider">Total Paid Out</p>
             <p className="font-mono text-lg font-bold text-green-600">{formatCents(earnings.totalPaid)}</p>
           </div>
           <div>
-            <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Pending Payout</p>
+            <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider">Pending Payout</p>
             <p className="font-mono text-lg font-bold text-accent">{formatCents(earnings.pendingPayout)}</p>
           </div>
           <div>
-            <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Beats / Total Leases</p>
+            <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider">Beats / Total Leases</p>
             <p className="font-mono text-lg font-bold">{earnings.totalBeats} / {earnings.totalLeases}</p>
           </div>
         </div>

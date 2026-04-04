@@ -250,7 +250,7 @@ export default function CreateInvite() {
             <div className="flex-1 min-w-0">
               <p className="font-mono text-sm font-semibold truncate">{selectedClient.display_name}</p>
               {selectedClient.email && (
-                <p className="font-mono text-[10px] text-black/40 truncate">{selectedClient.email}</p>
+                <p className="font-mono text-[10px] text-black/60 truncate">{selectedClient.email}</p>
               )}
             </div>
             <button onClick={clearClient} className="text-black/30 hover:text-red-500 p-1 flex-shrink-0">
@@ -262,13 +262,13 @@ export default function CreateInvite() {
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block font-mono text-[10px] text-black/40 uppercase tracking-wider mb-1">Name</label>
+                <label className="block font-mono text-[10px] text-black/60 uppercase tracking-wider mb-1">Name</label>
                 <input type="text" value={clientName} onChange={(e) => setClientName(e.target.value)}
                   className="w-full border-2 border-black/20 px-3 py-2.5 font-mono text-sm focus:border-accent focus:outline-none"
                   placeholder="Client name" />
               </div>
               <div>
-                <label className="block font-mono text-[10px] text-black/40 uppercase tracking-wider mb-1">Email</label>
+                <label className="block font-mono text-[10px] text-black/60 uppercase tracking-wider mb-1">Email</label>
                 <input type="email" value={clientEmail} onChange={(e) => setClientEmail(e.target.value)}
                   className="w-full border-2 border-black/20 px-3 py-2.5 font-mono text-sm focus:border-accent focus:outline-none"
                   placeholder="client@email.com" />
@@ -313,14 +313,14 @@ export default function CreateInvite() {
                       <div className="flex-1 min-w-0">
                         <p className="font-mono text-xs font-semibold truncate">{client.display_name}</p>
                         {client.email && (
-                          <p className="font-mono text-[10px] text-black/40 truncate">{client.email}</p>
+                          <p className="font-mono text-[10px] text-black/60 truncate">{client.email}</p>
                         )}
                       </div>
                     </button>
                   ))
                 ) : (
                   <div className="p-3 text-center">
-                    <p className="font-mono text-xs text-black/40">No clients found</p>
+                    <p className="font-mono text-xs text-black/60">No clients found</p>
                   </div>
                 )}
 
@@ -385,7 +385,7 @@ export default function CreateInvite() {
       {/* Custom Price Override */}
       <div>
         <label className="block font-mono text-xs font-semibold uppercase tracking-wider mb-1">
-          Custom Total Price <span className="font-normal text-black/40">(leave blank for standard rate)</span>
+          Custom Total Price <span className="font-normal text-black/60">(leave blank for standard rate)</span>
         </label>
         <div className="flex items-center gap-2">
           <span className="font-mono text-sm">$</span>

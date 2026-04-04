@@ -283,7 +283,7 @@ export default function InvitePage() {
               <span className="text-black/60">Deposit Due Now (50%)</span>
               <span className="font-bold text-accent">{formatCents(booking.deposit_amount)}</span>
             </div>
-            <div className="flex justify-between text-black/40 text-xs">
+            <div className="flex justify-between text-black/60 text-xs">
               <span>Remainder due after session</span>
               <span>{formatCents(booking.remainder_amount)}</span>
             </div>
@@ -328,7 +328,7 @@ export default function InvitePage() {
                 {paying ? 'REDIRECTING TO PAYMENT...' : `PAY ${formatCents(booking.deposit_amount)} DEPOSIT`}
               </button>
 
-              <p className="font-mono text-[10px] text-black/40 text-center mt-3">
+              <p className="font-mono text-[10px] text-black/60 text-center mt-3">
                 Signed in as {authedUser.email}. Secure payment powered by Stripe.
               </p>
             </>

@@ -48,13 +48,13 @@ export default async function WritePage({ params }: Props) {
       {/* Header */}
       <section className="bg-black text-white py-8 sm:py-12">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <Link href={`/beats/${beat.id}`} className="font-mono text-xs text-white/40 hover:text-accent uppercase tracking-wider no-underline mb-4 block">
+          <Link href={`/beats/${beat.id}`} className="font-mono text-xs text-white/60 hover:text-accent uppercase tracking-wider no-underline mb-4 block">
             &larr; Back to beat
           </Link>
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-heading-lg mb-1">{beat.title}</h1>
-              <p className="font-mono text-white/50 text-sm">
+              <p className="font-mono text-white/80 text-sm">
                 by{' '}
                 {producerSlug ? (
                   <Link href={`/u/${producerSlug}`} className="text-accent no-underline hover:underline">

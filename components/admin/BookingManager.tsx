@@ -413,7 +413,7 @@ export default function BookingManager() {
           <div key={s.label} className="border border-black/10 p-4">
             <s.icon className="w-4 h-4 text-accent mb-2" />
             <p className="font-heading text-xl">{s.value}</p>
-            <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">{s.label}</p>
+            <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider">{s.label}</p>
           </div>
         ))}
       </div>
@@ -435,12 +435,12 @@ export default function BookingManager() {
         <button onClick={fetchBookings} className="p-2 border border-black/20 hover:border-black transition-colors">
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
         </button>
-        <span className="font-mono text-xs text-black/40">{bookings.length} bookings</span>
+        <span className="font-mono text-xs text-black/60">{bookings.length} bookings</span>
       </div>
 
       {/* Bookings List */}
       {loading ? (
-        <p className="font-mono text-sm text-black/40">Loading...</p>
+        <p className="font-mono text-sm text-black/70">Loading...</p>
       ) : (
         <div className="space-y-2">
           {bookings.map((b) => {
@@ -458,7 +458,7 @@ export default function BookingManager() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-sm font-bold">{b.customer_name}</span>
-                      <span className={`font-mono text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 ${STATUS_COLORS[b.status] || 'bg-black/5 text-black/50'}`}>
+                      <span className={`font-mono text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 ${STATUS_COLORS[b.status] || 'bg-black/5 text-black/70'}`}>
                         {b.status}
                       </span>
                       {b.reschedule_requested && (
@@ -467,7 +467,7 @@ export default function BookingManager() {
                         </span>
                       )}
                     </div>
-                    <p className="font-mono text-xs text-black/50 mt-1">
+                    <p className="font-mono text-xs text-black/70 mt-1">
                       {date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })} · {date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' })} · {b.duration}hr · {roomLabel}
                       {b.engineer_name && <span className="text-accent"> · {b.engineer_name}</span>}
                     </p>
@@ -488,19 +488,19 @@ export default function BookingManager() {
                   <div className="border-t border-black/10 p-4 space-y-4">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 font-mono text-xs">
                       <div>
-                        <p className="text-black/40 uppercase tracking-wider">Email</p>
+                        <p className="text-black/60 uppercase tracking-wider">Email</p>
                         <p className="font-semibold">{b.customer_email}</p>
                       </div>
                       <div>
-                        <p className="text-black/40 uppercase tracking-wider">Phone</p>
+                        <p className="text-black/60 uppercase tracking-wider">Phone</p>
                         <p className="font-semibold">{b.customer_phone || '—'}</p>
                       </div>
                       <div>
-                        <p className="text-black/40 uppercase tracking-wider">Room</p>
+                        <p className="text-black/60 uppercase tracking-wider">Room</p>
                         <p className="font-semibold">{roomLabel}</p>
                       </div>
                       <div>
-                        <p className="text-black/40 uppercase tracking-wider">Duration</p>
+                        <p className="text-black/60 uppercase tracking-wider">Duration</p>
                         <p className="font-semibold">{b.duration}hr</p>
                       </div>
                     </div>
@@ -508,15 +508,15 @@ export default function BookingManager() {
                     {/* Financial Info */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 font-mono text-xs">
                       <div>
-                        <p className="text-black/40 uppercase tracking-wider">Total</p>
+                        <p className="text-black/60 uppercase tracking-wider">Total</p>
                         <p className="font-semibold">{formatCents(b.total_amount)}</p>
                       </div>
                       <div>
-                        <p className="text-black/40 uppercase tracking-wider">Deposit Paid</p>
+                        <p className="text-black/60 uppercase tracking-wider">Deposit Paid</p>
                         <p className="font-semibold">{formatCents(b.actual_deposit_paid || b.deposit_amount)}</p>
                       </div>
                       <div>
-                        <p className="text-black/40 uppercase tracking-wider">Remainder</p>
+                        <p className="text-black/60 uppercase tracking-wider">Remainder</p>
                         {editingRemainder === b.id ? (
                           <div className="flex items-center gap-1">
                             <span className="text-black/60">$</span>
@@ -542,7 +542,7 @@ export default function BookingManager() {
                         )}
                       </div>
                       <div>
-                        <p className="text-black/40 uppercase tracking-wider">Surcharges</p>
+                        <p className="text-black/60 uppercase tracking-wider">Surcharges</p>
                         <p className="font-semibold">
                           {b.night_fees_amount > 0 && <span>Night: {formatCents(b.night_fees_amount)}</span>}
                           {b.same_day_fee && <span className="block">Same-day: {formatCents(b.same_day_fee_amount)}</span>}
@@ -553,7 +553,7 @@ export default function BookingManager() {
 
                     {/* Engineer Assignment */}
                     <div className="font-mono text-xs">
-                      <p className="text-black/40 uppercase tracking-wider mb-1">Engineer</p>
+                      <p className="text-black/60 uppercase tracking-wider mb-1">Engineer</p>
                       <div className="flex items-center gap-2 flex-wrap">
                         <select
                           value={b.engineer_name || ''}
@@ -570,7 +570,7 @@ export default function BookingManager() {
                           )}
                         </select>
                         {b.requested_engineer && (
-                          <span className="text-black/40">Requested: {b.requested_engineer}</span>
+                          <span className="text-black/60">Requested: {b.requested_engineer}</span>
                         )}
                       </div>
                     </div>
@@ -622,7 +622,7 @@ export default function BookingManager() {
 
                     {/* Reschedule / Edit Time */}
                     <div className="font-mono text-xs">
-                      <p className="text-black/40 uppercase tracking-wider mb-1">Session Time</p>
+                      <p className="text-black/60 uppercase tracking-wider mb-1">Session Time</p>
                       {editingTime === b.id ? (
                         <div className="flex items-center gap-2 flex-wrap">
                           <input
@@ -679,7 +679,7 @@ export default function BookingManager() {
 
                     {/* Admin Notes */}
                     <div>
-                      <label className="font-mono text-[10px] text-black/40 uppercase tracking-wider block mb-1">Admin Notes</label>
+                      <label className="font-mono text-[10px] text-black/60 uppercase tracking-wider block mb-1">Admin Notes</label>
                       <textarea
                         defaultValue={b.admin_notes || ''}
                         onBlur={(e) => updateNotes(b.id, e.target.value)}
@@ -728,7 +728,7 @@ export default function BookingManager() {
                                 className="w-20 border border-black/20 px-1 py-0.5 text-xs font-mono"
                                 autoFocus
                               />
-                              <button onClick={() => setEditingCharge(null)} className="text-black/40 font-mono text-[10px]">Done</button>
+                              <button onClick={() => setEditingCharge(null)} className="text-black/60 font-mono text-[10px]">Done</button>
                             </div>
                           ) : (
                             <button
@@ -791,15 +791,15 @@ export default function BookingManager() {
                         <p className="font-mono text-[10px] text-red-600 uppercase tracking-wider font-bold">Cancelled Session — Deposit Tracking</p>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3 font-mono text-xs">
                           <div>
-                            <p className="text-black/40">Original Total</p>
+                            <p className="text-black/60">Original Total</p>
                             <p className="font-semibold">{formatCents(b.total_amount)}</p>
                           </div>
                           <div>
-                            <p className="text-black/40">Deposit on Card</p>
+                            <p className="text-black/60">Deposit on Card</p>
                             <p className="font-semibold">{b.actual_deposit_paid ? formatCents(b.actual_deposit_paid) : '$0.00'}</p>
                           </div>
                           <div>
-                            <p className="text-black/40">Deposit Kept</p>
+                            <p className="text-black/60">Deposit Kept</p>
                             <p className="font-semibold text-red-600">{formatCents(b.deposit_amount)}</p>
                             <button
                               onClick={() => { setEditingRemainder(b.id); setRemainderInput((b.deposit_amount / 100).toFixed(2)); }}
@@ -809,7 +809,7 @@ export default function BookingManager() {
                         </div>
                         {!b.actual_deposit_paid && b.deposit_amount === 0 && (
                           <div className="flex items-center gap-2 flex-wrap mt-1">
-                            <p className="font-mono text-[10px] text-black/40">Record cash deposit kept:</p>
+                            <p className="font-mono text-[10px] text-black/60">Record cash deposit kept:</p>
                             <div className="flex items-center gap-1">
                               <span className="font-mono text-xs">$</span>
                               <input
@@ -843,7 +843,7 @@ export default function BookingManager() {
                     {/* Record Cash Payment Form */}
                     {showCashPayment === b.id && (
                       <div className="border border-black/10 p-3 space-y-2">
-                        <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Record Cash Payment</p>
+                        <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider">Record Cash Payment</p>
                         <div className="flex items-center gap-2 flex-wrap">
                           <div className="flex items-center gap-1">
                             <span className="font-mono text-sm">$</span>
@@ -880,7 +880,7 @@ export default function BookingManager() {
                     {showPaymentLink === b.id && (
                       <div className="border border-blue-200 bg-blue-50/30 p-3 space-y-2">
                         <p className="font-mono text-[10px] text-blue-600 uppercase tracking-wider font-bold">Send Stripe Payment Link</p>
-                        <p className="font-mono text-[10px] text-black/50">Creates a Stripe checkout link and emails it to {b.customer_email}</p>
+                        <p className="font-mono text-[10px] text-black/70">Creates a Stripe checkout link and emails it to {b.customer_email}</p>
                         <div className="flex items-center gap-2 flex-wrap">
                           <div className="flex items-center gap-1">
                             <span className="font-mono text-sm">$</span>
@@ -922,7 +922,7 @@ export default function BookingManager() {
                     </div>
                     {showFileUpload === b.id && (
                       <div className="border border-black/10 p-3 space-y-3">
-                        <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider font-bold">Upload Session Files for {b.customer_name}</p>
+                        <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider font-bold">Upload Session Files for {b.customer_name}</p>
                         {b.customer_email ? (
                           <>
                             <div
@@ -945,7 +945,7 @@ export default function BookingManager() {
                                 input.click();
                               }}
                             >
-                              <p className="font-mono text-xs text-black/50">
+                              <p className="font-mono text-xs text-black/70">
                                 {isDragging ? 'Drop files here' : 'Click or drag files to upload'}
                               </p>
                             </div>
@@ -1002,11 +1002,11 @@ export default function BookingManager() {
                     </div>
                     {showFiles === b.id && (
                       <div className="border border-black/10 p-3 space-y-2">
-                        <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider font-bold">Delivered Files for {b.customer_name}</p>
+                        <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider font-bold">Delivered Files for {b.customer_name}</p>
                         {loadingFiles ? (
                           <p className="font-mono text-xs text-black/40">Loading...</p>
                         ) : bookingFiles.length === 0 ? (
-                          <p className="font-mono text-xs text-black/30">No files delivered yet</p>
+                          <p className="font-mono text-xs text-black/60">No files delivered yet</p>
                         ) : (
                           <div className="space-y-1">
                             {bookingFiles.map(f => (

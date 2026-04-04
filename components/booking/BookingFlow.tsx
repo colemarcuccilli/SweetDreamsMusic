@@ -39,7 +39,7 @@ function tierLabel(tier: 'regular' | 'lateNight' | 'deepNight'): string {
 function tierColor(tier: 'regular' | 'lateNight' | 'deepNight'): string {
   if (tier === 'lateNight') return 'text-amber-600';
   if (tier === 'deepNight') return 'text-red-500';
-  return 'text-black/40';
+  return 'text-black/60';
 }
 
 export default function BookingFlow({ userName, userEmail }: { userName: string; userEmail: string }) {
@@ -319,7 +319,7 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
           </div>
 
           {/* Availability heat map legend */}
-          <div className="flex flex-wrap gap-4 mb-4 font-mono text-[10px] uppercase tracking-wider text-black/50">
+          <div className="flex flex-wrap gap-4 mb-4 font-mono text-[10px] uppercase tracking-wider text-black/70">
             <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> Available</span>
             <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block" /> Limited</span>
             <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" /> Fully Booked</span>
@@ -375,7 +375,7 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
               >
                 <Home className={cn('w-6 h-6 mb-3', room === r ? 'text-accent' : 'text-black/40')} />
                 <p className="font-bold text-sm uppercase tracking-wider">{ROOM_LABELS[r]}</p>
-                <p className={cn('text-xs mt-1', room === r ? 'text-white/60' : 'text-black/40')}>
+                <p className={cn('text-xs mt-1', room === r ? 'text-white/80' : 'text-black/60')}>
                   {formatCents(ROOM_RATES[r])}/hour
                   <span className="block text-[10px] mt-0.5">1hr: {formatCents(ROOM_RATES_SINGLE[r])}</span>
                   {r === 'studio_a' && (
@@ -391,7 +391,7 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
 
         <div className="mb-4">
           <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">
-            Request an Engineer <span className="font-normal text-black/40">(not guaranteed)</span>
+            Request an Engineer <span className="font-normal text-black/60">(not guaranteed)</span>
           </h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <button
@@ -402,7 +402,7 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
               )}
             >
               <p className="font-bold uppercase tracking-wider">Any Available</p>
-              <p className={cn('text-xs mt-1', engineer === 'any' ? 'text-white/60' : 'text-black/40')}>
+              <p className={cn('text-xs mt-1', engineer === 'any' ? 'text-white/80' : 'text-black/60')}>
                 We&apos;ll match you
               </p>
             </button>
@@ -416,7 +416,7 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
                 )}
               >
                 <p className="font-bold uppercase tracking-wider">{eng.displayName}</p>
-                <p className={cn('text-xs mt-1', engineer === eng.name ? 'text-white/60' : 'text-black/40')}>
+                <p className={cn('text-xs mt-1', engineer === eng.name ? 'text-white/80' : 'text-black/60')}>
                   {eng.specialties.join(', ')}
                 </p>
               </button>
@@ -441,7 +441,7 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
         {/* Time slots */}
         <div className="mb-8">
           <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-2">Start Time</h3>
-          <p className="font-mono text-xs text-black/40 mb-4">
+          <p className="font-mono text-xs text-black/60 mb-4">
             Open 24 hours. Surcharges apply for late night and after-hours bookings.
           </p>
           {studioARestricted && (
@@ -521,7 +521,7 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
         {/* Live hour-by-hour preview when time is selected */}
         {selectedTime && (
           <div className="mt-6 border border-black/10 p-4">
-            <h4 className="font-mono text-xs font-semibold uppercase tracking-wider text-black/50 mb-3">Hour-by-Hour Preview</h4>
+            <h4 className="font-mono text-xs font-semibold uppercase tracking-wider text-black/70 mb-3">Hour-by-Hour Preview</h4>
             <div className="space-y-1">
               {pricing.hourBreakdown.map((hb, i) => (
                 <div key={i} className="flex items-center justify-between font-mono text-xs py-1.5 border-b border-black/5 last:border-0">
@@ -598,7 +598,7 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
           <hr className="border-black/10 my-6" />
 
           {/* Detailed price breakdown */}
-          <h4 className="font-mono text-xs font-semibold uppercase tracking-wider text-black/50 mb-3">Price Breakdown</h4>
+          <h4 className="font-mono text-xs font-semibold uppercase tracking-wider text-black/70 mb-3">Price Breakdown</h4>
           <div className="space-y-2 font-mono text-sm">
             {/* Base rate */}
             <div className="flex justify-between">
@@ -660,7 +660,7 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
               <span>Deposit Due Now (50%)</span>
               <span className="text-accent">{formatCents(pricing.deposit)}</span>
             </div>
-            <p className="text-xs text-black/40 mt-2">
+            <p className="text-xs text-black/60 mt-2">
               Remainder ({formatCents(pricing.total - pricing.deposit)}) charged to your card on file after your session.
             </p>
           </div>

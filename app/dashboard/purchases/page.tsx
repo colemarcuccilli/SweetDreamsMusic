@@ -93,7 +93,7 @@ export default function PurchasesPage() {
   if (loading) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-12">
-        <p className="font-mono text-sm text-black/40">Loading purchases...</p>
+        <p className="font-mono text-sm text-black/70">Loading purchases...</p>
       </div>
     );
   }
@@ -110,14 +110,14 @@ export default function PurchasesPage() {
       {purchases.length === 0 ? (
         <div className="border-2 border-black/10 p-12 text-center">
           <ShoppingBag className="w-12 h-12 text-black/10 mx-auto mb-4" />
-          <p className="font-mono text-sm text-black/40 mb-4">No purchases yet</p>
+          <p className="font-mono text-sm text-black/70 mb-4">No purchases yet</p>
           <Link href="/beats" className="bg-accent text-black font-mono text-xs font-bold uppercase tracking-wider px-6 py-3 hover:bg-accent/90 inline-block">
             Browse Beat Store
           </Link>
         </div>
       ) : (
         <div className="space-y-4">
-          <p className="font-mono text-xs text-black/40">{purchases.length} purchase{purchases.length !== 1 ? 's' : ''}</p>
+          <p className="font-mono text-xs text-black/60">{purchases.length} purchase{purchases.length !== 1 ? 's' : ''}</p>
 
           {purchases.map(purchase => {
             const beat = Array.isArray(purchase.beats) ? purchase.beats[0] : purchase.beats;
@@ -139,7 +139,7 @@ export default function PurchasesPage() {
                   {/* Info */}
                   <div className="flex-1 min-w-0">
                     <p className="font-mono text-sm font-bold truncate">{beat?.title || 'Beat'}</p>
-                    <p className="font-mono text-xs text-black/50">
+                    <p className="font-mono text-xs text-black/70">
                       {beat?.producer || 'Producer'}
                       {beat?.genre && ` · ${beat.genre}`}
                     </p>
@@ -147,13 +147,13 @@ export default function PurchasesPage() {
                       <span className="bg-accent/20 text-accent font-mono text-[10px] font-bold uppercase px-2 py-0.5">
                         {license?.name || purchase.license_type}
                       </span>
-                      <span className="font-mono text-[10px] text-black/40">
+                      <span className="font-mono text-[10px] text-black/60">
                         {formatCents(purchase.amount_paid)}
                       </span>
-                      <span className="font-mono text-[10px] text-black/40">
+                      <span className="font-mono text-[10px] text-black/60">
                         {new Date(purchase.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </span>
-                      <span className="font-mono text-[10px] text-black/30">
+                      <span className="font-mono text-[10px] text-black/60">
                         {purchase.download_count}/10 downloads
                       </span>
                     </div>
@@ -187,7 +187,7 @@ export default function PurchasesPage() {
                     <pre className="font-mono text-xs text-black/70 whitespace-pre-wrap max-h-96 overflow-y-auto border border-black/10 bg-white p-4">
                       {purchase.license_text || 'Loading license...'}
                     </pre>
-                    <p className="font-mono text-[10px] text-black/30 mt-2">
+                    <p className="font-mono text-[10px] text-black/60 mt-2">
                       Purchase ID: {purchase.id} · This license is stored in your account and can be accessed at any time.
                     </p>
                   </div>

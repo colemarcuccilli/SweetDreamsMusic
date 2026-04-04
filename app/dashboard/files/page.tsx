@@ -82,7 +82,7 @@ export default async function FilesPage() {
                 <FileAudio className="w-7 h-7 text-accent" />
                 MY FILES
               </h2>
-              <p className="font-mono text-xs text-black/40 mt-2">
+              <p className="font-mono text-xs text-black/60 mt-2">
                 All files from your sessions. Toggle the switch to share a track on your public profile.
               </p>
             </div>
@@ -94,8 +94,8 @@ export default async function FilesPage() {
           {filesWithUrls.length === 0 ? (
             <div className="border-2 border-black/10 p-12 text-center">
               <FileAudio className="w-10 h-10 text-black/10 mx-auto mb-4" />
-              <p className="font-mono text-sm text-black/50 mb-2">No files yet</p>
-              <p className="font-mono text-xs text-black/30">Files from your recording sessions will appear here for download.</p>
+              <p className="font-mono text-sm text-black/70 mb-2">No files yet</p>
+              <p className="font-mono text-xs text-black/60">Files from your recording sessions will appear here for download.</p>
             </div>
           ) : (
             <FilesFilter files={filesWithUrls}>
@@ -116,7 +116,7 @@ export default async function FilesPage() {
                 if (filtered.length === 0) {
                   return (
                     <div className="border-2 border-black/10 p-8 text-center">
-                      <p className="font-mono text-sm text-black/40">No files match your search</p>
+                      <p className="font-mono text-sm text-black/70">No files match your search</p>
                     </div>
                   );
                 }
@@ -125,7 +125,7 @@ export default async function FilesPage() {
                   <div className="space-y-8">
                     {Object.entries(grouped).map(([date, files]) => (
                       <div key={date}>
-                        <h3 className="font-mono text-xs text-black/40 uppercase tracking-wider mb-3 border-b border-black/10 pb-2">
+                        <h3 className="font-mono text-xs text-black/60 uppercase tracking-wider mb-3 border-b border-black/10 pb-2">
                           {date} — {files.length} file{files.length > 1 ? 's' : ''}
                         </h3>
                         <div className="space-y-2">
@@ -140,13 +140,13 @@ export default async function FilesPage() {
                                     <p className="font-mono text-sm font-bold truncate">
                                       {file.display_name || file.file_name}
                                     </p>
-                                    <div className="font-mono text-xs text-black/40 mt-1 flex items-center gap-3 flex-wrap">
+                                    <div className="font-mono text-xs text-black/60 mt-1 flex items-center gap-3 flex-wrap">
                                       <span>by {file.uploaded_by_name}</span>
                                       <span className="uppercase">{file.file_type?.split('/')[1] || 'file'}</span>
                                       {file.file_size > 0 && <span>{formatFileSize(file.file_size)}</span>}
                                     </div>
                                     {file.description && (
-                                      <p className="font-mono text-[10px] text-black/30 mt-1">{file.description}</p>
+                                      <p className="font-mono text-[10px] text-black/60 mt-1">{file.description}</p>
                                     )}
                                   </div>
                                   {downloadUrl ? (
@@ -158,7 +158,7 @@ export default async function FilesPage() {
                                       <Download className="w-4 h-4" /> Download
                                     </a>
                                   ) : (
-                                    <span className="font-mono text-xs text-black/30">Unavailable</span>
+                                    <span className="font-mono text-xs text-black/60">Unavailable</span>
                                   )}
                                 </div>
                                 {file.file_type?.startsWith('audio/') && (

@@ -65,14 +65,14 @@ export default function EngineerFiles() {
       )
     : files;
 
-  if (loading) return <p className="font-mono text-sm text-black/40">Loading files...</p>;
+  if (loading) return <p className="font-mono text-sm text-black/70">Loading files...</p>;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
         <div>
           <h2 className="text-heading-sm">ALL UPLOADED FILES</h2>
-          <p className="font-mono text-xs text-black/40 mt-1">{files.length} file{files.length !== 1 ? 's' : ''} uploaded across all clients</p>
+          <p className="font-mono text-xs text-black/60 mt-1">{files.length} file{files.length !== 1 ? 's' : ''} uploaded across all clients</p>
         </div>
       </div>
 
@@ -91,7 +91,7 @@ export default function EngineerFiles() {
       {filtered.length === 0 ? (
         <div className="border-2 border-black/10 p-8 text-center">
           <FileAudio className="w-8 h-8 text-black/10 mx-auto mb-3" />
-          <p className="font-mono text-sm text-black/40">{search ? 'No files match your search' : 'No files uploaded yet'}</p>
+          <p className="font-mono text-sm text-black/70">{search ? 'No files match your search' : 'No files uploaded yet'}</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -99,7 +99,7 @@ export default function EngineerFiles() {
             <div key={file.id} className="border border-black/10 p-4 hover:border-black/20 transition-colors flex items-center justify-between gap-4">
               <div className="min-w-0 flex-1">
                 <p className="font-mono text-sm font-bold truncate">{file.display_name || file.file_name}</p>
-                <div className="font-mono text-xs text-black/40 mt-1 flex items-center gap-3 flex-wrap">
+                <div className="font-mono text-xs text-black/60 mt-1 flex items-center gap-3 flex-wrap">
                   {file.client_name && <span>Client: <strong className="text-black/60">{file.client_name}</strong></span>}
                   <span>by {file.uploaded_by_name}</span>
                   <span className="uppercase">{file.file_type?.split('/')[1] || 'file'}</span>

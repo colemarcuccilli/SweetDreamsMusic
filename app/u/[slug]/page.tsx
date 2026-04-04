@@ -201,8 +201,8 @@ export default async function PublicProfilePage({ params }: Props) {
       {isOwner && isEmpty && (
         <section className="bg-white text-black py-16 sm:py-24">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <p className="font-mono text-sm text-black/40 mb-2">Your profile is looking empty.</p>
-            <p className="font-mono text-xs text-black/30 max-w-md mx-auto">
+            <p className="font-mono text-sm text-black/70 mb-2">Your profile is looking empty.</p>
+            <p className="font-mono text-xs text-black/60 max-w-md mx-auto">
               Add a bio, upload photos, link your socials, and showcase your music and projects.
             </p>
             <Link
@@ -231,7 +231,7 @@ export default async function PublicProfilePage({ params }: Props) {
                     <div className="flex-1">
                       <h3 className="font-mono text-sm font-bold">{title}</h3>
                       {item.custom_description && (
-                        <p className="font-mono text-xs text-black/50 mt-1">{item.custom_description}</p>
+                        <p className="font-mono text-xs text-black/70 mt-1">{item.custom_description}</p>
                       )}
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -273,7 +273,7 @@ export default async function PublicProfilePage({ params }: Props) {
         <section className={`${hasReleased ? 'bg-black/[0.02]' : 'bg-white'} text-black py-16 sm:py-24`}>
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
             <h2 className="text-heading-xl mb-2">UNRELEASED</h2>
-            <p className="font-mono text-xs text-black/40 mb-8">Exclusive previews — recorded at Sweet Dreams Music</p>
+            <p className="font-mono text-xs text-black/60 mb-8">Exclusive previews — recorded at Sweet Dreams Music</p>
             <div className="space-y-4">
               {unreleasedItems.map((item) => {
                 const deliverable = deliverables[item.deliverable_id];
@@ -289,12 +289,12 @@ export default async function PublicProfilePage({ params }: Props) {
                       <Music className="w-8 h-8 text-accent flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <h3 className="font-mono text-sm font-bold truncate">{title}</h3>
-                        <div className="font-mono text-xs text-black/40 mt-1 flex items-center gap-3 flex-wrap">
+                        <div className="font-mono text-xs text-black/60 mt-1 flex items-center gap-3 flex-wrap">
                           {recordedDate && <span>Recorded {recordedDate}</span>}
                           <span className="text-[10px] uppercase tracking-wider bg-black/5 px-2 py-0.5 font-bold">Unreleased</span>
                         </div>
                         {item.custom_description && (
-                          <p className="font-mono text-xs text-black/50 mt-2">{item.custom_description}</p>
+                          <p className="font-mono text-xs text-black/70 mt-2">{item.custom_description}</p>
                         )}
                       </div>
                     </div>
@@ -349,7 +349,7 @@ export default async function PublicProfilePage({ params }: Props) {
                         <p className="font-mono text-xs text-accent uppercase tracking-wider mb-2">{project.project_type}</p>
                       )}
                       {project.description && (
-                        <p className="font-mono text-xs text-white/50">{project.description}</p>
+                        <p className="font-mono text-xs text-white/80">{project.description}</p>
                       )}
                       {hasLinks && (
                         <div className="flex flex-wrap gap-2 mt-3">
@@ -400,17 +400,17 @@ export default async function PublicProfilePage({ params }: Props) {
                   className="border-2 border-black/10 p-5 hover:border-accent transition-colors no-underline"
                 >
                   <p className="font-mono text-sm font-bold">{beat.title}</p>
-                  <p className="font-mono text-xs text-black/50 mt-1">
+                  <p className="font-mono text-xs text-black/70 mt-1">
                     {beat.genre}{beat.bpm ? ` · ${beat.bpm} BPM` : ''}{beat.musical_key ? ` · ${beat.musical_key}` : ''}
                   </p>
                   <div className="flex gap-3 mt-2">
                     {beat.mp3_lease_price && (
-                      <span className="font-mono text-[10px] text-black/40">
+                      <span className="font-mono text-[10px] text-black/60">
                         MP3 ${(beat.mp3_lease_price / 100).toFixed(2)}
                       </span>
                     )}
                     {beat.trackout_lease_price && (
-                      <span className="font-mono text-[10px] text-black/40">
+                      <span className="font-mono text-[10px] text-black/60">
                         Trackout ${(beat.trackout_lease_price / 100).toFixed(2)}
                       </span>
                     )}
@@ -431,7 +431,7 @@ export default async function PublicProfilePage({ params }: Props) {
       {!isOwner && (
         <section className="bg-white text-black py-16">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <p className="font-mono text-sm text-black/50 mb-4">
+            <p className="font-mono text-sm text-black/70 mb-4">
               Want your own profile?
             </p>
             <Link href="/login"

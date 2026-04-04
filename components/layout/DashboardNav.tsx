@@ -32,7 +32,7 @@ export default function DashboardNav({ role, isProducer, displayName, email, pro
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-8 sm:pt-12 pb-6">
           <div>
             <h1 className="text-heading-xl">{displayName || 'Welcome'}</h1>
-            <p className="font-mono text-white/50 text-sm mt-1">{email}</p>
+            <p className="font-mono text-white/80 text-sm mt-1">{email}</p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link
@@ -69,7 +69,7 @@ export default function DashboardNav({ role, isProducer, displayName, email, pro
                 className={`font-mono text-sm font-semibold uppercase tracking-wider px-5 py-4 border-b-2 transition-colors inline-flex items-center gap-2 flex-shrink-0 no-underline ${
                   isActive
                     ? 'border-accent text-accent'
-                    : 'border-transparent text-white/40 hover:text-white/70'
+                    : 'border-transparent text-white/60 hover:text-white/80'
                 }`}
               >
                 <t.icon className="w-4 h-4" />

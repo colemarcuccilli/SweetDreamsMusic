@@ -224,7 +224,7 @@ export default function ProfileEditor({ userId, profileSlug }: { userId: string;
   }
 
   if (loading) {
-    return <p className="font-mono text-sm text-black/40">Loading profile...</p>;
+    return <p className="font-mono text-sm text-black/70">Loading profile...</p>;
   }
 
   return (
@@ -237,7 +237,7 @@ export default function ProfileEditor({ userId, profileSlug }: { userId: string;
             <img src={coverPhotoUrl} alt="" className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
-              <span className="font-mono text-sm text-black/20">No cover photo</span>
+              <span className="font-mono text-sm text-black/50">No cover photo</span>
             </div>
           )}
         </div>
@@ -252,7 +252,7 @@ export default function ProfileEditor({ userId, profileSlug }: { userId: string;
             disabled={uploading !== null}
           />
         </label>
-        <span className="font-mono text-[10px] text-black/30 ml-3">Recommended: 1500×500, JPG or PNG, max 5MB</span>
+        <span className="font-mono text-[10px] text-black/60 ml-3">Recommended: 1500×500, JPG or PNG, max 5MB</span>
       </div>
 
       {/* Profile Picture */}
@@ -278,7 +278,7 @@ export default function ProfileEditor({ userId, profileSlug }: { userId: string;
                 disabled={uploading !== null}
               />
             </label>
-            <p className="font-mono text-[10px] text-black/30 mt-2">Square recommended, max 5MB</p>
+            <p className="font-mono text-[10px] text-black/60 mt-2">Square recommended, max 5MB</p>
           </div>
         </div>
       </div>
@@ -343,7 +343,7 @@ export default function ProfileEditor({ userId, profileSlug }: { userId: string;
         <div className="space-y-3">
           {SOCIAL_FIELDS.map((field) => (
             <div key={field.key} className="flex items-center gap-3">
-              <span className="font-mono text-xs text-black/50 w-28 flex-shrink-0">{field.label}</span>
+              <span className="font-mono text-xs text-black/70 w-28 flex-shrink-0">{field.label}</span>
               <input
                 type="url"
                 value={socialLinks[field.key] || ''}
@@ -360,7 +360,7 @@ export default function ProfileEditor({ userId, profileSlug }: { userId: string;
       {profileSlug && (
         <div className="border border-black/10 p-4 flex items-center justify-between">
           <div>
-            <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Your Public Profile</p>
+            <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider">Your Public Profile</p>
             <p className="font-mono text-sm">/u/{profileSlug}</p>
           </div>
           <a
@@ -389,7 +389,7 @@ export default function ProfileEditor({ userId, profileSlug }: { userId: string;
         <div className="flex items-center justify-between mb-6">
           <div>
             <h2 className="text-heading-lg">PROJECTS</h2>
-            <p className="font-mono text-xs text-black/40 mt-1">Showcase your releases, singles, and projects with cover art and links.</p>
+            <p className="font-mono text-xs text-black/60 mt-1">Showcase your releases, singles, and projects with cover art and links.</p>
           </div>
           <button
             onClick={addProject}
@@ -400,9 +400,9 @@ export default function ProfileEditor({ userId, profileSlug }: { userId: string;
         </div>
 
         {loadingProjects ? (
-          <p className="font-mono text-sm text-black/40">Loading projects...</p>
+          <p className="font-mono text-sm text-black/70">Loading projects...</p>
         ) : projects.length === 0 ? (
-          <p className="font-mono text-xs text-black/30 border border-black/10 p-8 text-center">
+          <p className="font-mono text-xs text-black/60 border border-black/10 p-8 text-center">
             No projects yet. Add your first release, single, or project to showcase on your profile.
           </p>
         ) : (
@@ -416,7 +416,7 @@ export default function ProfileEditor({ userId, profileSlug }: { userId: string;
                       <img src={project.cover_image_url} alt="" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
-                        <span className="font-mono text-[10px] text-black/20">No art</span>
+                        <span className="font-mono text-[10px] text-black/50">No art</span>
                       </div>
                     )}
                     <label className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer flex items-center justify-center">
@@ -456,10 +456,10 @@ export default function ProfileEditor({ userId, profileSlug }: { userId: string;
 
                     {/* Platform Links */}
                     <div className="border border-black/10 p-3 space-y-2">
-                      <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider font-bold">Platform Links</p>
+                      <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider font-bold">Platform Links</p>
                       {PROJECT_LINK_FIELDS.map((field) => (
                         <div key={field.key} className="flex items-center gap-2">
-                          <span className="font-mono text-[10px] text-black/50 w-24 flex-shrink-0">{field.label}</span>
+                          <span className="font-mono text-[10px] text-black/70 w-24 flex-shrink-0">{field.label}</span>
                           <input
                             type="url"
                             value={(project.links || {})[field.key] || ''}
@@ -496,7 +496,7 @@ export default function ProfileEditor({ userId, profileSlug }: { userId: string;
                           onChange={(e) => { updateProject(project.id, { is_public: e.target.checked }); }}
                           className="accent-accent"
                         />
-                        <span className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Public</span>
+                        <span className="font-mono text-[10px] text-black/60 uppercase tracking-wider">Public</span>
                       </label>
                     </div>
                   </div>

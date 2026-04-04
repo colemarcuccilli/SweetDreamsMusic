@@ -144,7 +144,7 @@ export default function HomePage() {
                 <h3 className="text-heading-sm mb-2">STUDIO A</h3>
                 <div className="flex items-baseline gap-1 mb-3">
                   <span className="font-heading text-display-sm text-accent">{formatCents(ROOM_RATES.studio_a)}</span>
-                  <span className="font-mono text-sm text-white/50">/hour</span>
+                  <span className="font-mono text-sm text-white/80">/hour</span>
                 </div>
                 <p className="font-mono text-sm text-white/60">Our primary recording room. Premium acoustics and equipment.</p>
               </div>
@@ -157,13 +157,13 @@ export default function HomePage() {
                 <h3 className="text-heading-sm mb-2">STUDIO B</h3>
                 <div className="flex items-baseline gap-1 mb-3">
                   <span className="font-heading text-display-sm text-accent">{formatCents(ROOM_RATES.studio_b)}</span>
-                  <span className="font-mono text-sm text-white/50">/hour</span>
+                  <span className="font-mono text-sm text-white/80">/hour</span>
                 </div>
                 <p className="font-mono text-sm text-white/60">Versatile second studio. Perfect for all session types.</p>
               </div>
             </div>
           </div>
-          <div className="flex flex-wrap gap-4 font-mono text-sm text-white/50 mb-8">
+          <div className="flex flex-wrap gap-4 font-mono text-sm text-white/80 mb-8">
             <span className="text-accent font-semibold">4hr Sweet Spots available</span>
             <span className="text-white/20">|</span>
             <span>Open 24 hours</span>

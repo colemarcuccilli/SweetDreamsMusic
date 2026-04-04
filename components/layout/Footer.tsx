@@ -36,7 +36,7 @@ export default function Footer() {
             <h4 className="text-lg mb-4">STUDIO HOURS</h4>
             <div className="font-mono text-sm text-white/60 space-y-2">
               <p>Open 24 Hours — 7 Days a Week</p>
-              <p className="text-white/40 text-xs mt-3">Regular: 9 AM – 10 PM</p>
+              <p className="text-white/60 text-xs mt-3">Regular: 9 AM – 10 PM</p>
               <p className="text-amber-400/70 text-xs">Late Night: 10 PM – 2 AM (+$10/hr)</p>
               <p className="text-red-400/70 text-xs">After Hours: 2 AM – 9 AM (+$30/hr)</p>
               <p className="text-accent text-xs">Same-day booking: +$10/hr</p>
@@ -45,14 +45,14 @@ export default function Footer() {
         </div>
 
         <div className="mt-12 pt-8 border-t border-white/10 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <p className="font-mono text-xs text-white/40">
+          <p className="font-mono text-xs text-white/60">
             &copy; {new Date().getFullYear()} Sweet Dreams Music LLC. All rights reserved.
           </p>
           <Link
             href="https://sweetdreams.us"
             target="_blank"
             rel="noopener noreferrer"
-            className="font-mono text-xs text-white/40 hover:text-accent transition-colors no-underline"
+            className="font-mono text-xs text-white/60 hover:text-accent transition-colors no-underline"
           >
             A Sweet Dreams Company
           </Link>

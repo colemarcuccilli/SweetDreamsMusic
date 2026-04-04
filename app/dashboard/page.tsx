@@ -131,7 +131,7 @@ export default async function DashboardPage() {
 
               {(!bookings || bookings.length === 0) ? (
                 <div className="border-2 border-black/10 p-8 text-center">
-                  <p className="font-mono text-sm text-black/50 mb-4">No sessions yet</p>
+                  <p className="font-mono text-sm text-black/70 mb-4">No sessions yet</p>
                   <Link
                     href="/book"
                     className="font-mono text-sm font-bold text-accent hover:underline"
@@ -154,7 +154,7 @@ export default async function DashboardPage() {
                               hour: 'numeric', minute: '2-digit', timeZone: 'UTC'
                             })}
                           </p>
-                          <p className="font-mono text-xs text-black/50 mt-1">
+                          <p className="font-mono text-xs text-black/70 mt-1">
                             {booking.duration} hour{booking.duration > 1 ? 's' : ''} — {formatCents(booking.total_amount)}
                             {booking.room && ` · ${booking.room === 'studio_a' ? 'Studio A' : 'Studio B'}`}
                           </p>
@@ -216,7 +216,7 @@ export default async function DashboardPage() {
 
               {filesWithUrls.length === 0 ? (
                 <div className="border-2 border-black/10 p-8 text-center">
-                  <p className="font-mono text-sm text-black/50">
+                  <p className="font-mono text-sm text-black/70">
                     No files yet. Files from your sessions will appear here.
                   </p>
                 </div>
@@ -229,12 +229,12 @@ export default async function DashboardPage() {
                           <p className="font-mono text-sm font-semibold truncate">
                             {file.display_name || file.file_name}
                           </p>
-                          <p className="font-mono text-xs text-black/50 mt-1">
+                          <p className="font-mono text-xs text-black/70 mt-1">
                             by {file.uploaded_by_name} — {new Date(file.created_at).toLocaleDateString()}
                           </p>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
-                          <span className="font-mono text-xs text-black/40 uppercase">
+                          <span className="font-mono text-xs text-black/60 uppercase">
                             {file.file_type?.split('/')[1] || 'file'}
                           </span>
                           {file.downloadUrl && (
@@ -284,7 +284,7 @@ export default async function DashboardPage() {
                       className="border-2 border-black/10 p-4 hover:border-accent transition-colors no-underline"
                     >
                       <p className="font-mono text-sm font-bold truncate">{beat.title}</p>
-                      <p className="font-mono text-xs text-black/50 mt-1">
+                      <p className="font-mono text-xs text-black/70 mt-1">
                         {beat.producer}
                         {beat.bpm && ` · ${beat.bpm} BPM`}
                         {beat.genre && ` · ${beat.genre}`}
@@ -308,7 +308,7 @@ export default async function DashboardPage() {
               <ShoppingBag className="w-8 h-8 text-accent flex-shrink-0" />
               <div>
                 <p className="font-mono text-sm font-bold">MY BEAT PURCHASES</p>
-                <p className="font-mono text-xs text-black/40">View licenses, re-download files, and manage your beat purchases</p>
+                <p className="font-mono text-xs text-black/60">View licenses, re-download files, and manage your beat purchases</p>
               </div>
             </Link>
           </div>
@@ -334,7 +334,7 @@ export default async function DashboardPage() {
                       className="border-2 border-black/10 p-4 hover:border-accent transition-colors no-underline"
                     >
                       <p className="font-mono text-sm font-bold truncate">{beat.title}</p>
-                      <p className="font-mono text-xs text-black/50 mt-1">
+                      <p className="font-mono text-xs text-black/70 mt-1">
                         {beat.producer} · Last edited {new Date(lyric.updated_at).toLocaleDateString()}
                       </p>
                     </Link>

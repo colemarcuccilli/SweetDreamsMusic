@@ -105,7 +105,7 @@ export default function BeatCard({ beat, isSaved, onToggleSave, showWriteButton 
             >
               {beat.title}
             </Link>
-            <p className="font-mono text-xs text-black/50 mt-0.5">
+            <p className="font-mono text-xs text-black/70 mt-0.5">
               {producerSlug ? (
                 <Link href={`/u/${producerSlug}`} className="hover:text-accent no-underline">
                   {producerName}
@@ -117,17 +117,17 @@ export default function BeatCard({ beat, isSaved, onToggleSave, showWriteButton 
             {/* Tags */}
             <div className="flex flex-wrap gap-1.5 mt-2">
               {beat.genre && (
-                <span className="font-mono text-[10px] text-black/40 border border-black/10 px-1.5 py-0.5">
+                <span className="font-mono text-[10px] text-black/60 border border-black/10 px-1.5 py-0.5">
                   {beat.genre}
                 </span>
               )}
               {beat.bpm && (
-                <span className="font-mono text-[10px] text-black/40 border border-black/10 px-1.5 py-0.5">
+                <span className="font-mono text-[10px] text-black/60 border border-black/10 px-1.5 py-0.5">
                   {beat.bpm} BPM
                 </span>
               )}
               {beat.musical_key && (
-                <span className="font-mono text-[10px] text-black/40 border border-black/10 px-1.5 py-0.5">
+                <span className="font-mono text-[10px] text-black/60 border border-black/10 px-1.5 py-0.5">
                   {beat.musical_key}
                 </span>
               )}
@@ -199,7 +199,7 @@ export default function BeatCard({ beat, isSaved, onToggleSave, showWriteButton 
         </div>
         <div className="flex items-center gap-2">
           {beat.lease_count > 0 && (
-            <span className="font-mono text-[10px] text-black/30">{beat.lease_count} sold</span>
+            <span className="font-mono text-[10px] text-black/60">{beat.lease_count} sold</span>
           )}
           {beat.has_exclusive && beat.exclusive_price && beat.lease_count >= 3 && (
             <span className="font-mono text-[10px] text-amber-600 inline-flex items-center gap-0.5" title="Exclusive price increases with demand">

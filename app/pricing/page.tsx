@@ -180,15 +180,15 @@ export default function PricingPage() {
             {BAND_PRICING.map((pkg) => (
               <div key={pkg.hours} className="border border-white/10 p-8">
                 <h3 className="text-heading-sm mb-2">{pkg.label}</h3>
-                <p className="font-mono text-xs text-white/40 mb-4">{pkg.note}</p>
+                <p className="font-mono text-xs text-white/70 mb-4">{pkg.note}</p>
                 <div className="flex items-baseline gap-1 mb-4">
                   <span className="font-heading text-display-sm text-accent">{formatCents(pkg.price)}</span>
                 </div>
-                <p className="font-mono text-sm text-white/50">{formatCents(pkg.perHour)}/hour</p>
+                <p className="font-mono text-sm text-white/80">{formatCents(pkg.perHour)}/hour</p>
               </div>
             ))}
           </div>
-          <p className="font-mono text-xs text-white/30 mt-8">
+          <p className="font-mono text-xs text-white/60 mt-8">
             Band recording includes full use of Studio A. 4-hour minimum booking required.
           </p>
         </div>

@@ -51,7 +51,7 @@ export default async function BeatDetailPage({ params }: Props) {
           <div className="flex flex-col lg:flex-row gap-12">
             {/* Left: Beat info + player */}
             <div className="flex-1">
-              <Link href="/beats" className="font-mono text-xs text-white/40 hover:text-accent uppercase tracking-wider no-underline mb-4 block">
+              <Link href="/beats" className="font-mono text-xs text-white/60 hover:text-accent uppercase tracking-wider no-underline mb-4 block">
                 &larr; Back to beats
               </Link>
               <div className="flex items-start gap-6 mb-6">
@@ -60,7 +60,7 @@ export default async function BeatDetailPage({ params }: Props) {
                 )}
                 <div>
                   <h1 className="text-display-md mb-3">{beat.title}</h1>
-                  <p className="font-mono text-white/50 text-lg">
+                  <p className="font-mono text-white/80 text-lg">
                     by{' '}
                     {producer?.public_profile_slug ? (
                       <Link href={`/u/${producer.public_profile_slug}`} className="text-accent hover:underline no-underline">
@@ -76,22 +76,22 @@ export default async function BeatDetailPage({ params }: Props) {
               {/* Tags */}
               <div className="flex flex-wrap gap-2 mb-8">
                 {beat.genre && (
-                  <span className="font-mono text-xs text-white/50 border border-white/20 px-3 py-1">
+                  <span className="font-mono text-xs text-white/80 border border-white/20 px-3 py-1">
                     {beat.genre}
                   </span>
                 )}
                 {beat.bpm && (
-                  <span className="font-mono text-xs text-white/50 border border-white/20 px-3 py-1">
+                  <span className="font-mono text-xs text-white/80 border border-white/20 px-3 py-1">
                     {beat.bpm} BPM
                   </span>
                 )}
                 {beat.musical_key && (
-                  <span className="font-mono text-xs text-white/50 border border-white/20 px-3 py-1">
+                  <span className="font-mono text-xs text-white/80 border border-white/20 px-3 py-1">
                     {beat.musical_key}
                   </span>
                 )}
                 {beat.tags?.map((tag: string) => (
-                  <span key={tag} className="font-mono text-xs text-white/30 border border-white/10 px-3 py-1">
+                  <span key={tag} className="font-mono text-xs text-white/60 border border-white/10 px-3 py-1">
                     {tag}
                   </span>
                 ))}
@@ -112,7 +112,7 @@ export default async function BeatDetailPage({ params }: Props) {
               {/* Info badges */}
               <div className="flex flex-wrap gap-3 mt-4">
                 {beat.lease_count > 0 && (
-                  <span className="font-mono text-[10px] text-white/30">
+                  <span className="font-mono text-[10px] text-white/60">
                     {beat.lease_count} lease{beat.lease_count !== 1 ? 's' : ''} sold
                   </span>
                 )}
@@ -131,7 +131,7 @@ export default async function BeatDetailPage({ params }: Props) {
 
             {/* Right: License pricing table */}
             <div className="lg:w-96 flex-shrink-0">
-              <h2 className="font-mono text-xs text-white/40 uppercase tracking-wider mb-4">Choose a License</h2>
+              <h2 className="font-mono text-xs text-white/60 uppercase tracking-wider mb-4">Choose a License</h2>
               <div className="space-y-3">
                 {beat.mp3_lease_price && (
                   <LicenseOption
@@ -202,13 +202,13 @@ function LicenseOption({
       <div className="flex items-start justify-between mb-2">
         <div>
           <h3 className="font-mono text-sm font-bold">{name}</h3>
-          <p className="font-mono text-[10px] text-white/40 mt-1">{description}</p>
+          <p className="font-mono text-[10px] text-white/70 mt-1">{description}</p>
         </div>
         <span className={`font-mono text-lg font-bold flex-shrink-0 ml-4 ${isExclusive ? 'text-accent' : 'text-white'}`}>
           {formatCents(price)}
         </span>
       </div>
-      <p className="font-mono text-[10px] text-white/30 mb-3">Delivery: {delivery}</p>
+      <p className="font-mono text-[10px] text-white/60 mb-3">Delivery: {delivery}</p>
       <BuyButton beatId={beatId} licenseType={type} isExclusive={isExclusive} />
     </div>
   );

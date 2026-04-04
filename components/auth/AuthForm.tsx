@@ -163,7 +163,7 @@ export default function AuthForm() {
           <button
             type="button"
             onClick={() => { setMode('forgot'); setError(''); setMessage(''); }}
-            className="font-mono text-sm text-black/40 hover:text-accent transition-colors underline"
+            className="font-mono text-sm text-black/60 hover:text-accent transition-colors underline"
           >
             Forgot your password?
           </button>

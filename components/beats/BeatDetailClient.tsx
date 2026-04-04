@@ -68,7 +68,7 @@ export default function BeatDetailClient({ beat }: BeatDetailClientProps) {
         <Repeat className="w-5 h-5" />
       </button>
 
-      <p className="font-mono text-xs text-white/40">
+      <p className="font-mono text-xs text-white/70">
         {isThisPlaying ? 'Playing...' : beat.previewUrl ? 'Click to preview' : 'No preview available'}
       </p>
     </div>

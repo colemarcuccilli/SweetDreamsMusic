@@ -154,7 +154,7 @@ export default function PrivateBeatSalePage() {
       <div className="min-h-screen bg-black flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-accent" />
-          <p className="font-mono text-sm text-white/50">Loading sale details...</p>
+          <p className="font-mono text-sm text-white/80">Loading sale details...</p>
         </div>
       </div>
     );
@@ -169,7 +169,7 @@ export default function PrivateBeatSalePage() {
           <h1 className="font-mono text-xl font-bold text-white uppercase tracking-wider mb-4">
             NOT FOUND
           </h1>
-          <p className="font-mono text-sm text-white/50 mb-6">{error}</p>
+          <p className="font-mono text-sm text-white/80 mb-6">{error}</p>
           <a href="/beats" className="font-mono text-sm text-accent hover:underline">
             Browse beats &rarr;
           </a>
@@ -191,7 +191,7 @@ export default function PrivateBeatSalePage() {
               <h1 className="font-mono text-2xl font-bold text-accent uppercase tracking-wider mb-2">
                 PURCHASE COMPLETE
               </h1>
-              <p className="font-mono text-sm text-white/50">
+              <p className="font-mono text-sm text-white/80">
                 Your beat purchase is complete. Download your files below.
               </p>
             </div>
@@ -208,8 +208,8 @@ export default function PrivateBeatSalePage() {
                 )}
                 <div className="font-mono text-sm space-y-1">
                   <p className="text-white font-bold">{sale.beat_title}</p>
-                  <p className="text-white/50">Produced by {sale.producer_name}</p>
-                  <p className="text-white/50">{sale.license_type} License</p>
+                  <p className="text-white/80">Produced by {sale.producer_name}</p>
+                  <p className="text-white/80">{sale.license_type} License</p>
                   {sale.amount > 0 && (
                     <p className="text-accent font-bold">{formatCents(sale.amount)}</p>
                   )}
@@ -220,7 +220,7 @@ export default function PrivateBeatSalePage() {
             {/* Download files */}
             {sale.download_files && sale.download_files.length > 0 && (
               <div className="space-y-3 mb-6">
-                <p className="font-mono text-xs text-white/40 uppercase tracking-wider">
+                <p className="font-mono text-xs text-white/60 uppercase tracking-wider">
                   Your Files
                 </p>
                 {sale.download_files.map((file, i) => (
@@ -244,7 +244,7 @@ export default function PrivateBeatSalePage() {
                   const el = document.getElementById('license-completed');
                   if (el) el.classList.toggle('hidden');
                 }}
-                className="flex items-center gap-2 font-mono text-xs text-white/40 uppercase tracking-wider hover:text-white/60 transition-colors mb-3"
+                className="flex items-center gap-2 font-mono text-xs text-white/60 uppercase tracking-wider hover:text-white/60 transition-colors mb-3"
               >
                 <FileText className="w-3 h-3" />
                 View License Agreement
@@ -272,7 +272,7 @@ export default function PrivateBeatSalePage() {
             <h1 className="font-mono text-xl font-bold text-white uppercase tracking-wider mb-2">
               {justPaid ? 'CONFIRMING PAYMENT' : 'REDIRECTING TO PAYMENT'}
             </h1>
-            <p className="font-mono text-sm text-white/50">
+            <p className="font-mono text-sm text-white/80">
               {justPaid
                 ? 'Payment received! Finalizing your purchase...'
                 : 'Please wait while we redirect you to checkout...'}
@@ -293,7 +293,7 @@ export default function PrivateBeatSalePage() {
             <h1 className="font-mono text-xl font-bold text-white uppercase tracking-wider mb-2">
               PROCESSING
             </h1>
-            <p className="font-mono text-sm text-white/50">
+            <p className="font-mono text-sm text-white/80">
               Signing your agreement...
             </p>
           </div>
@@ -311,7 +311,7 @@ export default function PrivateBeatSalePage() {
             <h1 className="font-mono text-2xl font-bold text-accent uppercase tracking-wider mb-2">
               LICENSE AGREEMENT
             </h1>
-            <p className="font-mono text-sm text-white/50 mb-6">
+            <p className="font-mono text-sm text-white/80 mb-6">
               Read the full license agreement below. You must agree to the terms and confirm your name to proceed.
             </p>
 
@@ -341,7 +341,7 @@ export default function PrivateBeatSalePage() {
 
             {/* Buyer name confirmation */}
             <div className="mb-6">
-              <label className="block font-mono text-xs text-white/40 uppercase tracking-wider mb-2">
+              <label className="block font-mono text-xs text-white/60 uppercase tracking-wider mb-2">
                 Type your full name to sign
               </label>
               <input
@@ -386,7 +386,7 @@ export default function PrivateBeatSalePage() {
           <h1 className="font-mono text-2xl font-bold text-accent uppercase tracking-wider mb-2">
             PRIVATE BEAT SALE
           </h1>
-          <p className="font-mono text-sm text-white/50 mb-6">
+          <p className="font-mono text-sm text-white/80 mb-6">
             {sale.producer_name} has set up a private sale for you. Review the details below.
           </p>
 
@@ -406,7 +406,7 @@ export default function PrivateBeatSalePage() {
               )}
               <div className="font-mono text-sm space-y-2 pt-1">
                 <p className="text-white font-bold text-base">{sale.beat_title}</p>
-                <p className="text-white/50">Produced by {sale.producer_name}</p>
+                <p className="text-white/80">Produced by {sale.producer_name}</p>
               </div>
             </div>
           </div>
@@ -414,17 +414,17 @@ export default function PrivateBeatSalePage() {
           {/* Sale details */}
           <div className="border-t border-b border-white/10 py-4 mb-6 font-mono text-sm space-y-3">
             <div className="flex justify-between">
-              <span className="text-white/40 uppercase tracking-wider text-xs">License</span>
+              <span className="text-white/60 uppercase tracking-wider text-xs">License</span>
               <span className="text-white font-bold">{sale.license_type}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-white/40 uppercase tracking-wider text-xs">Price</span>
+              <span className="text-white/60 uppercase tracking-wider text-xs">Price</span>
               <span className="text-accent font-bold text-lg">
                 {sale.requires_payment ? formatCents(sale.amount) : 'No Charge'}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-white/40 uppercase tracking-wider text-xs">Buyer</span>
+              <span className="text-white/60 uppercase tracking-wider text-xs">Buyer</span>
               <span className="text-white/70">{sale.buyer_name}</span>
             </div>
           </div>
@@ -440,7 +440,7 @@ export default function PrivateBeatSalePage() {
             CONTINUE TO AGREEMENT
           </button>
 
-          <p className="font-mono text-[10px] text-white/30 text-center mt-4">
+          <p className="font-mono text-[10px] text-white/60 text-center mt-4">
             You will review and sign the license agreement on the next step.
             {sale.requires_payment && ' Payment is processed securely via Stripe.'}
           </p>
