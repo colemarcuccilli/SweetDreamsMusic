@@ -1,23 +1,30 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { Sparkles, Tag, ChevronDown, ChevronUp } from 'lucide-react';
-import { CHANGELOG, type ChangelogTag, type ChangelogEntry } from '@/lib/changelog';
+import { useEffect, useMemo, useState } from 'react';
+import { Sparkles, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
+
+interface UpdateEntry {
+  id: string;
+  date: string;
+  title: string;
+  items: string[];
+  tags: string[];
+}
 
 interface UpdatesLogProps {
-  userRole: string; // 'admin' | 'engineer' | 'producer' | 'client' | etc
+  userRole: string;
   isProducer?: boolean;
 }
 
-function getVisibleTags(role: string, isProducer?: boolean): ChangelogTag[] {
-  const tags: ChangelogTag[] = ['all', 'client'];
+function getVisibleTags(role: string, isProducer?: boolean): string[] {
+  const tags = ['all', 'client'];
   if (role === 'engineer' || role === 'admin') tags.push('engineer');
   if (role === 'admin') tags.push('admin');
   if (isProducer || role === 'admin') tags.push('producer');
   return tags;
 }
 
-const TAG_COLORS: Record<ChangelogTag, string> = {
+const TAG_COLORS: Record<string, string> = {
   all: 'bg-accent/20 text-accent',
   client: 'bg-blue-100 text-blue-700',
   engineer: 'bg-green-100 text-green-700',
@@ -25,7 +32,7 @@ const TAG_COLORS: Record<ChangelogTag, string> = {
   admin: 'bg-red-100 text-red-700',
 };
 
-const TAG_LABELS: Record<ChangelogTag, string> = {
+const TAG_LABELS: Record<string, string> = {
   all: 'Everyone',
   client: 'Artists',
   engineer: 'Engineers',
@@ -34,40 +41,66 @@ const TAG_LABELS: Record<ChangelogTag, string> = {
 };
 
 export default function UpdatesLog({ userRole, isProducer }: UpdatesLogProps) {
-  const visibleTags = useMemo(() => getVisibleTags(userRole, isProducer), [userRole, isProducer]);
-  const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set(['0'])); // First group expanded
-  const [filterTag, setFilterTag] = useState<ChangelogTag | 'all_visible'>('all_visible');
+  const [updates, setUpdates] = useState<UpdateEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const [filterTag, setFilterTag] = useState<string>('all_visible');
 
-  // Filter entries to only those visible to this user's role
-  const visibleEntries = useMemo(() => {
-    return CHANGELOG.filter(entry =>
-      entry.tags.some(tag => visibleTags.includes(tag))
+  const visibleTags = useMemo(() => getVisibleTags(userRole, isProducer), [userRole, isProducer]);
+
+  useEffect(() => {
+    fetch('/api/updates?per_page=100')
+      .then(r => r.json())
+      .then(d => {
+        setUpdates(d.updates || []);
+        // Auto-expand the first entry
+        if (d.updates?.length > 0) setExpandedIds(new Set([d.updates[0].id]));
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Filter to entries visible to this user's role
+  const visibleUpdates = useMemo(() => {
+    return updates.filter(u =>
+      u.tags.some(tag => visibleTags.includes(tag))
     );
-  }, [visibleTags]);
+  }, [updates, visibleTags]);
 
   // Further filter by selected tag
-  const filteredEntries = useMemo(() => {
-    if (filterTag === 'all_visible') return visibleEntries;
-    return visibleEntries.filter(entry => entry.tags.includes(filterTag as ChangelogTag));
-  }, [visibleEntries, filterTag]);
+  const filteredUpdates = useMemo(() => {
+    if (filterTag === 'all_visible') return visibleUpdates;
+    return visibleUpdates.filter(u => u.tags.includes(filterTag));
+  }, [visibleUpdates, filterTag]);
 
-  // Group by version
+  // Group by date
   const grouped = useMemo(() => {
-    const map: Record<string, ChangelogEntry[]> = {};
-    filteredEntries.forEach(entry => {
-      const key = `${entry.version} — ${entry.date}`;
-      if (!map[key]) map[key] = [];
-      map[key].push(entry);
+    const map: Record<string, UpdateEntry[]> = {};
+    filteredUpdates.forEach(u => {
+      const dateKey = new Date(u.date).toLocaleDateString('en-US', {
+        month: 'long', day: 'numeric', year: 'numeric',
+      });
+      if (!map[dateKey]) map[dateKey] = [];
+      map[dateKey].push(u);
     });
     return Object.entries(map);
-  }, [filteredEntries]);
+  }, [filteredUpdates]);
 
-  function toggleVersion(idx: string) {
-    setExpandedVersions(prev => {
+  function toggleExpand(id: string) {
+    setExpandedIds(prev => {
       const next = new Set(prev);
-      if (next.has(idx)) next.delete(idx); else next.add(idx);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="w-6 h-6 text-accent animate-spin" />
+        <span className="font-mono text-sm text-black/40 ml-3">Loading updates...</span>
+      </div>
+    );
   }
 
   return (
@@ -80,7 +113,7 @@ export default function UpdatesLog({ userRole, isProducer }: UpdatesLogProps) {
             filterTag === 'all_visible' ? 'bg-black text-white' : 'bg-black/5 text-black/40 hover:bg-black/10'
           }`}
         >
-          All Updates
+          All Updates ({visibleUpdates.length})
         </button>
         {visibleTags.filter(t => t !== 'all').map(tag => (
           <button
@@ -90,75 +123,69 @@ export default function UpdatesLog({ userRole, isProducer }: UpdatesLogProps) {
               filterTag === tag ? 'bg-black text-white' : 'bg-black/5 text-black/40 hover:bg-black/10'
             }`}
           >
-            {TAG_LABELS[tag]}
+            {TAG_LABELS[tag] || tag}
           </button>
         ))}
       </div>
 
-      {/* Changelog */}
-      <div className="space-y-4">
+      {/* Updates grouped by date */}
+      <div className="space-y-6">
         {grouped.length === 0 && (
           <p className="font-mono text-sm text-black/30 text-center py-12">No updates match this filter</p>
         )}
 
-        {grouped.map(([versionKey, entries], idx) => {
-          const idxStr = String(idx);
-          const isExpanded = expandedVersions.has(idxStr);
-          const version = entries[0].version;
-          const date = entries[0].date;
+        {grouped.map(([dateKey, entries]) => (
+          <div key={dateKey}>
+            <h3 className="font-mono text-xs text-black/30 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <span className="w-2 h-2 bg-accent rounded-full" />
+              {dateKey}
+            </h3>
 
-          return (
-            <div key={versionKey} className="border-2 border-black/10">
-              <button
-                onClick={() => toggleVersion(idxStr)}
-                className="w-full p-4 flex items-center justify-between text-left hover:bg-black/[0.02] transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="bg-accent text-black font-mono text-[10px] font-bold px-2 py-1">
-                    v{version}
-                  </span>
-                  <span className="font-mono text-sm font-bold">
-                    {entries.length === 1 ? entries[0].title : `${entries.length} updates`}
-                  </span>
-                  <span className="font-mono text-xs text-black/30">
-                    {new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                  </span>
-                </div>
-                {isExpanded ? <ChevronUp className="w-4 h-4 text-black/30" /> : <ChevronDown className="w-4 h-4 text-black/30" />}
-              </button>
+            <div className="space-y-2 ml-4 border-l-2 border-black/5 pl-4">
+              {entries.map(update => {
+                const isExpanded = expandedIds.has(update.id);
+                const hasItems = update.items.length > 0;
 
-              {isExpanded && (
-                <div className="border-t border-black/10 divide-y divide-black/5">
-                  {entries.map((entry, eIdx) => (
-                    <div key={eIdx} className="p-4">
-                      <div className="flex items-start justify-between gap-3 mb-2">
-                        <div>
-                          <h4 className="font-mono text-sm font-bold">{entry.title}</h4>
-                          <p className="font-mono text-xs text-black/50 mt-0.5">{entry.description}</p>
-                        </div>
-                        <div className="flex gap-1 flex-shrink-0">
-                          {entry.tags.map(tag => (
-                            <span key={tag} className={`font-mono text-[9px] font-bold uppercase px-1.5 py-0.5 ${TAG_COLORS[tag]}`}>
-                              {TAG_LABELS[tag]}
+                return (
+                  <div key={update.id} className="border border-black/10 hover:border-black/20 transition-colors">
+                    <button
+                      onClick={() => hasItems && toggleExpand(update.id)}
+                      className={`w-full p-3 flex items-start justify-between text-left ${hasItems ? 'cursor-pointer' : 'cursor-default'}`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono text-[10px] text-black/20">{update.id}</span>
+                          {update.tags.map(tag => (
+                            <span key={tag} className={`font-mono text-[9px] font-bold uppercase px-1.5 py-0.5 ${TAG_COLORS[tag] || 'bg-black/5 text-black/40'}`}>
+                              {TAG_LABELS[tag] || tag}
                             </span>
                           ))}
                         </div>
+                        <p className="font-mono text-sm font-semibold mt-1 pr-4">{update.title}</p>
                       </div>
-                      <ul className="space-y-1 mt-3">
-                        {entry.items.map((item, iIdx) => (
-                          <li key={iIdx} className="font-mono text-xs text-black/60 flex items-start gap-2">
-                            <Sparkles className="w-3 h-3 text-accent flex-shrink-0 mt-0.5" />
-                            {item}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              )}
+                      {hasItems && (
+                        isExpanded ? <ChevronUp className="w-4 h-4 text-black/20 flex-shrink-0 mt-1" /> : <ChevronDown className="w-4 h-4 text-black/20 flex-shrink-0 mt-1" />
+                      )}
+                    </button>
+
+                    {isExpanded && hasItems && (
+                      <div className="border-t border-black/5 px-3 py-2 bg-black/[0.01]">
+                        <ul className="space-y-1">
+                          {update.items.map((item, i) => (
+                            <li key={i} className="font-mono text-xs text-black/60 flex items-start gap-2">
+                              <Sparkles className="w-3 h-3 text-accent flex-shrink-0 mt-0.5" />
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
     </div>
   );
