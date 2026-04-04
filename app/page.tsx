@@ -8,14 +8,28 @@ import { STUDIO_IMAGES } from '@/lib/images';
 import HeroTitle from '@/components/home/HeroTitle';
 
 export const metadata: Metadata = {
-  title: 'Sweet Dreams Music — Fort Wayne Recording Studio | Book Sessions Online',
-  description: 'Professional recording studio in Fort Wayne, Indiana. Two studios, four engineers, open 24 hours. Recording, mixing, mastering & production starting at $50/hour. Book online with 50% deposit.',
+  title: 'Sweet Dreams Music — Fort Wayne Recording Studio & Beat Store | Book Sessions Online',
+  description: 'Professional recording studio and beat store in Fort Wayne, Indiana. Two studios, four engineers, open 24 hours. Recording, mixing, mastering, music production, and beat marketplace. Sessions starting at $50/hour. Book online with 50% deposit.',
   alternates: { canonical: '/' },
   openGraph: {
-    title: 'Sweet Dreams Music — Fort Wayne Recording Studio',
-    description: 'Professional recording studio in Fort Wayne, IN. Two studios, four engineers, open 24/7. Recording, mixing, mastering & production starting at $50/hour.',
+    title: 'Sweet Dreams Music — Fort Wayne Recording Studio & Beat Store',
+    description: 'Professional recording studio and beat marketplace in Fort Wayne, IN. Two studios, four engineers, open 24/7. Recording, mixing, mastering, production, and artist development. Sessions starting at $50/hour.',
     url: SITE_URL,
     type: 'website',
+    images: [
+      {
+        url: `${SITE_URL}/og-image.png`,
+        width: 1200,
+        height: 630,
+        alt: 'Sweet Dreams Music — Fort Wayne Recording Studio & Beat Store',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Sweet Dreams Music — Fort Wayne Recording Studio & Beat Store',
+    description: 'Professional recording studio in Fort Wayne, IN. Two studios, four engineers, open 24/7. Beat store, recording, mixing, mastering & production.',
+    images: [`${SITE_URL}/og-image.png`],
   },
 };
 

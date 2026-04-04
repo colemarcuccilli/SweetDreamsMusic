@@ -5,9 +5,15 @@ import { SITE_URL, ENGINEERS } from '@/lib/constants';
 import { STUDIO_IMAGES } from '@/lib/images';
 
 export const metadata: Metadata = {
-  title: 'Engineers',
-  description: 'Meet our recording engineers. Professional sound engineers specializing in recording, mixing, and production.',
+  title: 'Our Engineers — Recording, Mixing & Production',
+  description: 'Meet the Sweet Dreams Music engineering team in Fort Wayne, IN. Four professional sound engineers specializing in recording, mixing, mastering, and music production. 30+ years of combined experience.',
   alternates: { canonical: `${SITE_URL}/engineers` },
+  openGraph: {
+    title: 'Our Engineers — Recording, Mixing & Production | Sweet Dreams Music',
+    description: 'Four professional sound engineers in Fort Wayne, Indiana. Specializing in recording, mixing, mastering, and full music production.',
+    url: `${SITE_URL}/engineers`,
+    type: 'website',
+  },
 };
 
 const ENGINEER_PHOTOS: Record<string, string> = {

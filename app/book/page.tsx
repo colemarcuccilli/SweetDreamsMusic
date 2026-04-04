@@ -7,9 +7,15 @@ import { getSessionUser } from '@/lib/auth';
 import BookingFlow from '@/components/booking/BookingFlow';
 
 export const metadata: Metadata = {
-  title: 'Book a Session',
-  description: 'Book your recording session at Sweet Dreams Music. Choose your date, time, studio, and engineer. Starting at $50/hour.',
+  title: 'Book a Recording Session — Schedule Online',
+  description: 'Book your recording session at Sweet Dreams Music in Fort Wayne, IN. Choose your date, time, studio, and engineer. Sessions starting at $50/hour with 50% deposit. Open 24/7.',
   alternates: { canonical: `${SITE_URL}/book` },
+  openGraph: {
+    title: 'Book a Recording Session | Sweet Dreams Music — Fort Wayne, IN',
+    description: 'Schedule your recording session online. Choose your studio, engineer, date, and time. Starting at $50/hour with 50% deposit booking.',
+    url: `${SITE_URL}/book`,
+    type: 'website',
+  },
 };
 
 export default async function BookPage() {

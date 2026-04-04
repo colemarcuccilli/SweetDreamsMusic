@@ -8,7 +8,7 @@ function LocalBusinessSchema() {
     '@id': `${SITE_URL}/#organization`,
     name: 'Sweet Dreams Music',
     alternateName: 'Sweet Dreams Music LLC',
-    description: 'Professional recording studio in Fort Wayne, Indiana. Two studios, four engineers, open 24 hours. Recording, mixing, mastering, and music production services. Sessions starting at $50/hour.',
+    description: 'Professional recording studio and beat store in Fort Wayne, Indiana. Two studios, four engineers, open 24 hours. Recording, mixing, mastering, music production, beat marketplace, and artist development. Sessions starting at $50/hour.',
     url: SITE_URL,
     telephone: '',
     email: BRAND.email,
@@ -198,11 +198,78 @@ function FAQSchema() {
   );
 }
 
+function MusicStoreSchema() {
+  const schema = {
+    '@context': 'https://schema.org',
+    '@type': 'MusicStore',
+    '@id': `${SITE_URL}/#beatstore`,
+    name: 'Sweet Dreams Beat Store',
+    description: 'Online beat marketplace by Sweet Dreams Music. Browse and license beats from Fort Wayne producers. MP3 leases, trackout leases, and exclusive rights available.',
+    url: `${SITE_URL}/beats`,
+    parentOrganization: {
+      '@id': `${SITE_URL}/#organization`,
+    },
+    address: {
+      '@type': 'PostalAddress',
+      addressLocality: 'Fort Wayne',
+      addressRegion: 'IN',
+      addressCountry: 'US',
+    },
+    priceRange: '$29.99 - $400+',
+    currenciesAccepted: 'USD',
+    paymentAccepted: 'Credit Card',
+    hasOfferCatalog: {
+      '@type': 'OfferCatalog',
+      name: 'Beat Licenses',
+      itemListElement: [
+        {
+          '@type': 'Offer',
+          itemOffered: {
+            '@type': 'Service',
+            name: 'MP3 Lease',
+            description: 'MP3 download with non-exclusive license for streaming and personal projects.',
+          },
+          price: '29.99',
+          priceCurrency: 'USD',
+        },
+        {
+          '@type': 'Offer',
+          itemOffered: {
+            '@type': 'Service',
+            name: 'Trackout Lease',
+            description: 'Stems and trackouts with non-exclusive license for mixing, distribution, and streaming.',
+          },
+          price: '74.99',
+          priceCurrency: 'USD',
+        },
+        {
+          '@type': 'Offer',
+          itemOffered: {
+            '@type': 'Service',
+            name: 'Exclusive Rights',
+            description: 'Full ownership with all rights transferred. Beat removed from store after purchase.',
+          },
+          price: '400.00',
+          priceCurrency: 'USD',
+        },
+      ],
+    },
+  };
+
+  return (
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(schema) }}
+    />
+  );
+}
+
 export default function JsonLd() {
   return (
     <>
       <LocalBusinessSchema />
       <WebSiteSchema />
+      <MusicStoreSchema />
       <FAQSchema />
     </>
   );

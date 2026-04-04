@@ -6,9 +6,15 @@ import { createClient } from '@/lib/supabase/server';
 import BeatStoreClient from '@/components/beats/BeatStoreClient';
 
 export const metadata: Metadata = {
-  title: 'Beat Store',
-  description: 'Browse and buy beats from Sweet Dreams Music producers. MP3 leases, trackout leases, and exclusive rights available.',
+  title: 'Beat Store — Buy Beats Online | MP3 Leases, Trackouts & Exclusives',
+  description: 'Browse and buy beats from Sweet Dreams Music producers in Fort Wayne, IN. Hip-hop, trap, R&B, and more. MP3 leases from $29.99, trackout leases, and exclusive rights available. Preview and license beats instantly.',
   alternates: { canonical: `${SITE_URL}/beats` },
+  openGraph: {
+    title: 'Beat Store — Buy Beats Online | Sweet Dreams Music',
+    description: 'Browse and license beats from Fort Wayne producers. MP3 leases, trackout leases, and exclusive rights. Hip-hop, trap, R&B, drill, and more genres available.',
+    url: `${SITE_URL}/beats`,
+    type: 'website',
+  },
 };
 
 export default async function BeatsPage() {

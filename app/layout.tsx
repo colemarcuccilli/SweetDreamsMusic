@@ -58,15 +58,25 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     title: SEO.defaultTitle,
-    description: 'Professional recording studio in Fort Wayne, IN. Two studios, four engineers, open 24/7. Book sessions starting at $50/hour. Recording, mixing, mastering & production.',
+    description: 'Professional recording studio and beat store in Fort Wayne, Indiana. Two studios, four engineers, open 24/7. Recording, mixing, mastering, music production, and beat marketplace. Sessions starting at $50/hour.',
     url: SITE_URL,
     siteName: BRAND.name,
     locale: 'en_US',
+    images: [
+      {
+        url: `${SITE_URL}/og-image.png`,
+        width: 1200,
+        height: 630,
+        alt: 'Sweet Dreams Music — Fort Wayne Recording Studio & Beat Store',
+        type: 'image/png',
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: SEO.defaultTitle,
-    description: 'Professional recording studio in Fort Wayne, IN. Two studios, four engineers, open 24/7. Sessions starting at $50/hour.',
+    description: 'Professional recording studio and beat store in Fort Wayne, IN. Two studios, four engineers, open 24/7. Sessions starting at $50/hour.',
+    images: [`${SITE_URL}/og-image.png`],
   },
   verification: {
     google: process.env.GOOGLE_SITE_VERIFICATION || undefined,

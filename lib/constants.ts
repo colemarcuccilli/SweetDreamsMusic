@@ -19,9 +19,9 @@ export const BRAND = {
 };
 
 export const SEO = {
-  defaultTitle: 'Sweet Dreams Music — Fort Wayne Recording Studio',
+  defaultTitle: 'Sweet Dreams Music — Fort Wayne Recording Studio & Beat Store',
   titleTemplate: '%s | Sweet Dreams Music — Fort Wayne Recording Studio',
-  defaultDescription: 'Professional recording studio in Fort Wayne, IN. Book sessions starting at $60/hour. Band recording available.',
+  defaultDescription: 'Professional recording studio in Fort Wayne, Indiana. Two studios, four engineers, open 24/7. Beat store with MP3 leases, trackout leases, and exclusive rights. Music production, mixing, mastering, and artist development. Sessions starting at $50/hour.',
   keywords: [
     'Fort Wayne recording studio',
     'recording studio near me',
@@ -35,10 +35,21 @@ export const SEO = {
     'band recording Indiana',
     'buy beats online',
     'beat store',
+    'beat marketplace',
+    'buy beats Fort Wayne',
+    'lease beats online',
+    'exclusive beats for sale',
     'music studio 24 hours',
     'affordable recording studio',
     'recording session booking',
+    'artist development Fort Wayne',
+    'music video production Fort Wayne',
+    'sell beats online',
+    'hip hop beats',
+    'trap beats',
+    'r&b beats',
     'Sweet Dreams Music',
+    'Sweet Dreams Music Fort Wayne',
   ],
 };
 

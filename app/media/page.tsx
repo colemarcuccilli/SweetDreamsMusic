@@ -5,9 +5,15 @@ import { SITE_URL } from '@/lib/constants';
 import { STUDIO_IMAGES } from '@/lib/images';
 
 export const metadata: Metadata = {
-  title: 'Media',
-  description: 'Music videos, visual content, and creative media by Sweet Dreams. Full-service creative agency based in Fort Wayne, IN.',
+  title: 'Media — Music Videos & Visual Content',
+  description: 'Music videos, visual content, and creative media production by Sweet Dreams Music. Full-service music video and media production based in Fort Wayne, Indiana.',
   alternates: { canonical: `${SITE_URL}/media` },
+  openGraph: {
+    title: 'Media — Music Videos & Visual Content | Sweet Dreams Music',
+    description: 'Music video production and creative media by Sweet Dreams Music in Fort Wayne, IN. Professional visual content for artists.',
+    url: `${SITE_URL}/media`,
+    type: 'website',
+  },
 };
 
 const videos = [

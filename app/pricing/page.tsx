@@ -7,9 +7,15 @@ import { formatCents, calculateSessionTotal } from '@/lib/utils';
 import { STUDIO_IMAGES } from '@/lib/images';
 
 export const metadata: Metadata = {
-  title: 'Pricing',
-  description: 'Recording studio pricing. Studio A from $70/hr, Studio B from $50/hr. Sweet Spot deals and band recording available. Open 24 hours.',
+  title: 'Studio Pricing — Recording Rates & Packages',
+  description: 'Sweet Dreams Music recording studio pricing in Fort Wayne, IN. Studio A from $70/hr, Studio B from $50/hr. 4-hour Sweet Spot deals, band recording packages, and 24-hour availability. 50% deposit booking.',
   alternates: { canonical: `${SITE_URL}/pricing` },
+  openGraph: {
+    title: 'Studio Pricing — Recording Rates & Packages | Sweet Dreams Music',
+    description: 'Recording studio rates starting at $50/hr. Studio A and Studio B pricing, Sweet Spot deals, band recording packages. Open 24/7 in Fort Wayne, Indiana.',
+    url: `${SITE_URL}/pricing`,
+    type: 'website',
+  },
 };
 
 const included = [

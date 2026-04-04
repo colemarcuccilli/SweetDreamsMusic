@@ -6,9 +6,15 @@ import { SITE_URL, BRAND } from '@/lib/constants';
 import { STUDIO_IMAGES } from '@/lib/images';
 
 export const metadata: Metadata = {
-  title: 'About',
-  description: 'Learn about Sweet Dreams Music recording studio in Fort Wayne, IN. Our studio, equipment, location, and hours.',
+  title: 'About Sweet Dreams Music — Fort Wayne Recording Studio',
+  description: 'Learn about Sweet Dreams Music LLC, a professional recording studio in Fort Wayne, Indiana. Two acoustically treated studios, premium equipment, four engineers, and 24/7 availability.',
   alternates: { canonical: `${SITE_URL}/about` },
+  openGraph: {
+    title: 'About Sweet Dreams Music — Fort Wayne Recording Studio',
+    description: 'Professional recording studio in Fort Wayne, Indiana. Two studios, premium equipment, four engineers, open 24/7.',
+    url: `${SITE_URL}/about`,
+    type: 'website',
+  },
 };
 
 export default function AboutPage() {
