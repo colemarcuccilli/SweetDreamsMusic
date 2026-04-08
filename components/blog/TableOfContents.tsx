@@ -36,7 +36,7 @@ export default function TableOfContents({ content }: TableOfContentsProps) {
   if (headings.length < 2) return null;
 
   return (
-    <nav className="sticky top-24" aria-label="Table of contents">
+    <nav aria-label="Table of contents">
       <p className="font-mono text-[10px] font-semibold tracking-[0.3em] uppercase text-black/40 mb-4">
         On This Page
       </p>

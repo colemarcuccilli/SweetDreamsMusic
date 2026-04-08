@@ -142,9 +142,11 @@ function renderMarkdown(content: string): string {
       continue;
     }
 
-    // Table detection: line contains | and has content
-    const isTableRow = /^\|(.+)\|$/.test(line.trim());
-    const isSeparatorRow = /^\|[\s:|-]+\|$/.test(line.trim());
+    // Table detection: line contains | with content between pipes
+    const trimmedLine = line.trim();
+    const pipeCount = (trimmedLine.match(/\|/g) || []).length;
+    const isTableRow = pipeCount >= 2 && trimmedLine.includes('|') && !trimmedLine.startsWith('#');
+    const isSeparatorRow = /^[\s|:-]+$/.test(trimmedLine) && trimmedLine.includes('---');
 
     if (isTableRow || isSeparatorRow) {
       if (!inTable) {
@@ -156,7 +158,7 @@ function renderMarkdown(content: string): string {
 
       if (isSeparatorRow) {
         // Parse alignments from separator row like |:---|:---:|---:|
-        const cells = line.trim().replace(/^\||\|$/g, '').split('|');
+        const cells = trimmedLine.replace(/^\||\|$/g, '').split('|');
         tableAlignments = cells.map(cell => {
           const trimmed = cell.trim();
           if (trimmed.startsWith(':') && trimmed.endsWith(':')) return 'center';
@@ -167,7 +169,7 @@ function renderMarkdown(content: string): string {
       }
 
       // Data row
-      const cells = line.trim().replace(/^\||\|$/g, '').split('|');
+      const cells = trimmedLine.replace(/^\||\|$/g, '').split('|');
       tableRows.push(cells);
       continue;
     } else if (inTable) {

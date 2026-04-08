@@ -9,6 +9,7 @@ import BlogContent from '@/components/blog/BlogContent';
 import TableOfContents from '@/components/blog/TableOfContents';
 import BlogCTA from '@/components/blog/BlogCTA';
 import BlogPostCard from '@/components/blog/BlogPostCard';
+import MobileTOC from '@/components/blog/MobileTOC';
 
 interface BlogPostPageProps {
   params: Promise<{ slug: string }>;
@@ -302,11 +303,16 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
               </div>
             </article>
 
-            {/* Sidebar: Table of Contents */}
-            <aside className="hidden lg:block w-64 shrink-0">
+            {/* Sidebar: Table of Contents (desktop — sticky) */}
+            <aside className="hidden lg:block w-64 shrink-0 self-start sticky top-24">
               <TableOfContents content={post.content || ''} />
             </aside>
           </div>
+        </div>
+
+        {/* Mobile TOC — fixed bottom bar */}
+        <div className="lg:hidden">
+          <MobileTOC content={post.content || ''} />
         </div>
       </section>
 
