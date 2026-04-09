@@ -9,7 +9,7 @@ export async function GET() {
 
   const { data: beats, error } = await supabase
     .from('beats')
-    .select('id, title, genre, bpm, musical_key, tags, mp3_lease_price, trackout_lease_price, exclusive_price, has_exclusive, lease_count, total_lease_revenue, status, created_at, preview_url, cover_image_url')
+    .select('id, title, genre, bpm, musical_key, tags, mp3_lease_price, trackout_lease_price, exclusive_price, has_exclusive, lease_count, total_lease_revenue, status, created_at, preview_url, cover_image_url, mp3_file_path, trackout_file_path, audio_file_path, contains_samples, sample_details')
     .eq('producer_id', profileId)
     .order('created_at', { ascending: false });
 
@@ -46,6 +46,14 @@ export async function POST(request: NextRequest) {
 
   if (!previewFile || !title) {
     return NextResponse.json({ error: 'preview_file and title required' }, { status: 400 });
+  }
+
+  // Convert dollar amounts to cents
+  function dollarsToCents(val: string): number | null {
+    if (!val) return null;
+    const num = parseFloat(val);
+    if (isNaN(num)) return null;
+    return Math.round(num * 100);
   }
 
   // Get producer info
@@ -105,14 +113,14 @@ export async function POST(request: NextRequest) {
       genre: genre || null,
       bpm: bpm ? parseInt(bpm) : null,
       musical_key: key || null,
-      tags: tags ? tags.split(',').map((t: string) => t.trim()) : [],
+      tags: tags ? tags.split(',').map((t: string) => t.trim()).filter(Boolean).concat(['Sweet Dreams']) : ['Sweet Dreams'],
       preview_url: previewUrl,
       audio_file_path: previewPath,
       mp3_file_path: mp3FilePath,
       trackout_file_path: trackoutFilePath,
-      mp3_lease_price: mp3LeasePrice ? parseInt(mp3LeasePrice) : null,
-      trackout_lease_price: trackoutLeasePrice ? parseInt(trackoutLeasePrice) : null,
-      exclusive_price: hasExclusive && exclusivePrice ? parseInt(exclusivePrice) : null,
+      mp3_lease_price: dollarsToCents(mp3LeasePrice),
+      trackout_lease_price: dollarsToCents(trackoutLeasePrice),
+      exclusive_price: hasExclusive ? dollarsToCents(exclusivePrice) : null,
       has_exclusive: hasExclusive,
       contains_samples: containsSamples,
       sample_details: containsSamples ? sampleDetails || null : null,

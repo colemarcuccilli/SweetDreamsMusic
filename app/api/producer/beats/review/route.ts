@@ -128,12 +128,17 @@ export async function POST(request: NextRequest) {
 
   // Upload cover image to storage
   const ext = coverImage.name.split('.').pop()?.toLowerCase() || 'jpg';
-  const imagePath = `covers/${beatId}.${ext}`;
+  const imagePath = `beats/covers/${beatId}.${ext}`;
   const imageBuffer = Buffer.from(await coverImage.arrayBuffer());
+
+  // Validate file size (max 5MB)
+  if (imageBuffer.length > 5 * 1024 * 1024) {
+    return NextResponse.json({ error: 'Cover image must be under 5MB' }, { status: 400 });
+  }
 
   const { error: uploadError } = await serviceClient
     .storage
-    .from('beats')
+    .from('media')
     .upload(imagePath, imageBuffer, {
       contentType: coverImage.type || 'image/jpeg',
       upsert: true,
@@ -147,7 +152,7 @@ export async function POST(request: NextRequest) {
   // Get public URL for the cover image
   const { data: urlData } = serviceClient
     .storage
-    .from('beats')
+    .from('media')
     .getPublicUrl(imagePath);
 
   const coverImageUrl = urlData.publicUrl;
