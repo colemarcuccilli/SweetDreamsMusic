@@ -167,6 +167,7 @@ export default function Accounting() {
       setShowPayoutForm(null);
       setPayoutAmount('');
       setPayoutNote('');
+      setPayoutMethod('cash');
     } else {
       alert(`Failed: ${data.error}`);
     }

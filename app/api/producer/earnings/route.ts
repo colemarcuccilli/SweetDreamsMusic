@@ -21,6 +21,8 @@ export async function GET() {
       totalGross: 0,
       platformFee: 0,
       netEarnings: 0,
+      totalPaid: 0,
+      pendingPayout: 0,
       totalBeats: 0,
       totalLeases: 0,
     });
@@ -38,14 +40,29 @@ export async function GET() {
   const netEarnings = Math.round(totalGross * PRODUCER_COMMISSION);
   const platformFee = Math.round(totalGross * PLATFORM_COMMISSION);
 
-  // Get payouts
-  const { data: payouts } = await serviceClient
+  // Get payouts from both tables (producer_payouts legacy + payroll_payouts new)
+  const { data: legacyPayouts } = await serviceClient
     .from('producer_payouts')
     .select('amount, status')
     .eq('producer_id', profileId)
     .eq('status', 'paid');
 
-  const totalPaid = payouts?.reduce((sum, p) => sum + p.amount, 0) || 0;
+  // Also check payroll_payouts (admin records payouts here)
+  const { data: profile } = await serviceClient
+    .from('profiles')
+    .select('display_name, producer_name')
+    .eq('id', profileId)
+    .single();
+
+  const producerName = profile?.producer_name || profile?.display_name || '';
+  const { data: payrollPayouts } = producerName ? await serviceClient
+    .from('payroll_payouts')
+    .select('amount')
+    .eq('person_name', producerName) : { data: null };
+
+  const legacyPaid = legacyPayouts?.reduce((sum, p) => sum + p.amount, 0) || 0;
+  const payrollPaid = payrollPayouts?.reduce((sum, p) => sum + p.amount, 0) || 0;
+  const totalPaid = legacyPaid + payrollPaid;
 
   return NextResponse.json({
     totalGross,
