@@ -381,6 +381,13 @@ export default function BookingManager() {
     setEditingRemainder(null);
   }
 
+  function saveKeptDeposit(bookingId: string) {
+    const cents = Math.round(parseFloat(remainderInput) * 100);
+    if (isNaN(cents) || cents < 0) return;
+    updateBooking(bookingId, { actual_deposit_paid: cents });
+    setEditingRemainder(null);
+  }
+
   function saveTimeChange(bookingId: string) {
     if (!dateInput || !timeInput) return;
     const [h, m] = timeInput.split(':').map(Number);
@@ -817,19 +824,9 @@ export default function BookingManager() {
                               className="w-full border border-black/20 pl-6 pr-3 py-1.5 font-mono text-sm focus:border-accent focus:outline-none"
                               placeholder="Amount collected" />
                           </div>
-                          <select value={cashNote || 'cash'} onChange={e => setCashNote(e.target.value)}
-                            className="border border-black/20 px-2 py-1.5 font-mono text-xs focus:border-accent focus:outline-none bg-white">
-                            <option value="cash">Cash</option>
-                            <option value="venmo">Venmo</option>
-                            <option value="zelle">Zelle</option>
-                            <option value="cashapp">Cash App</option>
-                          </select>
                         </div>
-                        <input type="text" value={cashNote === 'cash' || cashNote === 'venmo' || cashNote === 'zelle' || cashNote === 'cashapp' ? '' : cashNote}
-                          onChange={e => setCashNote(prev => {
-                            const method = ['cash', 'venmo', 'zelle', 'cashapp'].includes(prev) ? prev : 'cash';
-                            return e.target.value || method;
-                          })}
+                        <input type="text" value={cashNote}
+                          onChange={e => setCashNote(e.target.value)}
                           className="w-full border border-black/20 px-3 py-1.5 font-mono text-xs focus:border-accent focus:outline-none"
                           placeholder="Note (e.g., Added 1 hour in session)" />
                         <button
@@ -837,8 +834,8 @@ export default function BookingManager() {
                             const amt = parseFloat(cashAmount);
                             if (!amt || amt <= 0) { alert('Enter a valid amount'); return; }
                             setUpdatingId(b.id);
-                            const method = ['cash', 'venmo', 'zelle', 'cashapp'].includes(cashNote) ? cashNote : 'cash';
-                            const note = cashNote && !['cash', 'venmo', 'zelle', 'cashapp'].includes(cashNote) ? cashNote : `Additional ${method} payment recorded in session`;
+                            const method = 'cash';
+                            const note = cashNote || 'Additional cash payment recorded in session';
                             // Update the booking total and record the payment
                             const amtCents = Math.round(amt * 100);
                             await fetch('/api/admin/bookings/update', {
@@ -879,11 +876,25 @@ export default function BookingManager() {
                           </div>
                           <div>
                             <p className="text-black/60">Deposit Kept</p>
-                            <p className="font-semibold text-red-600">{formatCents(b.deposit_amount)}</p>
-                            <button
-                              onClick={() => { setEditingRemainder(b.id); setRemainderInput((b.deposit_amount / 100).toFixed(2)); }}
-                              className="text-[10px] text-accent hover:underline"
-                            >Edit kept amount</button>
+                            {editingRemainder === `kept-${b.id}` ? (
+                              <div className="flex items-center gap-1">
+                                <span className="font-mono text-xs">$</span>
+                                <input type="text" inputMode="decimal" value={remainderInput}
+                                  onChange={e => setRemainderInput(e.target.value)}
+                                  className="w-20 border border-black/20 px-2 py-1 font-mono text-xs"
+                                  onKeyDown={e => { if (e.key === 'Enter') saveKeptDeposit(b.id); }} />
+                                <button onClick={() => saveKeptDeposit(b.id)} className="text-[10px] text-green-600 font-bold">Save</button>
+                                <button onClick={() => setEditingRemainder(null)} className="text-[10px] text-black/60">Cancel</button>
+                              </div>
+                            ) : (
+                              <>
+                                <p className="font-semibold text-red-600">{formatCents(b.actual_deposit_paid || 0)}</p>
+                                <button
+                                  onClick={() => { setEditingRemainder(`kept-${b.id}`); setRemainderInput(((b.actual_deposit_paid || 0) / 100).toFixed(2)); }}
+                                  className="text-[10px] text-accent hover:underline"
+                                >Edit kept amount</button>
+                              </>
+                            )}
                           </div>
                         </div>
                         {!b.actual_deposit_paid && b.deposit_amount === 0 && (

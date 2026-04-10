@@ -421,7 +421,7 @@ export default function Accounting() {
     // Business keeps
     const totalGrossRevenue = sessionStats.totalBooked + mediaStats.totalRevenue + beatStats.totalRevenue;
     const businessKeeps = totalGrossRevenue - totalPayroll;
-    const keptDeposits = cancelledBookings.reduce((s, b) => s + Math.max(b.actual_deposit_paid || 0, b.deposit_amount || 0), 0);
+    const keptDeposits = cancelledBookings.reduce((s, b) => s + (b.actual_deposit_paid || 0), 0);
 
     return { people: entries, totalPayroll, totalGrossRevenue, businessKeeps, keptDeposits };
   }, [bookings, mediaSales, beatPurchases, sessionStats, mediaStats, beatStats, cancelledBookings]);
@@ -590,7 +590,7 @@ export default function Accounting() {
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   <StatCard icon={Calendar} label="Cancelled Sessions" value={String(cancelledBookings.length)} />
                   <StatCard icon={DollarSign} label="Deposits Kept (Card)" value={formatCents(cancelledBookings.reduce((s, b) => s + (b.actual_deposit_paid || 0), 0))} />
-                  <StatCard icon={DollarSign} label="Total Kept from Cancelled" value={formatCents(cancelledBookings.reduce((s, b) => s + Math.max(b.actual_deposit_paid || 0, b.deposit_amount || 0), 0))} accent />
+                  <StatCard icon={DollarSign} label="Total Kept from Cancelled" value={formatCents(cancelledBookings.reduce((s, b) => s + (b.actual_deposit_paid || 0), 0))} accent />
                 </div>
               )}
 
