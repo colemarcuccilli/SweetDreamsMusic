@@ -9,7 +9,7 @@ export async function GET() {
   const { data: profile, error } = await supabase
     .from('profiles')
     .select('roadmap_progress, career_stage')
-    .eq('id', user.id)
+    .eq('user_id', user.id)
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -36,7 +36,7 @@ export async function PUT(request: NextRequest) {
   const { data: profile, error: fetchError } = await supabase
     .from('profiles')
     .select('roadmap_progress')
-    .eq('id', user.id)
+    .eq('user_id', user.id)
     .single();
 
   if (fetchError) return NextResponse.json({ error: fetchError.message }, { status: 500 });
@@ -56,7 +56,7 @@ export async function PUT(request: NextRequest) {
   const { error: updateError } = await supabase
     .from('profiles')
     .update({ roadmap_progress: progress })
-    .eq('id', user.id);
+    .eq('user_id', user.id);
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
 

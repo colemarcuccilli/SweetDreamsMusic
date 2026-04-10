@@ -11,7 +11,7 @@ export async function GET() {
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('total_xp, artist_level, daily_streak, last_hub_visit, longest_streak')
-    .eq('id', user.id)
+    .eq('user_id', user.id)
     .single();
 
   if (profileError) return NextResponse.json({ error: profileError.message }, { status: 500 });
@@ -68,7 +68,7 @@ export async function GET() {
         longest_streak: longestStreak,
         last_hub_visit: today,
       })
-      .eq('id', user.id);
+      .eq('user_id', user.id);
 
     // Insert xp_log entries
     const logEntries: { user_id: string; action: string; xp_amount: number; label: string; metadata: Record<string, unknown> }[] = [
@@ -175,7 +175,7 @@ export async function POST(request: NextRequest) {
   const { data: profile } = await supabase
     .from('profiles')
     .select('total_xp')
-    .eq('id', user.id)
+    .eq('user_id', user.id)
     .single();
 
   const newTotal = profile?.total_xp || 0;

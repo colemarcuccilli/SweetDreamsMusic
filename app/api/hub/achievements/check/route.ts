@@ -98,7 +98,7 @@ export async function POST() {
     supabase
       .from('profiles')
       .select('total_xp, artist_level, daily_streak, display_name, genre, career_stage, profile_picture_url, public_profile_slug, role')
-      .eq('id', user.id)
+      .eq('user_id', user.id)
       .single(),
 
     // Session notes by this user
@@ -255,7 +255,7 @@ export async function POST() {
         total_xp: newTotal,
         artist_level: levelInfo.level,
       })
-      .eq('id', user.id);
+      .eq('user_id', user.id);
 
     // Log XP entries for each achievement
     const xpLogs = newAchievements.map((key) => ({
