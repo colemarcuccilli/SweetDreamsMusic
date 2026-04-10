@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
   // Get the booking
   const { data: booking, error } = await supabase
     .from('bookings')
-    .select('id, remainder_amount, total_amount')
+    .select('id, remainder_amount, total_amount, engineer_name, customer_name')
     .eq('id', bookingId)
     .single();
 
@@ -36,18 +36,39 @@ export async function POST(request: NextRequest) {
   }).eq('id', bookingId);
 
   // Log the payment in audit log
-  await supabase.from('booking_audit_log').insert({
-    booking_id: bookingId,
-    action: `${method}_payment`,
-    performed_by: user.email || 'unknown',
-    details: {
-      amount: amountCents,
-      method,
-      note: note || '',
-      previous_remainder: booking.remainder_amount,
-      new_remainder: newRemainder,
-    },
-  });
+  try {
+    await supabase.from('booking_audit_log').insert({
+      booking_id: bookingId,
+      action: `${method}_payment`,
+      performed_by: user.email || 'unknown',
+      details: {
+        amount: amountCents,
+        method,
+        note: note || '',
+        previous_remainder: booking.remainder_amount,
+        new_remainder: newRemainder,
+      },
+    });
+  } catch { /* audit log table may not exist — don't break payment recording */ }
+
+  // If cash payment, log to cash ledger — engineer owes business this amount
+  if (method === 'cash' && booking.engineer_name) {
+    try {
+      const { createServiceClient } = await import('@/lib/supabase/server');
+      const serviceClient = createServiceClient();
+      await serviceClient.from('cash_ledger').insert({
+        booking_id: bookingId,
+        engineer_name: booking.engineer_name,
+        amount: amountCents,
+        client_name: booking.customer_name || 'Unknown',
+        note: note || 'Cash payment recorded',
+        recorded_by: user.email || 'unknown',
+        status: 'owed',
+      });
+    } catch (e) {
+      console.error('Cash ledger error:', e);
+    }
+  }
 
   return NextResponse.json({
     success: true,

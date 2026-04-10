@@ -95,6 +95,7 @@ export default function Accounting() {
   const [beatPurchases, setBeatPurchases] = useState<BeatPurchase[]>([]);
   const [mediaSales, setMediaSales] = useState<{ id: string; description: string; amount: number; sale_type: string; sold_by: string | null; filmed_by: string | null; edited_by: string | null; client_name: string | null; notes: string | null; created_at: string }[]>([]);
   const [cancelledBookings, setCancelledBookings] = useState<{ id: string; customer_name: string; start_time: string; total_amount: number; deposit_amount: number; actual_deposit_paid: number | null }[]>([]);
+  const [cashLedger, setCashLedger] = useState<{ id: string; engineer_name: string; amount: number; client_name: string; note: string | null; status: string; created_at: string; booking_id: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>('overview');
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth');
@@ -130,12 +131,15 @@ export default function Accounting() {
     if (range?.from) params.set('from', range.from);
     if (range?.to) params.set('to', range.to);
 
-    const [accountingRes, payoutsRes] = await Promise.all([
+    const [accountingRes, payoutsRes, cashRes] = await Promise.all([
       fetch(`/api/admin/accounting?${params}`),
       fetch('/api/admin/payouts'),
+      fetch('/api/admin/cash-ledger'),
     ]);
     const data = await accountingRes.json();
     const payoutsData = await payoutsRes.json();
+    const cashData = await cashRes.json();
+    setCashLedger(cashData.entries || []);
     setBookings(data.bookings || []);
     setBeatPurchases(data.beatPurchases || []);
     setMediaSales(data.mediaSales || []);
@@ -921,6 +925,66 @@ export default function Accounting() {
                   </BreakdownSection>
                 );
               })}
+
+              {/* Cash Owed by Engineers */}
+              {cashLedger.length > 0 && (() => {
+                const owedEntries = cashLedger.filter(e => e.status === 'owed');
+                const byEngineer: Record<string, { total: number; entries: typeof owedEntries }> = {};
+                owedEntries.forEach(e => {
+                  if (!byEngineer[e.engineer_name]) byEngineer[e.engineer_name] = { total: 0, entries: [] };
+                  byEngineer[e.engineer_name].total += e.amount;
+                  byEngineer[e.engineer_name].entries.push(e);
+                });
+                const totalOwed = owedEntries.reduce((s, e) => s + e.amount, 0);
+                const totalCollected = cashLedger.filter(e => e.status === 'collected').reduce((s, e) => s + e.amount, 0);
+
+                return (
+                  <div className="border-2 border-red-200 bg-red-50/30 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-mono text-sm font-bold uppercase tracking-wider text-red-700">Cash Owed to Business</h3>
+                      <span className="font-mono text-lg font-bold text-red-700">{formatCents(totalOwed)}</span>
+                    </div>
+                    <p className="font-mono text-xs text-black/60">Engineers collect cash and owe the full amount to the business. Business pays engineers through payroll.</p>
+                    {totalCollected > 0 && (
+                      <p className="font-mono text-xs text-green-700">Total collected so far: {formatCents(totalCollected)}</p>
+                    )}
+                    {Object.entries(byEngineer).map(([name, data]) => (
+                      <div key={name} className="border border-red-200 p-3 space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="font-mono text-sm font-bold">{name}</span>
+                          <span className="font-mono text-sm font-bold text-red-700">Owes {formatCents(data.total)}</span>
+                        </div>
+                        {data.entries.map(entry => (
+                          <div key={entry.id} className="flex justify-between items-center text-xs font-mono border-t border-red-100 pt-1">
+                            <div>
+                              <span className="text-black/70">{entry.client_name}</span>
+                              <span className="text-black/60 ml-2">{new Date(entry.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                              {entry.note && <span className="text-black/60 ml-2">— {entry.note}</span>}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold">{formatCents(entry.amount)}</span>
+                              <button
+                                onClick={async () => {
+                                  if (!confirm(`Mark ${formatCents(entry.amount)} as collected from ${name}?`)) return;
+                                  await fetch('/api/admin/cash-ledger', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ entryId: entry.id }),
+                                  });
+                                  fetchData();
+                                }}
+                                className="text-[10px] font-bold uppercase bg-green-100 text-green-700 px-2 py-1 hover:bg-green-200"
+                              >
+                                Mark Collected
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
 
               {/* Business Summary at bottom of payroll */}
               <div className="border-2 border-accent p-4 space-y-2">
