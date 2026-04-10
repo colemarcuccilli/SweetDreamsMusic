@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, ChevronDown, DollarSign, X, Check, Clock, Pencil, Mail, Banknote, CreditCard, Send, Upload, Download, FileAudio } from 'lucide-react';
+import { RefreshCw, ChevronDown, DollarSign, X, Check, Clock, Pencil, Mail, Banknote, CreditCard, Send, Upload, Download, FileAudio, Plus } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
 import { ENGINEERS, ROOM_LABELS } from '@/lib/constants';
 
@@ -797,7 +797,72 @@ export default function BookingManager() {
                           <Check className="w-3 h-3" /> Paid in Full
                         </span>
                       )}
+                      {/* Add Time — always available for extending sessions */}
+                      <button
+                        onClick={() => { setShowCashPayment(showCashPayment === `add-${b.id}` ? null : `add-${b.id}`); setShowPaymentLink(null); setCashAmount(''); setCashNote(''); }}
+                        className="border border-accent text-accent font-mono text-xs font-bold uppercase px-3 py-2 hover:bg-accent/10 inline-flex items-center gap-1">
+                        <Plus className="w-3 h-3" /> Add Time / Record Cash
+                      </button>
                     </div>
+
+                    {/* Add Time / Additional Cash Form */}
+                    {showCashPayment === `add-${b.id}` && (
+                      <div className="border border-accent/30 bg-accent/5 p-3 space-y-2">
+                        <p className="font-mono text-[10px] text-accent uppercase tracking-wider font-bold">Record Additional Payment</p>
+                        <p className="font-mono text-[10px] text-black/60">Client added time or services during the session. Enter the amount collected.</p>
+                        <div className="flex gap-2">
+                          <div className="relative flex-1">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 font-mono text-sm text-black/60">$</span>
+                            <input type="text" inputMode="decimal" value={cashAmount} onChange={e => setCashAmount(e.target.value)}
+                              className="w-full border border-black/20 pl-6 pr-3 py-1.5 font-mono text-sm focus:border-accent focus:outline-none"
+                              placeholder="Amount collected" />
+                          </div>
+                          <select value={cashNote || 'cash'} onChange={e => setCashNote(e.target.value)}
+                            className="border border-black/20 px-2 py-1.5 font-mono text-xs focus:border-accent focus:outline-none bg-white">
+                            <option value="cash">Cash</option>
+                            <option value="venmo">Venmo</option>
+                            <option value="zelle">Zelle</option>
+                            <option value="cashapp">Cash App</option>
+                          </select>
+                        </div>
+                        <input type="text" value={cashNote === 'cash' || cashNote === 'venmo' || cashNote === 'zelle' || cashNote === 'cashapp' ? '' : cashNote}
+                          onChange={e => setCashNote(prev => {
+                            const method = ['cash', 'venmo', 'zelle', 'cashapp'].includes(prev) ? prev : 'cash';
+                            return e.target.value || method;
+                          })}
+                          className="w-full border border-black/20 px-3 py-1.5 font-mono text-xs focus:border-accent focus:outline-none"
+                          placeholder="Note (e.g., Added 1 hour in session)" />
+                        <button
+                          onClick={async () => {
+                            const amt = parseFloat(cashAmount);
+                            if (!amt || amt <= 0) { alert('Enter a valid amount'); return; }
+                            setUpdatingId(b.id);
+                            const method = ['cash', 'venmo', 'zelle', 'cashapp'].includes(cashNote) ? cashNote : 'cash';
+                            const note = cashNote && !['cash', 'venmo', 'zelle', 'cashapp'].includes(cashNote) ? cashNote : `Additional ${method} payment recorded in session`;
+                            // Update the booking total and record the payment
+                            const amtCents = Math.round(amt * 100);
+                            await fetch('/api/admin/bookings/update', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ bookingId: b.id, updates: { total_amount: b.total_amount + amtCents } }),
+                            });
+                            await fetch('/api/booking/record-payment', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ bookingId: b.id, amount: amt, method, note }),
+                            });
+                            setShowCashPayment(null);
+                            setCashAmount('');
+                            setCashNote('');
+                            setUpdatingId(null);
+                            fetchBookings();
+                          }}
+                          disabled={updatingId === b.id}
+                          className="bg-accent text-black font-mono text-xs font-bold uppercase px-4 py-2 hover:bg-accent/90 disabled:opacity-50">
+                          {updatingId === b.id ? 'Recording...' : 'Record Payment'}
+                        </button>
+                      </div>
+                    )}
 
                     {/* Cancelled — Record Kept Deposit */}
                     {b.status === 'cancelled' && (
