@@ -138,6 +138,27 @@ export default function ArtistHub({ userId }: { userId: string }) {
       {/* Hub content with sidebar */}
       <section className="bg-white text-black min-h-[60vh]">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          {/* Mobile Tabs — above everything */}
+          <div className="lg:hidden mb-6">
+            <div className="flex flex-wrap gap-1.5">
+              {EXTENDED_TABS.map((t) => {
+                const Icon = TAB_ICONS[t.key] || LayoutDashboard;
+                return (
+                  <button
+                    key={t.key}
+                    onClick={() => setTab(t.key as ExtendedTab)}
+                    className={`font-mono text-[10px] font-bold uppercase tracking-wider px-3 py-2 transition-colors inline-flex items-center gap-1.5 rounded ${
+                      tab === t.key ? 'bg-black text-white' : 'bg-black/5 text-black/50 hover:bg-black/10'
+                    }`}
+                  >
+                    <Icon className="w-3 h-3" />
+                    {t.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="flex gap-8">
             {/* Desktop Sidebar */}
             <aside className="hidden lg:block w-48 shrink-0 self-start sticky top-24">
@@ -159,27 +180,6 @@ export default function ArtistHub({ userId }: { userId: string }) {
                 })}
               </nav>
             </aside>
-
-            {/* Mobile Tabs */}
-            <div className="lg:hidden w-full mb-6">
-              <div className="flex flex-wrap gap-1.5">
-                {EXTENDED_TABS.map((t) => {
-                  const Icon = TAB_ICONS[t.key] || LayoutDashboard;
-                  return (
-                    <button
-                      key={t.key}
-                      onClick={() => setTab(t.key as ExtendedTab)}
-                      className={`font-mono text-[10px] font-bold uppercase tracking-wider px-3 py-2 transition-colors inline-flex items-center gap-1.5 rounded ${
-                        tab === t.key ? 'bg-black text-white' : 'bg-black/5 text-black/50 hover:bg-black/10'
-                      }`}
-                    >
-                      <Icon className="w-3 h-3" />
-                      {t.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
 
             {/* Main Content */}
             <div className="flex-1 min-w-0">
