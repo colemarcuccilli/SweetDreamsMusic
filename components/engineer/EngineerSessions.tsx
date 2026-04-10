@@ -8,6 +8,7 @@ interface Booking {
   id: string;
   customer_name: string;
   customer_email?: string;
+  customer_phone?: string | null;
   artist_name?: string | null;
   start_time: string;
   end_time: string;
@@ -609,8 +610,12 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
             {booking.customer_name}
             {booking.artist_name && <span className="font-normal text-black/60 ml-1">({booking.artist_name})</span>}
           </p>
-          {booking.customer_email && (
-            <p className="font-mono text-xs text-black/70">{booking.customer_email}</p>
+          {(booking.customer_email || booking.customer_phone) && (
+            <p className="font-mono text-xs text-black/70">
+              {booking.customer_email}
+              {booking.customer_email && booking.customer_phone && ' · '}
+              {booking.customer_phone}
+            </p>
           )}
           {booking.requested_engineer && (
             <div className="flex items-center gap-2 mt-0.5">

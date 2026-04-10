@@ -12,14 +12,16 @@ import StudioBlocks from './StudioBlocks';
 import MediaSales from './MediaSales';
 import ProducerApplications from './ProducerApplications';
 import ContractsViewer from './ContractsViewer';
+import ClientCRM from './ClientCRM';
 
-type Tab = 'overview' | 'accounting' | 'bookings' | 'media' | 'blocks' | 'beats' | 'producers' | 'contracts' | 'users';
+type Tab = 'overview' | 'clients' | 'accounting' | 'bookings' | 'media' | 'blocks' | 'beats' | 'producers' | 'contracts' | 'users';
 
 export default function AdminDashboard({ user }: { user: SessionUser }) {
   const [tab, setTab] = useState<Tab>('overview');
 
   const tabs: { key: Tab; label: string; icon: typeof Calendar }[] = [
     { key: 'overview', label: 'Overview', icon: LayoutDashboard },
+    { key: 'clients', label: 'Clients', icon: Users },
     { key: 'accounting', label: 'Accounting', icon: DollarSign },
     { key: 'bookings', label: 'Bookings', icon: Calendar },
     { key: 'media', label: 'Media Sales', icon: Video },
@@ -78,6 +80,7 @@ export default function AdminDashboard({ user }: { user: SessionUser }) {
             {/* Main Content */}
             <div className="flex-1 min-w-0">
           {tab === 'overview' && <AdminOverview />}
+          {tab === 'clients' && <ClientCRM />}
           {tab === 'accounting' && <Accounting />}
           {tab === 'bookings' && <BookingManager />}
           {tab === 'media' && <MediaSales />}

@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
   // Fetch bookings where this engineer is assigned (with optional date range)
   let bookingsQuery = supabase
     .from('bookings')
-    .select('id, customer_name, customer_email, artist_name, start_time, end_time, duration, total_amount, deposit_amount, remainder_amount, actual_deposit_paid, status, room, requested_engineer, engineer_name, claimed_at, created_at, admin_notes, stripe_customer_id, stripe_payment_intent_id')
+    .select('id, customer_name, customer_email, customer_phone, artist_name, start_time, end_time, duration, total_amount, deposit_amount, remainder_amount, actual_deposit_paid, status, room, requested_engineer, engineer_name, claimed_at, created_at, admin_notes, stripe_customer_id, stripe_payment_intent_id')
     .in('engineer_name', [...matchNames])
     .not('status', 'eq', 'cancelled')
     .order('start_time', { ascending: false });
