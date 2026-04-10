@@ -77,42 +77,68 @@ export default function ProducerDashboard({ isAdmin = false }: { isAdmin?: boole
 
   return (
     <>
-      {/* Sub-tabs */}
-      <section className="bg-white text-black border-b-2 border-black/5">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex gap-0 overflow-x-auto">
-            {tabs.map((t) => (
-              <button
-                key={t.key}
-                onClick={() => setTab(t.key)}
-                className={`font-mono text-sm font-semibold uppercase tracking-wider px-5 py-4 border-b-2 transition-colors inline-flex items-center gap-2 flex-shrink-0 ${
-                  tab === t.key ? 'border-accent text-black' : 'border-transparent text-black/60 hover:text-black/80'
-                }`}
-              >
-                <t.icon className="w-4 h-4" />
-                {t.label}
-                {t.badge && (
-                  <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
-                    {t.badge}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-      </section>
+      <section className="bg-white text-black min-h-[60vh]">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex gap-8">
+            {/* Desktop Sidebar */}
+            <aside className="hidden lg:block w-48 shrink-0 self-start sticky top-24">
+              <nav className="space-y-1">
+                {tabs.map((t) => (
+                  <button
+                    key={t.key}
+                    onClick={() => setTab(t.key)}
+                    className={`w-full text-left font-mono text-xs font-semibold uppercase tracking-wider px-4 py-3 transition-colors flex items-center gap-2.5 rounded ${
+                      tab === t.key ? 'bg-black text-white' : 'text-black/50 hover:bg-black/5 hover:text-black/80'
+                    }`}
+                  >
+                    <t.icon className="w-4 h-4 shrink-0" />
+                    {t.label}
+                    {t.badge && (
+                      <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center ml-auto">
+                        {t.badge}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </nav>
+            </aside>
 
-      <section className="bg-white text-black py-8 sm:py-12 min-h-[60vh]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {loading ? (
-            <p className="font-mono text-sm text-black/70">Loading...</p>
-          ) : (
-            <>
-              {tab === 'beats' && <BeatsTab beats={beats} onBeatsChange={setBeats} isAdmin={isAdmin} />}
-              {tab === 'sales' && <SalesTab sales={sales} />}
-              {tab === 'earnings' && earnings && <EarningsTab earnings={earnings} />}
-            </>
-          )}
+            {/* Mobile Tabs */}
+            <div className="lg:hidden w-full mb-6">
+              <div className="flex flex-wrap gap-1.5">
+                {tabs.map((t) => (
+                  <button
+                    key={t.key}
+                    onClick={() => setTab(t.key)}
+                    className={`font-mono text-[10px] font-bold uppercase tracking-wider px-3 py-2 transition-colors inline-flex items-center gap-1.5 rounded ${
+                      tab === t.key ? 'bg-black text-white' : 'bg-black/5 text-black/50 hover:bg-black/10'
+                    }`}
+                  >
+                    <t.icon className="w-3 h-3" />
+                    {t.label}
+                    {t.badge && (
+                      <span className="bg-red-500 text-white text-[9px] font-bold px-1 py-0.5 rounded-full min-w-[16px] text-center">
+                        {t.badge}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Main Content */}
+            <div className="flex-1 min-w-0">
+              {loading ? (
+                <p className="font-mono text-sm text-black/70">Loading...</p>
+              ) : (
+                <>
+                  {tab === 'beats' && <BeatsTab beats={beats} onBeatsChange={setBeats} isAdmin={isAdmin} />}
+                  {tab === 'sales' && <SalesTab sales={sales} />}
+                  {tab === 'earnings' && earnings && <EarningsTab earnings={earnings} />}
+                </>
+              )}
+            </div>
+          </div>
         </div>
       </section>
     </>
