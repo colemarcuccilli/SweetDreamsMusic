@@ -722,3 +722,75 @@ export async function sendBeatSaleProducerNotification(to: string, details: {
     });
   } catch (e) { console.error('Email error (producer sale notification):', e); }
 }
+
+// ── Beat Approval Flow Emails ───────────────────────────────────────
+
+export async function sendAdminBeatApprovalNotification(adminEmails: string[], details: {
+  producerName: string; beatTitle: string; genre: string | null;
+}) {
+  const html = wrap(
+    h1('NEW BEAT — APPROVAL NEEDED') +
+    p(`A producer has uploaded a new beat that needs your approval before it can go live.`) +
+    detailTable(
+      detail('Producer', details.producerName) +
+      detail('Beat', details.beatTitle) +
+      (details.genre ? detail('Genre', details.genre) : '')
+    ) +
+    p('Review this beat in the admin dashboard under the Beats tab.') +
+    btn('REVIEW BEAT', `${SITE_URL}/admin`)
+  );
+
+  for (const email of adminEmails) {
+    try {
+      await resend.emails.send({
+        from: FROM, to: email,
+        subject: `Beat Approval Needed — ${details.beatTitle}`,
+        html,
+      });
+    } catch (e) {
+      console.error(`Email error (admin beat approval to ${email}):`, e);
+    }
+  }
+}
+
+export async function sendBeatApprovedNotification(to: string, details: {
+  beatTitle: string;
+}) {
+  try {
+    await resend.emails.send({
+      from: FROM, to,
+      subject: `Beat Approved — ${details.beatTitle}`,
+      html: wrap(
+        h1('BEAT APPROVED') +
+        p(`Your beat has been approved by the Sweet Dreams team.`) +
+        detailTable(
+          detail('Beat', details.beatTitle) +
+          detail('Status', 'Approved — Agreement Required')
+        ) +
+        p('Log in to your Producer Dashboard to sign the agreement and upload your cover art. Once complete, your beat will be live on the store.') +
+        btn('SIGN AGREEMENT', `${SITE_URL}/producer`)
+      ),
+    });
+  } catch (e) { console.error('Email error (beat approved):', e); }
+}
+
+export async function sendBeatRejectedNotification(to: string, details: {
+  beatTitle: string; reason?: string;
+}) {
+  try {
+    await resend.emails.send({
+      from: FROM, to,
+      subject: `Beat Not Approved — ${details.beatTitle}`,
+      html: wrap(
+        h1('BEAT NOT APPROVED') +
+        p(`Unfortunately, your beat was not approved for the Sweet Dreams store.`) +
+        detailTable(
+          detail('Beat', details.beatTitle) +
+          (details.reason ? detail('Reason', details.reason) : '')
+        ) +
+        p('If you have questions or would like to re-submit, feel free to reach out to us.') +
+        btn('VIEW DASHBOARD', `${SITE_URL}/producer`)
+      ),
+    });
+  } catch (e) { console.error('Email error (beat rejected):', e); }
+}

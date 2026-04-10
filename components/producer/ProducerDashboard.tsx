@@ -67,7 +67,7 @@ export default function ProducerDashboard({ isAdmin = false }: { isAdmin?: boole
     });
   }, []);
 
-  const pendingCount = beats.filter((b) => b.status === 'pending_review').length;
+  const pendingCount = beats.filter((b) => b.status === 'pending_review' || b.status === 'pending_approval').length;
 
   const tabs: { key: Tab; label: string; icon: typeof Music; badge?: number }[] = [
     { key: 'beats', label: 'My Beats', icon: Music, badge: pendingCount > 0 ? pendingCount : undefined },
@@ -170,6 +170,7 @@ const PS_STATUS_BADGE: Record<string, { bg: string; text: string }> = {
 function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; onBeatsChange: (beats: Beat[]) => void; isAdmin?: boolean }) {
   const [showForm, setShowForm] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
   const [reviewBeat, setReviewBeat] = useState<Beat | null>(null);
 
   // Private sales
@@ -207,15 +208,18 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
   const [sampleDetails, setSampleDetails] = useState('');
   const [uploadError, setUploadError] = useState('');
 
-  const pendingBeats = beats.filter((b) => b.status === 'pending_review');
-  const activeBeats = beats.filter((b) => b.status !== 'pending_review');
+  const pendingApprovalBeats = beats.filter((b) => b.status === 'pending_approval');
+  const pendingReviewBeats = beats.filter((b) => b.status === 'pending_review');
+  const pendingBeats = [...pendingApprovalBeats, ...pendingReviewBeats];
+  const activeBeats = beats.filter((b) => b.status !== 'pending_review' && b.status !== 'pending_approval' && b.status !== 'rejected');
+  const rejectedBeats = beats.filter((b) => b.status === 'rejected');
 
   function resetForm() {
     setTitle(''); setGenre(''); setBpm(''); setMusicalKey('');
     setTags(''); setPreviewFile(null); setMp3File(null); setTrackoutFile(null);
     setMp3Price('29.99'); setTrackoutPrice('74.99'); setExclusivePrice('400.00');
     setHasExclusive(true); setContainsSamples(false); setSampleDetails('');
-    setUploadError('');
+    setUploadError(''); setUploadSuccess(false);
   }
 
   async function handleUpload() {
@@ -247,6 +251,8 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
         onBeatsChange([data.beat, ...beats]);
         resetForm();
         setShowForm(false);
+        setUploadSuccess(true);
+        setTimeout(() => setUploadSuccess(false), 8000);
       } else {
         setUploadError(data.error || 'Upload failed');
       }
@@ -285,19 +291,28 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
           >
             <DollarSign className="w-3 h-3" /> Private Sale
           </button>
-          {isAdmin && (
-            <button
-              onClick={() => setShowForm(!showForm)}
-              className="bg-accent text-black font-mono text-xs font-bold uppercase tracking-wider px-4 py-2 hover:bg-accent/90 inline-flex items-center gap-1"
-            >
-              {showForm ? <><X className="w-3 h-3" /> Cancel</> : <><Plus className="w-3 h-3" /> Upload Beat</>}
-            </button>
-          )}
+          <button
+            onClick={() => { setShowForm(!showForm); setUploadSuccess(false); }}
+            className="bg-accent text-black font-mono text-xs font-bold uppercase tracking-wider px-4 py-2 hover:bg-accent/90 inline-flex items-center gap-1"
+          >
+            {showForm ? <><X className="w-3 h-3" /> Cancel</> : <><Plus className="w-3 h-3" /> Upload Beat</>}
+          </button>
         </div>
       </div>
 
-      {/* Upload Form -- admin only */}
-      {showForm && isAdmin && (
+      {/* Upload Success Message */}
+      {uploadSuccess && (
+        <div className="border-2 border-green-500 bg-green-50 p-4 mb-6 flex items-center gap-3">
+          <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+          <div>
+            <p className="font-mono text-sm font-bold text-green-800">Beat uploaded!</p>
+            <p className="font-mono text-xs text-green-700">Waiting for admin approval. You will receive an email when your beat is reviewed.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Form */}
+      {showForm && (
         <div className="border-2 border-accent p-6 mb-8 space-y-4">
           <h3 className="font-mono text-sm font-bold uppercase">Upload New Beat</h3>
 
@@ -442,27 +457,70 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
         </div>
       )}
 
-      {/* Pending Review Section */}
-      {pendingBeats.length > 0 && (
+      {/* Pending Approval Section (waiting for admin) */}
+      {pendingApprovalBeats.length > 0 && (
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-4">
             <AlertCircle className="w-5 h-5 text-amber-500" />
             <h3 className="font-mono text-sm font-bold uppercase">
-              Pending Review ({pendingBeats.length})
+              Waiting for Admin Approval ({pendingApprovalBeats.length})
             </h3>
           </div>
           <div className="space-y-3">
-            {pendingBeats.map((beat) => (
-              <div key={beat.id} className="border-2 border-amber-400 bg-amber-50 p-4">
+            {pendingApprovalBeats.map((beat) => (
+              <div key={beat.id} className="border-2 border-amber-300 bg-amber-50/50 p-4">
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 bg-amber-100 flex items-center justify-center flex-shrink-0">
-                    <FileText className="w-5 h-5 text-amber-600" />
+                    <AlertCircle className="w-5 h-5 text-amber-500" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="font-mono text-sm font-bold">{beat.title}</p>
                       <span className="bg-amber-200 text-amber-800 font-mono text-[10px] font-bold uppercase px-1.5 py-0.5">
-                        Pending Review
+                        Pending Approval
+                      </span>
+                    </div>
+                    <p className="font-mono text-xs text-black/70 mt-0.5">
+                      {beat.genre}{beat.bpm && ` · ${beat.bpm} BPM`}{beat.musical_key && ` · ${beat.musical_key}`}
+                    </p>
+                    <p className="font-mono text-[10px] text-black/50 mt-1">Submitted for admin review. You will be notified when approved.</p>
+                  </div>
+                  {beat.preview_url && (
+                    <audio controls preload="none" className="hidden sm:block max-w-[160px] flex-shrink-0">
+                      <source src={beat.preview_url} type="audio/mpeg" />
+                    </audio>
+                  )}
+                  <button onClick={() => deleteBeat(beat.id)} className="text-red-400 hover:text-red-600 p-2 flex-shrink-0" title="Delete">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Pending Review Section (approved, needs agreement) */}
+      {pendingReviewBeats.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <CheckCircle className="w-5 h-5 text-green-500" />
+            <h3 className="font-mono text-sm font-bold uppercase">
+              Ready for Agreement ({pendingReviewBeats.length})
+            </h3>
+          </div>
+          <div className="space-y-3">
+            {pendingReviewBeats.map((beat) => (
+              <div key={beat.id} className="border-2 border-green-400 bg-green-50 p-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 bg-green-100 flex items-center justify-center flex-shrink-0">
+                    <FileText className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-mono text-sm font-bold">{beat.title}</p>
+                      <span className="bg-green-200 text-green-800 font-mono text-[10px] font-bold uppercase px-1.5 py-0.5">
+                        Approved — Sign Agreement
                       </span>
                     </div>
                     <p className="font-mono text-xs text-black/70 mt-0.5">
@@ -484,6 +542,40 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
                     className="bg-accent text-black font-mono text-xs font-bold uppercase tracking-wider px-4 py-2 hover:bg-accent/90 flex-shrink-0"
                   >
                     Review & Approve
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Rejected Beats */}
+      {rejectedBeats.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <X className="w-5 h-5 text-red-500" />
+            <h3 className="font-mono text-sm font-bold uppercase">
+              Rejected ({rejectedBeats.length})
+            </h3>
+          </div>
+          <div className="space-y-3">
+            {rejectedBeats.map((beat) => (
+              <div key={beat.id} className="border-2 border-red-200 bg-red-50/50 p-4 opacity-60">
+                <div className="flex items-center gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-mono text-sm font-bold">{beat.title}</p>
+                      <span className="bg-red-200 text-red-700 font-mono text-[10px] font-bold uppercase px-1.5 py-0.5">
+                        Rejected
+                      </span>
+                    </div>
+                    <p className="font-mono text-xs text-black/70 mt-0.5">
+                      {beat.genre}{beat.bpm && ` · ${beat.bpm} BPM`}{beat.musical_key && ` · ${beat.musical_key}`}
+                    </p>
+                  </div>
+                  <button onClick={() => deleteBeat(beat.id)} className="text-red-400 hover:text-red-600 p-2 flex-shrink-0" title="Delete">
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -524,18 +616,16 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
       )}
 
       {/* Active beat list */}
-      {activeBeats.length === 0 && pendingBeats.length === 0 && !showForm ? (
+      {activeBeats.length === 0 && pendingBeats.length === 0 && rejectedBeats.length === 0 && !showForm ? (
         <div className="border-2 border-black/10 p-12 text-center">
           <Music className="w-12 h-12 text-black/10 mx-auto mb-4" />
-          <p className="font-mono text-sm text-black/70 mb-4">{isAdmin ? 'No beats yet. Upload your first beat!' : 'No beats yet.'}</p>
-          {isAdmin && (
-            <button
-              onClick={() => setShowForm(true)}
-              className="bg-accent text-black font-mono text-xs font-bold uppercase tracking-wider px-5 py-2.5 hover:bg-accent/90 inline-flex items-center gap-1"
-            >
-              <Plus className="w-3 h-3" /> Upload Beat
-            </button>
-          )}
+          <p className="font-mono text-sm text-black/70 mb-4">No beats yet. Upload your first beat!</p>
+          <button
+            onClick={() => setShowForm(true)}
+            className="bg-accent text-black font-mono text-xs font-bold uppercase tracking-wider px-5 py-2.5 hover:bg-accent/90 inline-flex items-center gap-1"
+          >
+            <Plus className="w-3 h-3" /> Upload Beat
+          </button>
         </div>
       ) : activeBeats.length > 0 && (
         <div className="space-y-3">

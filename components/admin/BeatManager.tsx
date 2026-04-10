@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Music, X, Upload, TrendingUp, ShoppingCart, DollarSign } from 'lucide-react';
+import { Plus, Trash2, Music, X, Upload, TrendingUp, ShoppingCart, DollarSign, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
 import { BEAT_LICENSES, BEAT_GENRES } from '@/lib/constants';
 import PrivateSaleModal from '@/components/beats/PrivateSaleModal';
@@ -64,6 +64,10 @@ export default function BeatManager() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [showRejectModal, setShowRejectModal] = useState<string | null>(null);
 
   // Private sale state
   const [showPrivateSale, setShowPrivateSale] = useState(false);
@@ -181,6 +185,36 @@ export default function BeatManager() {
     return beat.producer || 'Unknown';
   }
 
+  async function handleApproval(beatId: string, action: 'approve' | 'reject', reason?: string) {
+    if (action === 'approve') setApprovingId(beatId);
+    else setRejectingId(beatId);
+
+    try {
+      const res = await fetch('/api/admin/beats/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ beatId, action, reason }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setBeats((prev) =>
+          prev.map((b) =>
+            b.id === beatId ? { ...b, status: data.status } : b
+          )
+        );
+        setShowRejectModal(null);
+        setRejectReason('');
+      }
+    } catch (e) {
+      console.error('Approval action failed:', e);
+    }
+    setApprovingId(null);
+    setRejectingId(null);
+  }
+
+  const pendingApprovalBeats = beats.filter((b) => b.status === 'pending_approval');
+  const otherBeats = beats.filter((b) => b.status !== 'pending_approval');
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -219,6 +253,105 @@ export default function BeatManager() {
           <div className="border-2 border-black/10 p-4">
             <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Exclusives Sold</p>
             <p className="text-heading-sm">{beats.filter((b) => b.status === 'sold_exclusive').length}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Pending Approval Section */}
+      {pendingApprovalBeats.length > 0 && (
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <AlertCircle className="w-5 h-5 text-amber-500" />
+            <h3 className="font-mono text-sm font-bold uppercase">
+              Pending Approval ({pendingApprovalBeats.length})
+            </h3>
+          </div>
+          <div className="space-y-3">
+            {pendingApprovalBeats.map((beat) => (
+              <div key={beat.id} className="border-2 border-amber-400 bg-amber-50 p-4">
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 bg-amber-100 flex items-center justify-center flex-shrink-0">
+                    <Music className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="font-mono text-sm font-bold">{beat.title}</p>
+                      <span className="bg-amber-200 text-amber-800 font-mono text-[10px] font-bold uppercase px-1.5 py-0.5">
+                        Pending Approval
+                      </span>
+                    </div>
+                    <p className="font-mono text-xs text-black/50 mt-0.5">
+                      {getProducerName(beat)}
+                      {beat.bpm && ` · ${beat.bpm} BPM`}
+                      {beat.musical_key && ` · ${beat.musical_key}`}
+                      {beat.genre && ` · ${beat.genre}`}
+                    </p>
+                    <div className="flex flex-wrap gap-3 mt-1">
+                      {beat.mp3_lease_price && <span className="font-mono text-[10px] text-black/40">MP3: {formatCents(beat.mp3_lease_price)}</span>}
+                      {beat.trackout_lease_price && <span className="font-mono text-[10px] text-black/40">Trackout: {formatCents(beat.trackout_lease_price)}</span>}
+                      {beat.exclusive_price && beat.has_exclusive && <span className="font-mono text-[10px] text-accent font-bold">EXCL: {formatCents(beat.exclusive_price)}</span>}
+                    </div>
+                  </div>
+                  {beat.preview_url && (
+                    <audio controls preload="none" className="hidden sm:block max-w-[160px] flex-shrink-0">
+                      <source src={beat.preview_url} type="audio/mpeg" />
+                    </audio>
+                  )}
+                  <div className="flex gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => handleApproval(beat.id, 'approve')}
+                      disabled={approvingId === beat.id}
+                      className="bg-green-600 text-white font-mono text-xs font-bold uppercase tracking-wider px-3 py-2 hover:bg-green-700 disabled:opacity-50 inline-flex items-center gap-1"
+                    >
+                      <CheckCircle className="w-3 h-3" />
+                      {approvingId === beat.id ? 'Approving...' : 'Approve'}
+                    </button>
+                    <button
+                      onClick={() => setShowRejectModal(beat.id)}
+                      disabled={rejectingId === beat.id}
+                      className="bg-red-600 text-white font-mono text-xs font-bold uppercase tracking-wider px-3 py-2 hover:bg-red-700 disabled:opacity-50 inline-flex items-center gap-1"
+                    >
+                      <XCircle className="w-3 h-3" />
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Reject Modal */}
+      {showRejectModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => { setShowRejectModal(null); setRejectReason(''); }}>
+          <div className="bg-white max-w-md w-full p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-mono text-sm font-bold uppercase">Reject Beat</h3>
+            <div>
+              <label className="block font-mono text-xs text-black/60 uppercase tracking-wider mb-1">Reason (optional)</label>
+              <textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                className="w-full border border-black/20 px-3 py-2 font-mono text-sm focus:border-accent focus:outline-none"
+                placeholder="Quality, missing stems, not a good fit, etc."
+                rows={3}
+              />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => { setShowRejectModal(null); setRejectReason(''); }}
+                className="font-mono text-xs font-bold uppercase tracking-wider px-4 py-2 text-black/50 hover:text-black"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleApproval(showRejectModal, 'reject', rejectReason || undefined)}
+                disabled={rejectingId === showRejectModal}
+                className="bg-red-600 text-white font-mono text-xs font-bold uppercase tracking-wider px-4 py-2 hover:bg-red-700 disabled:opacity-50"
+              >
+                {rejectingId === showRejectModal ? 'Rejecting...' : 'Reject Beat'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -387,17 +520,18 @@ export default function BeatManager() {
       {/* Beats List */}
       {loading ? (
         <p className="font-mono text-sm text-black/40">Loading beats...</p>
-      ) : beats.length === 0 ? (
+      ) : otherBeats.length === 0 && pendingApprovalBeats.length === 0 ? (
         <div className="border-2 border-black/10 p-12 text-center">
           <Music className="w-12 h-12 text-black/10 mx-auto mb-4" />
           <p className="font-mono text-sm text-black/40">No beats yet. Add your first beat above.</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {beats.map((beat) => (
+          {otherBeats.map((beat) => (
             <div key={beat.id} className={`border-2 p-4 flex items-center gap-4 ${
               beat.status === 'sold_exclusive' ? 'border-accent/30 bg-accent/5' :
               beat.status === 'inactive' ? 'border-black/5 opacity-50' :
+              beat.status === 'rejected' ? 'border-red-200 opacity-50' :
               'border-black/10'
             }`}>
               <div className="w-12 h-12 bg-black/5 flex items-center justify-center flex-shrink-0">
@@ -414,6 +548,9 @@ export default function BeatManager() {
                   )}
                   {beat.status === 'active' && (
                     <span className="bg-green-100 text-green-700 font-mono text-[10px] font-bold uppercase px-1.5 py-0.5 flex-shrink-0">Live</span>
+                  )}
+                  {beat.status === 'rejected' && (
+                    <span className="bg-red-100 text-red-700 font-mono text-[10px] font-bold uppercase px-1.5 py-0.5 flex-shrink-0">Rejected</span>
                   )}
                   {beat.contains_samples && (
                     <span className="bg-amber-100 text-amber-700 font-mono text-[10px] font-bold uppercase px-1.5 py-0.5 flex-shrink-0">Samples</span>
