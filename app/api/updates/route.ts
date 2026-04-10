@@ -9,16 +9,16 @@ function detectTags(message: string): string[] {
   const tags: Set<string> = new Set();
 
   // Admin keywords
-  if (/\badmin\b|booking.?manager|accounting|payroll|contracts?.?viewer|kpi|overview tab/i.test(lower)) tags.add('admin');
+  if (/\badmin\b|booking.?manager|accounting|payroll|contracts?.?viewer|kpi|overview tab|cash.?ledger|payout/i.test(lower)) tags.add('admin');
 
   // Engineer keywords
-  if (/\bengineer\b|client.?library|session.?note|invite.*session|claim|unclaimed/i.test(lower)) tags.add('engineer');
+  if (/\bengineer\b|client.?library|session.?note|invite.*session|claim|unclaimed|record.?cash|add.?time|cash.?ledger|cash.?owed|upload.?files?|deliver/i.test(lower)) tags.add('engineer');
 
   // Producer keywords
-  if (/\bproducer\b|beat.?(store|upload|sale|agreement|cover|price|license)|private.?sale/i.test(lower)) tags.add('producer');
+  if (/\bproducer\b|beat.?(store|upload|sale|agreement|cover|price|license)|private.?sale|sell.?beats/i.test(lower)) tags.add('producer');
 
   // Client/artist keywords
-  if (/\bdashboard\b|profile|booking|download|file|session.?prep|artist.?hub|xp|achievement|purchase|signup|login|reschedule/i.test(lower)) tags.add('client');
+  if (/\bdashboard\b|profile|booking|download|file|session.?prep|artist.?hub|xp|achievement|purchase|signup|login|reschedule|my.?purchases|public.?profile/i.test(lower)) tags.add('client');
 
   // If nothing detected, it's for everyone
   if (tags.size === 0) tags.add('all');
