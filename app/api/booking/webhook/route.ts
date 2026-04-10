@@ -234,41 +234,42 @@ export async function POST(request: NextRequest) {
             reschedule_deadline: inviteRescheduleDeadline,
           }).eq('id', bookingId);
 
-          // Notify engineers — priority to requested engineer, or all engineers for this studio
-          const room = existingBooking.room as string;
-          if (existingBooking.requested_engineer && invitePriorityExpiry) {
-            // Requested engineer gets priority — only notify them
-            const requestedEng = ENGINEERS.find(
-              (e) => e.name === existingBooking.requested_engineer || e.displayName === existingBooking.requested_engineer
-            );
-            if (requestedEng) {
-              const priorityLabel = getPriorityHoursLabel(invitePriorityExpiry);
-              await sendEngineerPriorityAlert(requestedEng.email, {
-                id: bookingId,
-                customerName: existingBooking.customer_name,
-                date: dateStr,
-                startTime: timeStr,
-                duration: existingBooking.duration,
-                room: existingBooking.room || '',
-                priorityHours: priorityLabel,
-              });
-            }
-          } else {
-            // No preference — notify all engineers for this studio
-            const engineerEmails = ENGINEERS
-              .filter((e) => e.studios.includes(room as Room))
-              .map((e) => e.email);
-            if (engineerEmails.length > 0) {
-              await sendEngineerNewBookingAlert(engineerEmails, {
-                id: bookingId,
-                customerName: existingBooking.customer_name,
-                date: dateStr,
-                startTime: timeStr,
-                duration: existingBooking.duration,
-                room: existingBooking.room || '',
-              });
+          // Notify engineers — BUT NOT if the booking already has an engineer assigned (invite sessions)
+          // Invite bookings auto-assign the engineer who created the invite, so no claim needed
+          if (!existingBooking.engineer_name) {
+            const room = existingBooking.room as string;
+            if (existingBooking.requested_engineer && invitePriorityExpiry) {
+              const requestedEng = ENGINEERS.find(
+                (e) => e.name === existingBooking.requested_engineer || e.displayName === existingBooking.requested_engineer
+              );
+              if (requestedEng) {
+                const priorityLabel = getPriorityHoursLabel(invitePriorityExpiry);
+                await sendEngineerPriorityAlert(requestedEng.email, {
+                  id: bookingId,
+                  customerName: existingBooking.customer_name,
+                  date: dateStr,
+                  startTime: timeStr,
+                  duration: existingBooking.duration,
+                  room: existingBooking.room || '',
+                  priorityHours: priorityLabel,
+                });
+              }
+            } else {
+              const engineerEmails = ENGINEERS
+                .filter((e) => e.studios.includes(room as Room))
+                .map((e) => e.email);
+              if (engineerEmails.length > 0) {
+                await sendEngineerNewBookingAlert(engineerEmails, {
+                  id: bookingId,
+                  customerName: existingBooking.customer_name,
+                  date: dateStr,
+                  startTime: timeStr,
+                  duration: existingBooking.duration,
+                  room: existingBooking.room || '',
+                });
             }
           }
+          } // end if (!existingBooking.engineer_name)
         }
       } else if (meta.type === 'booking_remainder') {
         // Remainder paid via Checkout (fallback when off-session charge failed)
@@ -627,29 +628,32 @@ export async function POST(request: NextRequest) {
             reschedule_deadline: inviteRescheduleDeadline,
           }).eq('id', bookingId);
 
-          const room = existingBooking.room as string;
-          if (existingBooking.requested_engineer && invitePriorityExpiry) {
-            const requestedEng = ENGINEERS.find(
-              (e) => e.name === existingBooking.requested_engineer || e.displayName === existingBooking.requested_engineer
-            );
-            if (requestedEng) {
-              const priorityLabel = getPriorityHoursLabel(invitePriorityExpiry);
-              await sendEngineerPriorityAlert(requestedEng.email, {
-                id: bookingId, customerName: existingBooking.customer_name,
-                date: dateStr, startTime: timeStr, duration: existingBooking.duration,
-                room: existingBooking.room || '', priorityHours: priorityLabel,
-              });
-            }
-          } else {
-            const engineerEmails = ENGINEERS
-              .filter((e) => e.studios.includes(room as Room))
-              .map((e) => e.email);
-            if (engineerEmails.length > 0) {
-              await sendEngineerNewBookingAlert(engineerEmails, {
-                id: bookingId, customerName: existingBooking.customer_name,
-                date: dateStr, startTime: timeStr, duration: existingBooking.duration,
-                room: existingBooking.room || '',
-              });
+          // Skip claim emails if engineer already assigned (invite sessions)
+          if (!existingBooking.engineer_name) {
+            const room = existingBooking.room as string;
+            if (existingBooking.requested_engineer && invitePriorityExpiry) {
+              const requestedEng = ENGINEERS.find(
+                (e) => e.name === existingBooking.requested_engineer || e.displayName === existingBooking.requested_engineer
+              );
+              if (requestedEng) {
+                const priorityLabel = getPriorityHoursLabel(invitePriorityExpiry);
+                await sendEngineerPriorityAlert(requestedEng.email, {
+                  id: bookingId, customerName: existingBooking.customer_name,
+                  date: dateStr, startTime: timeStr, duration: existingBooking.duration,
+                  room: existingBooking.room || '', priorityHours: priorityLabel,
+                });
+              }
+            } else {
+              const engineerEmails = ENGINEERS
+                .filter((e) => e.studios.includes(room as Room))
+                .map((e) => e.email);
+              if (engineerEmails.length > 0) {
+                await sendEngineerNewBookingAlert(engineerEmails, {
+                  id: bookingId, customerName: existingBooking.customer_name,
+                  date: dateStr, startTime: timeStr, duration: existingBooking.duration,
+                  room: existingBooking.room || '',
+                });
+              }
             }
           }
         }
