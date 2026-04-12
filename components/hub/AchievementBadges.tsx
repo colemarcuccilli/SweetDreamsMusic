@@ -1,36 +1,24 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import {
-  Award, Lock, Mic, Calendar, Star, Folder, Rocket, Disc,
-  BarChart3 as BarChart, Flame, Target, Trophy, User, Heart,
-  PenLine, Zap, Crown, CheckCircle, FileText, Library, X,
-  ChevronDown, ChevronRight, Globe, Music, Link, Wrench,
-  Sliders, Headphones,
-} from 'lucide-react';
+import { Trophy, X, ChevronDown, ChevronRight } from 'lucide-react';
 import { ACHIEVEMENTS, TIER_COLORS } from '@/lib/achievements';
+import BadgeIcon from './BadgeIcon';
 import { SkeletonGrid } from './LoadingSkeleton';
-
-// ---------------------------------------------------------------------------
-// Icon map — maps string names from AchievementDef.icon to Lucide components
-// ---------------------------------------------------------------------------
-const ICON_MAP: Record<string, typeof Award> = {
-  Mic, Calendar, Star, Award, Folder, Rocket, Disc, BarChart, Flame,
-  Target, Trophy, User, Heart, PenLine, Zap, Crown, CheckCircle, FileText,
-  Library, Lock, Globe, Music, Link, Wrench, Sliders, Headphones,
-};
 
 // ---------------------------------------------------------------------------
 // Category metadata for display
 // ---------------------------------------------------------------------------
 const CATEGORY_META: Record<string, { label: string; order: number }> = {
   sessions:    { label: 'Sessions',    order: 0 },
-  projects:    { label: 'Projects',    order: 1 },
-  metrics:     { label: 'Metrics',     order: 2 },
-  goals:       { label: 'Goals',       order: 3 },
-  engagement:  { label: 'Engagement',  order: 4 },
-  milestones:  { label: 'Milestones',  order: 5 },
-  engineer:    { label: 'Engineer',    order: 6 },
+  engineer:    { label: 'Engineer',    order: 1 },
+  producer:    { label: 'Producer',    order: 2 },
+  projects:    { label: 'Projects',    order: 3 },
+  revenue:     { label: 'Revenue',     order: 4 },
+  metrics:     { label: 'Metrics',     order: 5 },
+  goals:       { label: 'Goals',       order: 6 },
+  engagement:  { label: 'Engagement',  order: 7 },
+  milestones:  { label: 'Milestones',  order: 8 },
 };
 
 // ---------------------------------------------------------------------------
@@ -210,12 +198,11 @@ export default function AchievementBadges({ newUnlocks = [], progress = {}, onDi
 
               {/* Achievement grid */}
               {!collapsed && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
                   {items.map(({ key, def }) => {
                     const isUnlocked = unlockedKeys.has(key);
                     const isNew = newUnlockSet.has(key);
                     const unlockedData = unlocked.find((a) => a.achievement_key === key);
-                    const Icon = ICON_MAP[def.icon] || Award;
                     const tier = TIER_COLORS[def.tier] ?? TIER_COLORS.bronze;
                     const prog = progress[key];
                     const progPct = prog && prog.target > 0
@@ -229,55 +216,55 @@ export default function AchievementBadges({ newUnlocks = [], progress = {}, onDi
                           'border-2 p-4 text-center transition-all duration-200',
                           isUnlocked
                             ? `${tier.bg} ${tier.border} ${isNew ? 'animate-pulse-gold' : ''}`
-                            : 'border-black/5 opacity-40',
+                            : 'border-dashed border-black/10 bg-black/[0.01]',
                           isUnlocked && !isNew ? 'hover:scale-[1.03] hover:shadow-md' : '',
                         ].join(' ')}
                       >
                         {/* Tier label */}
                         {isUnlocked && (
-                          <span className={`font-mono text-[9px] font-bold uppercase tracking-widest ${tier.text}`}>
+                          <span className={`font-mono text-[10px] font-bold uppercase tracking-widest ${tier.text}`}>
                             {def.tier}
                           </span>
                         )}
 
-                        {/* Icon */}
-                        <div className={`w-10 h-10 mx-auto mb-2 flex items-center justify-center ${
-                          isUnlocked ? tier.text : 'text-black/20'
-                        }`}>
-                          {isUnlocked ? <Icon className="w-7 h-7" /> : <Lock className="w-5 h-5" />}
+                        {/* Badge icon */}
+                        <div className="w-16 h-16 mx-auto mb-3 flex items-center justify-center">
+                          <BadgeIcon icon={def.icon} tier={def.tier} unlocked={isUnlocked} size={56} />
                         </div>
 
                         {/* Title */}
-                        <p className="font-mono text-xs font-bold uppercase tracking-wider">
+                        <p className={`font-mono text-xs font-bold uppercase tracking-wider ${isUnlocked ? '' : 'text-black/50'}`}>
                           {def.title}
                         </p>
 
                         {/* Description */}
-                        <p className="font-mono text-[10px] text-black/40 mt-1">{def.description}</p>
+                        <p className={`font-mono text-[11px] mt-1 ${isUnlocked ? 'text-black/60' : 'text-black/40'}`}>
+                          {def.description}
+                        </p>
 
                         {/* Progress bar for locked achievements */}
                         {!isUnlocked && prog && prog.target > 1 && (
                           <div className="mt-2">
-                            <div className="w-full h-1 bg-black/10 overflow-hidden">
+                            <div className="w-full h-1.5 bg-black/10 overflow-hidden rounded-full">
                               <div
-                                className="h-full bg-black/25 transition-all duration-500"
+                                className="h-full bg-black/30 transition-all duration-500 rounded-full"
                                 style={{ width: `${progPct}%` }}
                               />
                             </div>
-                            <p className="font-mono text-[10px] text-black/40 mt-0.5">
+                            <p className="font-mono text-[11px] text-black/50 mt-1 font-semibold">
                               {prog.current}/{prog.target}
                             </p>
                           </div>
                         )}
 
                         {/* XP reward */}
-                        <p className={`font-mono text-[10px] mt-1.5 font-bold ${isUnlocked ? tier.text : 'text-black/20'}`}>
+                        <p className={`font-mono text-[11px] mt-2 font-bold ${isUnlocked ? tier.text : 'text-black/30'}`}>
                           +{def.xp} XP
                         </p>
 
                         {/* Unlock date */}
                         {isUnlocked && unlockedData && (
-                          <p className="font-mono text-[10px] text-black/30 mt-1">
+                          <p className="font-mono text-[10px] text-black/30 mt-0.5">
                             {new Date(unlockedData.unlocked_at).toLocaleDateString()}
                           </p>
                         )}

@@ -19,6 +19,16 @@ export async function POST() {
     (e) => e.email.toLowerCase() === user.email?.toLowerCase()
   );
 
+  // Get profile first to check producer status
+  const { data: profileData } = await supabase
+    .from('profiles')
+    .select('id, total_xp, artist_level, daily_streak, display_name, genre, career_stage, profile_picture_url, public_profile_slug, role, is_producer')
+    .eq('user_id', user.id)
+    .single();
+
+  const isProducer = !!profileData?.is_producer;
+  const profileId = profileData?.id;
+
   // Query all relevant data in parallel
   const [
     sessionsResult,
@@ -29,12 +39,23 @@ export async function POST() {
     completedGoalsResult,
     metricsResult,
     tasksResult,
-    profileResult,
     sessionNotesResult,
     beatPurchasesResult,
     calendarEventsResult,
     platformConnectionsResult,
     existingAchievementsResult,
+    // Producer-specific
+    producerBeatsResult,
+    producerLeasesResult,
+    producerExclusivesResult,
+    // Engineer media sales
+    engineerMediaSalesResult,
+    // Private sales
+    privateSalesResult,
+    // Revenue: session earnings for engineers
+    engineerBookingsResult,
+    // Revenue: beat sales for producers
+    producerBeatRevenueResult,
   ] = await Promise.all([
     // Completed bookings as CLIENT (customer_email = user.email)
     // IMPORTANT: Exclude sessions where this user is the ENGINEER, not the client
@@ -130,10 +151,36 @@ export async function POST() {
       .from('artist_achievements')
       .select('achievement_key')
       .eq('user_id', user.id),
+
+    // Producer: beats uploaded with IDs (for purchase lookups)
+    isProducer && profileId
+      ? service.from('beats').select('id, total_lease_revenue').eq('producer_id', profileId).neq('status', 'rejected')
+      : Promise.resolve({ count: 0, data: null, error: null }),
+
+    // Placeholders — producer purchases queried separately below
+    Promise.resolve({ data: null, error: null }),
+    Promise.resolve({ data: null, error: null }),
+
+    // Engineer: media sales (sold_by matches engineer name)
+    isEngineer && engineerConfig
+      ? service.from('media_sales').select('id', { count: 'exact', head: true }).eq('sold_by', engineerConfig.name)
+      : Promise.resolve({ count: 0, data: null, error: null }),
+
+    // Private sales completed (created by this user's profile)
+    isProducer && profileId
+      ? service.from('private_beat_sales').select('id', { count: 'exact', head: true }).eq('created_by', profileId).eq('status', 'completed')
+      : Promise.resolve({ count: 0, data: null, error: null }),
+
+    // Engineer: all completed bookings with amounts (for revenue calc)
+    isEngineer && engineerConfig
+      ? service.from('bookings').select('total_amount').eq('engineer_name', engineerConfig.name).eq('status', 'completed')
+      : Promise.resolve({ data: null, error: null }),
+
+    // Placeholder — producer revenue computed from beats query above
+    Promise.resolve({ data: null, error: null }),
   ]);
 
   // Filter out sessions where the user was the engineer, not the client
-  // This prevents engineers from getting "First Session" when they engineer a session
   const clientSessions = isEngineer && engineerConfig
     ? (sessionsResult.data || []).filter(
         (b: { engineer_name: string | null }) => b.engineer_name !== engineerConfig.name
@@ -148,15 +195,61 @@ export async function POST() {
   const completedGoals = completedGoalsResult.count || 0;
   const metricCount = metricsResult.data?.length || 0;
   const completedTasks = tasksResult.count || 0;
-  const profile = profileResult.data;
+  const profile = profileData;
   const sessionNotesCount = sessionNotesResult.count || 0;
   const beatPurchaseCount = beatPurchasesResult.count || 0;
   const calendarEventCount = calendarEventsResult.count || 0;
   const platformConnectionCount = platformConnectionsResult.count || 0;
   const hasPublicProfile = !!profile?.public_profile_slug;
 
+  // Producer data
+  const producerBeats = producerBeatsResult.data as { id: string; total_lease_revenue: number }[] | null;
+  const producerBeatCount = producerBeats?.length || 0;
+  const producerBeatIds = producerBeats?.map(b => b.id) || [];
+
+  // Query producer's beat purchases (leases + exclusives) using beat IDs
+  let producerLeaseCount = 0;
+  let producerExclusiveCount = 0;
+  let producerBeatRevenue = 0;
+  if (isProducer && producerBeatIds.length > 0) {
+    const { data: producerPurchases } = await service
+      .from('beat_purchases')
+      .select('license_type, amount_paid')
+      .in('beat_id', producerBeatIds);
+    if (producerPurchases) {
+      for (const p of producerPurchases) {
+        if (p.license_type === 'exclusive') {
+          producerExclusiveCount++;
+        } else {
+          producerLeaseCount++;
+        }
+        producerBeatRevenue += p.amount_paid || 0;
+      }
+    }
+  }
+
+  // Engineer media sales
+  const engineerMediaSalesCount = (engineerMediaSalesResult as unknown as { count: number | null }).count || 0;
+
+  // Private sales
+  const privateSaleCount = (privateSalesResult as unknown as { count: number | null }).count || 0;
+
+  // Revenue calculation (in cents)
+  // Engineer revenue: 60% of session total_amount
+  let totalEarnings = 0;
+  if (isEngineer && engineerBookingsResult.data) {
+    const bookingsData = engineerBookingsResult.data as unknown as { total_amount: number }[];
+    const sessionRevenue = bookingsData.reduce((s, b) => s + b.total_amount, 0);
+    totalEarnings += Math.round(sessionRevenue * 0.6); // 60% engineer cut
+  }
+  // Producer revenue: 60% of beat sales
+  if (isProducer) {
+    totalEarnings += Math.round(producerBeatRevenue * 0.6); // 60% producer cut
+  }
+  const totalEarningsDollars = totalEarnings / 100;
+
   const existingKeys = new Set(
-    (existingAchievementsResult.data || []).map((a) => a.achievement_key)
+    ((existingAchievementsResult.data || []) as unknown as { achievement_key: string }[]).map((a) => a.achievement_key)
   );
 
   // Calculate metric weeks streak (consecutive weeks)
@@ -200,6 +293,30 @@ export async function POST() {
       eng_ten_sessions: engineerSessions >= 10,
       eng_twenty_five_sessions: engineerSessions >= 25,
       eng_fifty_sessions: engineerSessions >= 50,
+      eng_hundred_sessions: engineerSessions >= 100,
+      eng_first_media_sale: engineerMediaSalesCount >= 1,
+      eng_five_media_sales: engineerMediaSalesCount >= 5,
+    } : {}),
+
+    // Producer achievements (only for producers)
+    ...(isProducer ? {
+      first_beat_upload: producerBeatCount >= 1,
+      five_beats_uploaded: producerBeatCount >= 5,
+      ten_beats_uploaded: producerBeatCount >= 10,
+      first_lease_sold: producerLeaseCount >= 1,
+      five_leases_sold: producerLeaseCount >= 5,
+      twenty_five_leases_sold: producerLeaseCount >= 25,
+      first_exclusive_sold: producerExclusiveCount >= 1,
+      five_exclusives_sold: producerExclusiveCount >= 5,
+      first_private_sale: privateSaleCount >= 1,
+    } : {}),
+
+    // Revenue milestones (for anyone who earns — engineers, producers)
+    ...((isEngineer || isProducer) ? {
+      earned_500: totalEarningsDollars >= 500,
+      earned_2500: totalEarningsDollars >= 2500,
+      earned_10000: totalEarningsDollars >= 10000,
+      earned_25000: totalEarningsDollars >= 25000,
     } : {}),
 
     first_project: totalProjects >= 1,
@@ -303,6 +420,26 @@ export async function POST() {
       eng_ten_sessions: { current: Math.min(engineerSessions, 10), target: 10 },
       eng_twenty_five_sessions: { current: Math.min(engineerSessions, 25), target: 25 },
       eng_fifty_sessions: { current: Math.min(engineerSessions, 50), target: 50 },
+      eng_hundred_sessions: { current: Math.min(engineerSessions, 100), target: 100 },
+      eng_first_media_sale: { current: Math.min(engineerMediaSalesCount, 1), target: 1 },
+      eng_five_media_sales: { current: Math.min(engineerMediaSalesCount, 5), target: 5 },
+    } : {}),
+    ...(isProducer ? {
+      first_beat_upload: { current: Math.min(producerBeatCount, 1), target: 1 },
+      five_beats_uploaded: { current: Math.min(producerBeatCount, 5), target: 5 },
+      ten_beats_uploaded: { current: Math.min(producerBeatCount, 10), target: 10 },
+      first_lease_sold: { current: Math.min(producerLeaseCount, 1), target: 1 },
+      five_leases_sold: { current: Math.min(producerLeaseCount, 5), target: 5 },
+      twenty_five_leases_sold: { current: Math.min(producerLeaseCount, 25), target: 25 },
+      first_exclusive_sold: { current: Math.min(producerExclusiveCount, 1), target: 1 },
+      five_exclusives_sold: { current: Math.min(producerExclusiveCount, 5), target: 5 },
+      first_private_sale: { current: Math.min(privateSaleCount, 1), target: 1 },
+    } : {}),
+    ...((isEngineer || isProducer) ? {
+      earned_500: { current: Math.min(Math.round(totalEarningsDollars), 500), target: 500 },
+      earned_2500: { current: Math.min(Math.round(totalEarningsDollars), 2500), target: 2500 },
+      earned_10000: { current: Math.min(Math.round(totalEarningsDollars), 10000), target: 10000 },
+      earned_25000: { current: Math.min(Math.round(totalEarningsDollars), 25000), target: 25000 },
     } : {}),
   };
 

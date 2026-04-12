@@ -3,13 +3,15 @@
 // Each achievement has conditions checked automatically
 // ============================================================
 
+export type AchievementCategory = 'sessions' | 'projects' | 'metrics' | 'goals' | 'engagement' | 'milestones' | 'engineer' | 'producer' | 'revenue';
+
 export interface AchievementDef {
   title: string;
   description: string;
   icon: string;
   xp: number;       // XP awarded on unlock
   tier: 'bronze' | 'silver' | 'gold' | 'diamond';
-  category: 'sessions' | 'projects' | 'metrics' | 'goals' | 'engagement' | 'milestones' | 'engineer';
+  category: AchievementCategory;
 }
 
 export const ACHIEVEMENTS: Record<string, AchievementDef> = {
@@ -160,6 +162,94 @@ export const ACHIEVEMENTS: Record<string, AchievementDef> = {
     icon: 'Link', xp: 50, tier: 'bronze', category: 'engagement',
   },
 
+  // === Producer ===
+  first_beat_upload: {
+    title: 'Beat Maker',
+    description: 'Uploaded your first beat',
+    icon: 'Upload', xp: 50, tier: 'bronze', category: 'producer',
+  },
+  five_beats_uploaded: {
+    title: 'Catalog Started',
+    description: 'Uploaded 5 beats',
+    icon: 'Disc', xp: 150, tier: 'silver', category: 'producer',
+  },
+  ten_beats_uploaded: {
+    title: 'Hit Factory',
+    description: 'Uploaded 10 beats',
+    icon: 'Disc', xp: 300, tier: 'gold', category: 'producer',
+  },
+  first_lease_sold: {
+    title: 'First Sale',
+    description: 'Sold your first lease',
+    icon: 'DollarSign', xp: 100, tier: 'bronze', category: 'producer',
+  },
+  five_leases_sold: {
+    title: 'Moving Units',
+    description: 'Sold 5 leases',
+    icon: 'TrendingUp', xp: 200, tier: 'silver', category: 'producer',
+  },
+  twenty_five_leases_sold: {
+    title: 'Beat Mogul',
+    description: 'Sold 25 leases',
+    icon: 'Crown', xp: 500, tier: 'gold', category: 'producer',
+  },
+  first_exclusive_sold: {
+    title: 'Exclusive Deal',
+    description: 'Sold your first exclusive',
+    icon: 'Star', xp: 200, tier: 'silver', category: 'producer',
+  },
+  five_exclusives_sold: {
+    title: 'Top Producer',
+    description: 'Sold 5 exclusives',
+    icon: 'Crown', xp: 750, tier: 'diamond', category: 'producer',
+  },
+
+  // === Engineer (expanded) ===
+  eng_hundred_sessions: {
+    title: 'Century Club',
+    description: 'Engineered 100 sessions',
+    icon: 'Award', xp: 1500, tier: 'diamond', category: 'engineer',
+  },
+  eng_first_media_sale: {
+    title: 'Media Seller',
+    description: 'Made your first media sale',
+    icon: 'Camera', xp: 100, tier: 'bronze', category: 'engineer',
+  },
+  eng_five_media_sales: {
+    title: 'Content Creator',
+    description: 'Made 5 media sales',
+    icon: 'Camera', xp: 200, tier: 'silver', category: 'engineer',
+  },
+
+  // === Revenue Milestones ===
+  earned_500: {
+    title: 'First Check',
+    description: 'Earned $500+ on the platform',
+    icon: 'DollarSign', xp: 100, tier: 'bronze', category: 'revenue',
+  },
+  earned_2500: {
+    title: 'Stacking Up',
+    description: 'Earned $2,500+ on the platform',
+    icon: 'DollarSign', xp: 250, tier: 'silver', category: 'revenue',
+  },
+  earned_10000: {
+    title: 'Five Figures',
+    description: 'Earned $10,000+ on the platform',
+    icon: 'DollarSign', xp: 500, tier: 'gold', category: 'revenue',
+  },
+  earned_25000: {
+    title: 'Big Money',
+    description: 'Earned $25,000+ on the platform',
+    icon: 'DollarSign', xp: 1000, tier: 'diamond', category: 'revenue',
+  },
+
+  // === Engagement (expanded) ===
+  first_private_sale: {
+    title: 'Direct Deal',
+    description: 'Completed your first private beat sale',
+    icon: 'Handshake', xp: 75, tier: 'bronze', category: 'engagement',
+  },
+
   // === Milestones ===
   level_5: {
     title: 'Getting Started',
@@ -198,10 +288,18 @@ export const ACHIEVEMENTS: Record<string, AchievementDef> = {
   },
 };
 
-// Tier colors for badge styling
+// Tier colors for badge styling (Tailwind classes)
 export const TIER_COLORS: Record<string, { bg: string; border: string; text: string; glow: string }> = {
   bronze: { bg: 'bg-amber-50', border: 'border-amber-300', text: 'text-amber-700', glow: 'shadow-amber-200' },
   silver: { bg: 'bg-gray-50', border: 'border-gray-300', text: 'text-gray-600', glow: 'shadow-gray-200' },
   gold: { bg: 'bg-yellow-50', border: 'border-yellow-400', text: 'text-yellow-700', glow: 'shadow-yellow-200' },
   diamond: { bg: 'bg-cyan-50', border: 'border-cyan-300', text: 'text-cyan-700', glow: 'shadow-cyan-200' },
+};
+
+// Tier hex colors for SVG badge rendering
+export const TIER_HEX: Record<string, { primary: string; secondary: string; bg: string; glow: string }> = {
+  bronze: { primary: '#CD7F32', secondary: '#A0522D', bg: '#FDF2E6', glow: '#CD7F3240' },
+  silver: { primary: '#A8A8A8', secondary: '#707070', bg: '#F5F5F5', glow: '#A8A8A840' },
+  gold: { primary: '#F4C430', secondary: '#DAA520', bg: '#FFF9E6', glow: '#F4C43060' },
+  diamond: { primary: '#4FD1C5', secondary: '#2C7A7B', bg: '#E6FFFA', glow: '#4FD1C560' },
 };
