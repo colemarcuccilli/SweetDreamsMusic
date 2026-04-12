@@ -98,7 +98,12 @@ ENGINEERS.forEach(eng => {
   if (eng.displayName && eng.displayName !== eng.name) {
     NAME_MAP[eng.displayName.toLowerCase()] = eng.name;
   }
+  // Also map email-derived names (e.g., "zionomari" from email "zionomari@...")
+  const emailPrefix = eng.email.split('@')[0].toLowerCase();
+  if (emailPrefix) NAME_MAP[emailPrefix] = eng.name;
 });
+// Additional known aliases not derivable from the ENGINEERS constant
+NAME_MAP['zion omari'] = 'Zion Tinsley';
 
 function normalizeName(raw: string | null): string | null {
   if (!raw) return null;
@@ -385,34 +390,37 @@ export default function Accounting() {
     };
   }, [mediaSales]);
 
-  // ===== PAYROLL: All-time cumulative per-person earnings (never date-filtered) =====
-  const payrollData = useMemo(() => {
-    const people: Record<string, {
-      sessionCount: number; sessionRevenue: number; sessionPay: number; sessionHours: number;
-      mediaCommission: number; mediaSoldCount: number;
-      mediaWorkerPay: number; mediaFilmedCount: number; mediaEditedCount: number;
-      beatSales: number; beatProducerPay: number; beatCount: number;
-      totalPay: number;
-    }> = {};
+  // ===== Helper: compute per-person earnings from a set of bookings/media/beats =====
+  type PersonEarnings = {
+    sessionCount: number; sessionRevenue: number; sessionPay: number; sessionHours: number;
+    mediaCommission: number; mediaSoldCount: number;
+    mediaWorkerPay: number; mediaFilmedCount: number; mediaEditedCount: number;
+    beatSales: number; beatProducerPay: number; beatCount: number;
+    totalPay: number;
+  };
 
-    const initPerson = () => ({ sessionCount: 0, sessionRevenue: 0, sessionPay: 0, sessionHours: 0, mediaCommission: 0, mediaSoldCount: 0, mediaWorkerPay: 0, mediaFilmedCount: 0, mediaEditedCount: 0, beatSales: 0, beatProducerPay: 0, beatCount: 0, totalPay: 0 });
+  function computeEarnings(
+    bks: Booking[],
+    media: typeof allTimeMediaSales,
+    beats: BeatPurchase[],
+  ): Record<string, PersonEarnings> {
+    const people: Record<string, PersonEarnings> = {};
+    const init = (): PersonEarnings => ({ sessionCount: 0, sessionRevenue: 0, sessionPay: 0, sessionHours: 0, mediaCommission: 0, mediaSoldCount: 0, mediaWorkerPay: 0, mediaFilmedCount: 0, mediaEditedCount: 0, beatSales: 0, beatProducerPay: 0, beatCount: 0, totalPay: 0 });
 
-    // Sessions: engineer gets 60% — use ALL-TIME data with name normalization
-    allTimeBookings.forEach(b => {
+    bks.forEach(b => {
       const eng = normalizeName(b.engineer_name);
       if (!eng || eng === 'Unassigned') return;
-      if (!people[eng]) people[eng] = initPerson();
+      if (!people[eng]) people[eng] = init();
       people[eng].sessionCount++;
       people[eng].sessionRevenue += b.total_amount;
       people[eng].sessionPay += Math.round(b.total_amount * ENGINEER_SESSION_SPLIT);
       people[eng].sessionHours += b.duration;
     });
 
-    // Media: seller gets 15%, workers split 50%
-    allTimeMediaSales.forEach(m => {
+    media.forEach(m => {
       const seller = normalizeName(m.sold_by);
       if (seller) {
-        if (!people[seller]) people[seller] = initPerson();
+        if (!people[seller]) people[seller] = init();
         people[seller].mediaSoldCount++;
         people[seller].mediaCommission += Math.round(m.amount * MEDIA_SELLER_COMMISSION);
       }
@@ -420,47 +428,105 @@ export default function Accounting() {
       const editor = normalizeName(m.edited_by);
       const wCount = (filmer ? 1 : 0) + (editor ? 1 : 0);
       if (filmer) {
-        if (!people[filmer]) people[filmer] = initPerson();
+        if (!people[filmer]) people[filmer] = init();
         people[filmer].mediaFilmedCount++;
         people[filmer].mediaWorkerPay += Math.round(m.amount * MEDIA_WORKER_TOTAL / wCount);
       }
       if (editor) {
-        if (!people[editor]) people[editor] = initPerson();
+        if (!people[editor]) people[editor] = init();
         people[editor].mediaEditedCount++;
         people[editor].mediaWorkerPay += Math.round(m.amount * MEDIA_WORKER_TOTAL / wCount);
       }
     });
 
-    // Beat sales: producer gets 60%
-    allTimeBeatPurchases.forEach(p => {
+    beats.forEach(p => {
       const prod = normalizeName(p.beats?.producer ?? null);
       if (!prod) return;
-      if (!people[prod]) people[prod] = initPerson();
+      if (!people[prod]) people[prod] = init();
       people[prod].beatCount++;
       people[prod].beatSales += p.amount_paid;
       people[prod].beatProducerPay += Math.round(p.amount_paid * PRODUCER_COMMISSION);
     });
 
-    // Calculate totals
     Object.values(people).forEach(p => {
       p.totalPay = p.sessionPay + p.mediaCommission + p.mediaWorkerPay + p.beatProducerPay;
     });
+    return people;
+  }
 
-    // Apply normalized payout totals
+  // ===== PAYROLL: All-time + current period earnings =====
+  const payrollData = useMemo(() => {
+    // All-time earnings
+    const allTimePeople = computeEarnings(allTimeBookings, allTimeMediaSales, allTimeBeatPurchases);
+
+    // All-time payouts by person (normalized)
     const normalizedPayouts: Record<string, number> = {};
     payouts.forEach(p => {
       const name = normalizeName(p.person_name) || p.person_name;
       normalizedPayouts[name] = (normalizedPayouts[name] || 0) + p.amount;
     });
 
-    // Sort by balance owed (most owed first), then by total earned
-    const entries = Object.entries(people).sort((a, b) => {
-      const aRemaining = a[1].totalPay - (normalizedPayouts[a[0]] || 0);
-      const bRemaining = b[1].totalPay - (normalizedPayouts[b[0]] || 0);
-      if (bRemaining !== aRemaining) return bRemaining - aRemaining;
-      return b[1].totalPay - a[1].totalPay;
+    // Current pay period: 1st-15th or 16th-end
+    const now = new Date();
+    const day = now.getDate();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    let periodStart: Date, periodEnd: Date, periodLabel: string;
+    const monthName = now.toLocaleDateString('en-US', { month: 'short' });
+
+    if (day <= 15) {
+      periodStart = new Date(year, month, 1);
+      periodEnd = new Date(year, month, 15, 23, 59, 59);
+      periodLabel = `${monthName} 1–15, ${year}`;
+    } else {
+      periodStart = new Date(year, month, 16);
+      periodEnd = new Date(year, month + 1, 0, 23, 59, 59); // last day of month
+      periodLabel = `${monthName} 16–${periodEnd.getDate()}, ${year}`;
+    }
+
+    const periodStartStr = periodStart.toISOString();
+    const periodEndStr = periodEnd.toISOString();
+
+    // Filter data to current pay period
+    const periodBookings = allTimeBookings.filter(b => b.start_time >= periodStartStr && b.start_time <= periodEndStr);
+    const periodMedia = allTimeMediaSales.filter(m => m.created_at >= periodStartStr && m.created_at <= periodEndStr);
+    const periodBeats = allTimeBeatPurchases.filter(p => p.created_at >= periodStartStr && p.created_at <= periodEndStr);
+    const periodPeople = computeEarnings(periodBookings, periodMedia, periodBeats);
+
+    // Payouts during this period
+    const periodPayoutTotal = payouts
+      .filter(p => p.created_at >= periodStartStr && p.created_at <= periodEndStr)
+      .reduce((s, p) => s + p.amount, 0);
+
+    // Build combined entries: all people who have either all-time earnings or current period earnings
+    const allNames = new Set([...Object.keys(allTimePeople), ...Object.keys(periodPeople)]);
+    const entries: [string, PersonEarnings & { allTimeTotal: number; allTimePaid: number; balance: number; periodTotal: number }][] = [];
+
+    for (const name of allNames) {
+      const allTime = allTimePeople[name];
+      const period = periodPeople[name];
+      const allTimePaid = normalizedPayouts[name] || 0;
+      const allTimeTotal = allTime?.totalPay || 0;
+      const balance = Math.max(0, allTimeTotal - allTimePaid);
+      const periodTotal = period?.totalPay || 0;
+
+      // Use period data if available, otherwise all-time for the breakdown
+      const display = period || allTime;
+      if (!display) continue;
+
+      entries.push([name, { ...display, allTimeTotal, allTimePaid, balance, periodTotal }]);
+    }
+
+    // Sort by balance owed (most owed first)
+    entries.sort((a, b) => {
+      if (b[1].balance !== a[1].balance) return b[1].balance - a[1].balance;
+      return b[1].allTimeTotal - a[1].allTimeTotal;
     });
-    const totalPayroll = entries.reduce((s, [, d]) => s + d.totalPay, 0);
+
+    // Only show people who have a balance or earned this period
+    const activeEntries = entries.filter(([, d]) => d.balance > 0 || d.periodTotal > 0);
+
+    const totalPayroll = entries.reduce((s, [, d]) => s + d.allTimeTotal, 0);
     const totalPaid = Object.values(normalizedPayouts).reduce((s, v) => s + v, 0);
 
     // Business keeps (all-time)
@@ -471,7 +537,14 @@ export default function Accounting() {
     const businessKeeps = totalGrossRevenue - totalPayroll;
     const keptDeposits = allTimeCancelledBookings.reduce((s, b) => s + (b.actual_deposit_paid || 0), 0);
 
-    return { people: entries, totalPayroll, totalPaid, normalizedPayouts, totalGrossRevenue, businessKeeps, keptDeposits };
+    return {
+      people: activeEntries,
+      allPeople: entries,
+      totalPayroll, totalPaid, normalizedPayouts,
+      totalGrossRevenue, businessKeeps, keptDeposits,
+      periodLabel, periodStart: periodStartStr, periodEnd: periodEndStr,
+      periodPayoutTotal,
+    };
   }, [allTimeBookings, allTimeMediaSales, allTimeBeatPurchases, allTimeCancelledBookings, payouts]);
 
   // Payroll data for overview tab (date-filtered) - keep the existing behavior for overview
@@ -793,70 +866,63 @@ export default function Accounting() {
           {/* ========= PAYROLL ========= */}
           {view === 'payroll' && (
             <div className="space-y-6">
-              {/* Note: payroll always shows all-time data */}
-              <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">
-                Showing all-time cumulative balances — date filter applies to other tabs only
-              </p>
+              {/* Current pay period header */}
+              <div className="border-2 border-accent/30 bg-accent/5 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Current Pay Period</p>
+                    <p className="font-mono text-lg font-bold">{payrollData.periodLabel}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Total Owed (All Time)</p>
+                    <p className="font-mono text-2xl font-bold text-red-600">{formatCents(Math.max(0, payrollData.totalPayroll - payrollData.totalPaid))}</p>
+                  </div>
+                </div>
+              </div>
 
-              {/* Top summary */}
+              {/* Summary stats */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <MiniStat label="Total Earned (All People)" value={formatCents(payrollData.totalPayroll)} />
-                <MiniStat label="Total Paid Out" value={formatCents(payrollData.totalPaid)} />
-                <MiniStat label="Outstanding Balance" value={formatCents(Math.max(0, payrollData.totalPayroll - payrollData.totalPaid))} />
-                <MiniStat label="People on Payroll" value={String(payrollData.people.length)} />
+                <MiniStat label="All-Time Earned" value={formatCents(payrollData.totalPayroll)} />
+                <MiniStat label="All-Time Paid Out" value={formatCents(payrollData.totalPaid)} />
+                <MiniStat label="This Period Earned" value={formatCents(payrollData.people.reduce((s, [, d]) => s + d.periodTotal, 0))} />
+                <MiniStat label="People Owed" value={String(payrollData.people.filter(([, d]) => d.balance > 0).length)} />
               </div>
 
               {/* Per-Person Balances Table */}
               <div className="border border-black/10 p-4">
-                <h3 className="font-mono text-sm font-bold uppercase tracking-wider mb-4">Payroll Balances</h3>
+                <h3 className="font-mono text-sm font-bold uppercase tracking-wider mb-4">What We Owe</h3>
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[700px]">
                     <thead>
                       <tr className="border-b-2 border-black/20">
                         <th className="text-left font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Person</th>
-                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Sessions</th>
-                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Session Pay</th>
-                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Media Pay</th>
-                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Beat Pay</th>
-                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2 border-l-2 border-black/10">Total Earned</th>
-                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Paid</th>
-                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Balance</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">This Period</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2 border-l border-black/10">All-Time Earned</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">All-Time Paid</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2 border-l-2 border-black/10">Balance Owed</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {payrollData.people.map(([name, data]) => {
-                        const paid = payrollData.normalizedPayouts[name] || 0;
-                        const balance = Math.max(0, data.totalPay - paid);
-                        return (
-                          <tr key={name} className="border-b border-black/5 hover:bg-black/[0.02]">
-                            <td className="font-mono text-sm font-semibold py-3">{name}</td>
-                            <td className="font-mono text-xs text-right text-black/70">
-                              {data.sessionCount > 0 ? `${data.sessionCount} · ${data.sessionHours}hr` : '—'}
-                            </td>
-                            <td className="font-mono text-sm text-right">
-                              {data.sessionPay > 0 ? formatCents(data.sessionPay) : '—'}
-                            </td>
-                            <td className="font-mono text-sm text-right">
-                              {(data.mediaCommission + data.mediaWorkerPay) > 0 ? formatCents(data.mediaCommission + data.mediaWorkerPay) : '—'}
-                            </td>
-                            <td className="font-mono text-sm text-right">
-                              {data.beatProducerPay > 0 ? formatCents(data.beatProducerPay) : '—'}
-                            </td>
-                            <td className="font-mono text-sm text-right font-bold border-l-2 border-black/10">
-                              {formatCents(data.totalPay)}
-                            </td>
-                            <td className="font-mono text-sm text-right text-green-600">
-                              {paid > 0 ? formatCents(paid) : '—'}
-                            </td>
-                            <td className={`font-mono text-sm text-right font-bold ${balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                              {balance > 0 ? formatCents(balance) : 'PAID'}
-                            </td>
-                          </tr>
-                        );
-                      })}
+                      {payrollData.people.map(([name, data]) => (
+                        <tr key={name} className="border-b border-black/5 hover:bg-black/[0.02]">
+                          <td className="font-mono text-sm font-semibold py-3">{name}</td>
+                          <td className="font-mono text-sm text-right">
+                            {data.periodTotal > 0 ? formatCents(data.periodTotal) : <span className="text-black/30">—</span>}
+                          </td>
+                          <td className="font-mono text-sm text-right border-l border-black/10">
+                            {formatCents(data.allTimeTotal)}
+                          </td>
+                          <td className="font-mono text-sm text-right text-green-600">
+                            {data.allTimePaid > 0 ? formatCents(data.allTimePaid) : <span className="text-black/30">—</span>}
+                          </td>
+                          <td className={`font-mono text-sm text-right font-bold border-l-2 border-black/10 ${data.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {data.balance > 0 ? formatCents(data.balance) : 'PAID'}
+                          </td>
+                        </tr>
+                      ))}
                       {payrollData.people.length === 0 && (
                         <tr>
-                          <td colSpan={8} className="font-mono text-sm text-black/60 text-center py-12">No payroll data yet</td>
+                          <td colSpan={5} className="font-mono text-sm text-black/60 text-center py-12">No outstanding balances</td>
                         </tr>
                       )}
                     </tbody>
@@ -864,25 +930,16 @@ export default function Accounting() {
                       <tfoot>
                         <tr className="border-t-2 border-black/20">
                           <td className="font-mono text-sm font-bold py-3">TOTAL</td>
-                          <td className="font-mono text-xs text-right text-black/70">
-                            {payrollData.people.reduce((s, [, d]) => s + d.sessionCount, 0)} sessions
-                          </td>
                           <td className="font-mono text-sm text-right font-bold">
-                            {formatCents(payrollData.people.reduce((s, [, d]) => s + d.sessionPay, 0))}
+                            {formatCents(payrollData.people.reduce((s, [, d]) => s + d.periodTotal, 0))}
                           </td>
-                          <td className="font-mono text-sm text-right font-bold">
-                            {formatCents(payrollData.people.reduce((s, [, d]) => s + d.mediaCommission + d.mediaWorkerPay, 0))}
-                          </td>
-                          <td className="font-mono text-sm text-right font-bold">
-                            {formatCents(payrollData.people.reduce((s, [, d]) => s + d.beatProducerPay, 0))}
-                          </td>
-                          <td className="font-mono text-sm text-right font-bold border-l-2 border-black/10">
+                          <td className="font-mono text-sm text-right font-bold border-l border-black/10">
                             {formatCents(payrollData.totalPayroll)}
                           </td>
                           <td className="font-mono text-sm text-right font-bold text-green-600">
                             {formatCents(payrollData.totalPaid)}
                           </td>
-                          <td className="font-mono text-sm text-right font-bold text-red-600">
+                          <td className="font-mono text-sm text-right font-bold text-red-600 border-l-2 border-black/10">
                             {formatCents(Math.max(0, payrollData.totalPayroll - payrollData.totalPaid))}
                           </td>
                         </tr>
@@ -892,69 +949,81 @@ export default function Accounting() {
                 </div>
               </div>
 
-              {/* Per-Person Detail Cards with Earnings + Payout History */}
+              {/* Per-Person Detail Cards — Paystub View */}
               {payrollData.people.map(([name, data]) => {
-                const paid = payrollData.normalizedPayouts[name] || 0;
-                const remaining = Math.max(0, data.totalPay - paid);
-                // Get this person's payout history (normalize names for matching)
                 const personPayouts = payouts.filter(p => (normalizeName(p.person_name) || p.person_name) === name);
 
                 return (
                   <BreakdownSection
                     key={name}
-                    title={`${name} — ${formatCents(data.totalPay)} earned · ${formatCents(paid)} paid · ${remaining > 0 ? `${formatCents(remaining)} owed` : 'PAID IN FULL'}`}
+                    title={`${name} — ${data.balance > 0 ? `${formatCents(data.balance)} owed` : 'PAID IN FULL'}${data.periodTotal > 0 ? ` · ${formatCents(data.periodTotal)} this period` : ''}`}
                     expanded={expandedSection === `payroll-${name}`}
                     onToggle={() => toggleSection(`payroll-${name}`)}
                   >
                     <div className="space-y-3">
-                      {/* Earnings Breakdown */}
-                      <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider pt-1">Earnings</p>
-                      {data.sessionPay > 0 && (
-                        <div className="flex justify-between items-center py-2 border-b border-black/5">
-                          <div>
-                            <p className="font-mono text-sm font-semibold">Session Earnings</p>
-                            <p className="font-mono text-[10px] text-black/60">{data.sessionCount} sessions · {data.sessionHours}hr · {formatCents(data.sessionRevenue)} gross · 60% cut</p>
+                      {/* Current period earnings */}
+                      {data.periodTotal > 0 && (
+                        <>
+                          <p className="font-mono text-[10px] text-accent uppercase tracking-wider pt-1">This Period ({payrollData.periodLabel})</p>
+                          {data.sessionPay > 0 && (
+                            <div className="flex justify-between items-center py-2 border-b border-black/5">
+                              <div>
+                                <p className="font-mono text-sm font-semibold">Session Earnings</p>
+                                <p className="font-mono text-[10px] text-black/60">{data.sessionCount} sessions · {data.sessionHours}hr · {formatCents(data.sessionRevenue)} gross · 60% cut</p>
+                              </div>
+                              <p className="font-mono text-sm font-bold">{formatCents(data.sessionPay)}</p>
+                            </div>
+                          )}
+                          {data.mediaCommission > 0 && (
+                            <div className="flex justify-between items-center py-2 border-b border-black/5">
+                              <div>
+                                <p className="font-mono text-sm font-semibold">Media Sales Commission</p>
+                                <p className="font-mono text-[10px] text-black/60">{data.mediaSoldCount} sale{data.mediaSoldCount !== 1 ? 's' : ''} · 15% commission</p>
+                              </div>
+                              <p className="font-mono text-sm font-bold">{formatCents(data.mediaCommission)}</p>
+                            </div>
+                          )}
+                          {data.mediaWorkerPay > 0 && (
+                            <div className="flex justify-between items-center py-2 border-b border-black/5">
+                              <div>
+                                <p className="font-mono text-sm font-semibold">Media Work Pay</p>
+                                <p className="font-mono text-[10px] text-black/60">
+                                  {data.mediaFilmedCount > 0 ? `${data.mediaFilmedCount} filmed` : ''}
+                                  {data.mediaFilmedCount > 0 && data.mediaEditedCount > 0 ? ' · ' : ''}
+                                  {data.mediaEditedCount > 0 ? `${data.mediaEditedCount} edited` : ''}
+                                  {' · 50% worker split'}
+                                </p>
+                              </div>
+                              <p className="font-mono text-sm font-bold">{formatCents(data.mediaWorkerPay)}</p>
+                            </div>
+                          )}
+                          {data.beatProducerPay > 0 && (
+                            <div className="flex justify-between items-center py-2 border-b border-black/5">
+                              <div>
+                                <p className="font-mono text-sm font-semibold">Beat Sales</p>
+                                <p className="font-mono text-[10px] text-black/60">{data.beatCount} sale{data.beatCount !== 1 ? 's' : ''} · {formatCents(data.beatSales)} gross · 60% producer cut</p>
+                              </div>
+                              <p className="font-mono text-sm font-bold">{formatCents(data.beatProducerPay)}</p>
+                            </div>
+                          )}
+                          <div className="flex justify-between items-center py-2 border-t border-black/10">
+                            <p className="font-mono text-xs font-bold">Period Total</p>
+                            <p className="font-mono text-sm font-bold">{formatCents(data.periodTotal)}</p>
                           </div>
-                          <p className="font-mono text-sm font-bold">{formatCents(data.sessionPay)}</p>
-                        </div>
-                      )}
-                      {data.mediaCommission > 0 && (
-                        <div className="flex justify-between items-center py-2 border-b border-black/5">
-                          <div>
-                            <p className="font-mono text-sm font-semibold">Media Sales Commission</p>
-                            <p className="font-mono text-[10px] text-black/60">{data.mediaSoldCount} sale{data.mediaSoldCount !== 1 ? 's' : ''} brought in · 15% commission</p>
-                          </div>
-                          <p className="font-mono text-sm font-bold">{formatCents(data.mediaCommission)}</p>
-                        </div>
-                      )}
-                      {data.mediaWorkerPay > 0 && (
-                        <div className="flex justify-between items-center py-2 border-b border-black/5">
-                          <div>
-                            <p className="font-mono text-sm font-semibold">Media Work Pay</p>
-                            <p className="font-mono text-[10px] text-black/60">
-                              {data.mediaFilmedCount > 0 ? `${data.mediaFilmedCount} filmed` : ''}
-                              {data.mediaFilmedCount > 0 && data.mediaEditedCount > 0 ? ' · ' : ''}
-                              {data.mediaEditedCount > 0 ? `${data.mediaEditedCount} edited` : ''}
-                              {' · 50% worker split'}
-                            </p>
-                          </div>
-                          <p className="font-mono text-sm font-bold">{formatCents(data.mediaWorkerPay)}</p>
-                        </div>
-                      )}
-                      {data.beatProducerPay > 0 && (
-                        <div className="flex justify-between items-center py-2 border-b border-black/5">
-                          <div>
-                            <p className="font-mono text-sm font-semibold">Beat Sales</p>
-                            <p className="font-mono text-[10px] text-black/60">{data.beatCount} sale{data.beatCount !== 1 ? 's' : ''} · {formatCents(data.beatSales)} gross · 60% producer cut</p>
-                          </div>
-                          <p className="font-mono text-sm font-bold">{formatCents(data.beatProducerPay)}</p>
-                        </div>
+                        </>
                       )}
 
-                      {/* Total Earned line */}
-                      <div className="flex justify-between items-center py-2 border-t-2 border-black/20">
-                        <p className="font-mono text-sm font-bold">Total Earned</p>
-                        <p className="font-mono text-lg font-bold">{formatCents(data.totalPay)}</p>
+                      {/* All-time summary */}
+                      <div className="bg-black/[0.02] border border-black/10 p-3 space-y-1">
+                        <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">All-Time Summary</p>
+                        <div className="flex justify-between font-mono text-sm">
+                          <span className="text-black/60">Total Earned</span>
+                          <span className="font-bold">{formatCents(data.allTimeTotal)}</span>
+                        </div>
+                        <div className="flex justify-between font-mono text-sm">
+                          <span className="text-black/60">Total Paid</span>
+                          <span className="text-green-600">{formatCents(data.allTimePaid)}</span>
+                        </div>
                       </div>
 
                       {/* Payout History */}
@@ -974,25 +1043,21 @@ export default function Accounting() {
                               <span className="font-mono text-sm font-bold text-green-600">{formatCents(p.amount)}</span>
                             </div>
                           ))}
-                          <div className="flex justify-between items-center pt-2 border-t border-black/10">
-                            <span className="font-mono text-xs font-bold text-green-700">Total Paid</span>
-                            <span className="font-mono text-sm font-bold text-green-600">{formatCents(paid)}</span>
-                          </div>
                         </div>
                       )}
 
                       {/* Balance */}
-                      <div className={`flex justify-between items-center py-3 px-3 ${remaining > 0 ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
-                        <p className={`font-mono text-sm font-bold ${remaining > 0 ? 'text-red-700' : 'text-green-700'}`}>
-                          {remaining > 0 ? 'Balance Owed' : 'Paid in Full'}
+                      <div className={`flex justify-between items-center py-3 px-3 ${data.balance > 0 ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
+                        <p className={`font-mono text-sm font-bold ${data.balance > 0 ? 'text-red-700' : 'text-green-700'}`}>
+                          {data.balance > 0 ? 'Balance Owed' : 'Paid in Full'}
                         </p>
-                        <p className={`font-mono text-lg font-bold ${remaining > 0 ? 'text-red-700' : 'text-green-700'}`}>
-                          {remaining > 0 ? formatCents(remaining) : formatCents(0)}
+                        <p className={`font-mono text-lg font-bold ${data.balance > 0 ? 'text-red-700' : 'text-green-700'}`}>
+                          {data.balance > 0 ? formatCents(data.balance) : formatCents(0)}
                         </p>
                       </div>
 
                       {/* Record Payout button */}
-                      {remaining > 0 && (
+                      {data.balance > 0 && (
                         <>
                           {showPayoutForm === name ? (
                             <div className="border border-accent p-3 space-y-2">
@@ -1000,7 +1065,7 @@ export default function Accounting() {
                                 <div className="flex-1">
                                   <label className="font-mono text-[10px] text-black/60">Amount ($)</label>
                                   <input type="number" step="0.01" value={payoutAmount} onChange={(e) => setPayoutAmount(e.target.value)}
-                                    placeholder={`${(remaining / 100).toFixed(2)}`}
+                                    placeholder={`${(data.balance / 100).toFixed(2)}`}
                                     className="w-full border border-black/20 px-2 py-1.5 font-mono text-sm" />
                                 </div>
                                 <div>
@@ -1028,9 +1093,9 @@ export default function Accounting() {
                               </div>
                             </div>
                           ) : (
-                            <button onClick={() => { setShowPayoutForm(name); setPayoutAmount((remaining / 100).toFixed(2)); }}
+                            <button onClick={() => { setShowPayoutForm(name); setPayoutAmount((data.balance / 100).toFixed(2)); }}
                               className="w-full border-2 border-green-600 text-green-700 font-mono text-xs font-bold uppercase py-2 hover:bg-green-50">
-                              Record Payout — {formatCents(remaining)} owed
+                              Record Payout — {formatCents(data.balance)} owed
                             </button>
                           )}
                         </>
