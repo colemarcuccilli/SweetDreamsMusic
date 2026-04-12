@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Calendar, Music, Users, DollarSign, Clock, Video, Mic, FileText, LayoutDashboard, BarChart3 } from 'lucide-react';
+import { Calendar, Music, Users, DollarSign, Clock, Video, Mic, FileText, LayoutDashboard, BarChart3, Bell } from 'lucide-react';
 import type { SessionUser } from '@/lib/auth';
 import AdminOverview from './AdminOverview';
 import BookingManager from './BookingManager';
@@ -14,8 +14,9 @@ import ProducerApplications from './ProducerApplications';
 import ContractsViewer from './ContractsViewer';
 import ClientCRM from './ClientCRM';
 import PlatformAnalytics from './PlatformAnalytics';
+import Notifications from './Notifications';
 
-type Tab = 'overview' | 'clients' | 'accounting' | 'bookings' | 'media' | 'blocks' | 'beats' | 'producers' | 'contracts' | 'users' | 'analytics';
+type Tab = 'overview' | 'clients' | 'accounting' | 'bookings' | 'media' | 'blocks' | 'beats' | 'producers' | 'contracts' | 'users' | 'analytics' | 'notifications';
 
 export default function AdminDashboard({ user }: { user: SessionUser }) {
   const [tab, setTab] = useState<Tab>('overview');
@@ -32,6 +33,7 @@ export default function AdminDashboard({ user }: { user: SessionUser }) {
     { key: 'contracts', label: 'Contracts', icon: FileText },
     { key: 'users', label: 'Users', icon: Users },
     { key: 'analytics', label: 'Analytics', icon: BarChart3 },
+    { key: 'notifications', label: 'Notifications', icon: Bell },
   ];
 
   return (
@@ -92,6 +94,7 @@ export default function AdminDashboard({ user }: { user: SessionUser }) {
           {tab === 'contracts' && <ContractsViewer />}
           {tab === 'users' && <UserManager />}
           {tab === 'analytics' && <PlatformAnalytics />}
+          {tab === 'notifications' && <Notifications />}
             </div>
           </div>
         </div>
