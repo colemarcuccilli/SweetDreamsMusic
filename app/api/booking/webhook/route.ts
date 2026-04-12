@@ -321,13 +321,50 @@ export async function POST(request: NextRequest) {
           license_text: licenseText || null,
         }).select('id').single();
 
-        // If exclusive, mark beat as sold
-        if (meta.license_type === 'exclusive') {
+        // If exclusive and purchase was created, mark beat as sold and revoke existing leases
+        if (purchase && meta.license_type === 'exclusive') {
           await supabase.from('beats').update({
             status: 'sold_exclusive',
             exclusive_buyer_id: meta.buyer_id || null,
             exclusive_sold_at: new Date().toISOString(),
           }).eq('id', meta.beat_id);
+
+          // Revoke all existing leases for this beat
+          try {
+            const { data: existingLeases } = await supabase
+              .from('beat_purchases')
+              .select('id, buyer_email, license_type, created_at')
+              .eq('beat_id', meta.beat_id)
+              .in('license_type', ['mp3_lease', 'trackout_lease'])
+              .is('revoked_at', null);
+
+            if (existingLeases && existingLeases.length > 0) {
+              // Mark all leases as revoked
+              const leaseIds = existingLeases.map(l => l.id);
+              await supabase.from('beat_purchases').update({
+                revoked_at: new Date().toISOString(),
+                revoked_reason: 'Exclusive rights purchased',
+              }).in('id', leaseIds);
+
+              // Notify each leaseholder (per-email isolation so one failure doesn't block others)
+              const { sendLeaseRevokedNotification } = await import('@/lib/email');
+              for (const lease of existingLeases) {
+                if (lease.buyer_email) {
+                  try {
+                    const leaseName = lease.buyer_email.split('@')[0] || 'Customer';
+                    await sendLeaseRevokedNotification(lease.buyer_email, {
+                      buyerName: leaseName,
+                      beatTitle: meta.beat_title || 'Beat',
+                      producerName: meta.producer || 'Unknown',
+                      licenseType: lease.license_type === 'mp3_lease' ? 'MP3 Lease' : 'Trackout Lease',
+                      purchaseDate: new Date(lease.created_at).toLocaleDateString('en-US'),
+                    });
+                  } catch (emailErr) { console.error(`Failed to send revocation email to ${lease.buyer_email}:`, emailErr); }
+                }
+              }
+              console.log(`Revoked ${existingLeases.length} lease(s) for beat ${meta.beat_id} — exclusive purchased`);
+            }
+          } catch (e) { console.error('Lease revocation error:', e); }
         }
 
         // Send purchase confirmation email to buyer
@@ -411,12 +448,47 @@ export async function POST(request: NextRequest) {
             purchase_id: purchase?.id || null,
           }).eq('id', privateSaleId);
 
-          // If exclusive and has a beat_id, mark beat as sold
-          if (sale.license_type === 'exclusive' && sale.beat_id) {
+          // If exclusive and has a beat_id and purchase was created, mark beat as sold + revoke leases
+          if (purchase && sale.license_type === 'exclusive' && sale.beat_id) {
             await supabase.from('beats').update({
               status: 'sold_exclusive',
               exclusive_sold_at: new Date().toISOString(),
             }).eq('id', sale.beat_id);
+
+            // Revoke all existing leases for this beat
+            try {
+              const { data: existingLeases } = await supabase
+                .from('beat_purchases')
+                .select('id, buyer_email, license_type, created_at')
+                .eq('beat_id', sale.beat_id)
+                .in('license_type', ['mp3_lease', 'trackout_lease'])
+                .is('revoked_at', null);
+
+              if (existingLeases && existingLeases.length > 0) {
+                const leaseIds = existingLeases.map(l => l.id);
+                await supabase.from('beat_purchases').update({
+                  revoked_at: new Date().toISOString(),
+                  revoked_reason: 'Exclusive rights purchased',
+                }).in('id', leaseIds);
+
+                const { sendLeaseRevokedNotification } = await import('@/lib/email');
+                const { data: beatInfo } = await supabase.from('beats').select('title, producer').eq('id', sale.beat_id).single();
+                for (const lease of existingLeases) {
+                  if (lease.buyer_email) {
+                    try {
+                      await sendLeaseRevokedNotification(lease.buyer_email, {
+                        buyerName: lease.buyer_email.split('@')[0] || 'Customer',
+                        beatTitle: beatInfo?.title || sale.beat_title || 'Beat',
+                        producerName: beatInfo?.producer || sale.beat_producer || 'Unknown',
+                        licenseType: lease.license_type === 'mp3_lease' ? 'MP3 Lease' : 'Trackout Lease',
+                        purchaseDate: new Date(lease.created_at).toLocaleDateString('en-US'),
+                      });
+                    } catch (emailErr) { console.error(`Failed to send revocation email to ${lease.buyer_email}:`, emailErr); }
+                  }
+                }
+                console.log(`Revoked ${existingLeases.length} lease(s) for beat ${sale.beat_id} — exclusive purchased (private sale)`);
+              }
+            } catch (e) { console.error('Private sale lease revocation error:', e); }
           }
 
           // Send completion emails

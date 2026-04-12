@@ -14,6 +14,8 @@ interface Purchase {
   download_count: number;
   license_text: string | null;
   payment_method: string | null;
+  revoked_at: string | null;
+  revoked_reason: string | null;
   created_at: string;
   beats: {
     id: string;
@@ -44,11 +46,11 @@ export default function PurchasesPage() {
     try {
       const res = await fetch(`/api/beats/download?purchaseId=${purchaseId}`);
       const data = await res.json();
-      if (data.files && data.files.length > 0) {
-        for (const file of data.files) {
+      if (data.downloads && data.downloads.length > 0) {
+        for (const file of data.downloads) {
           const link = document.createElement('a');
           link.href = file.url;
-          link.download = file.name;
+          link.download = file.fileName;
           link.click();
         }
         // Update local download count
@@ -123,12 +125,25 @@ export default function PurchasesPage() {
             const beat = Array.isArray(purchase.beats) ? purchase.beats[0] : purchase.beats;
             const license = BEAT_LICENSES[purchase.license_type as keyof typeof BEAT_LICENSES];
             const isExpanded = expandedLicense === purchase.id;
+            const isRevoked = !!purchase.revoked_at;
 
             return (
-              <div key={purchase.id} className="border-2 border-black/10 overflow-hidden">
+              <div key={purchase.id} className={`border-2 overflow-hidden ${isRevoked ? 'border-red-200 bg-red-50/30' : 'border-black/10'}`}>
+                {/* Revoked banner */}
+                {purchase.revoked_at && (
+                  <div className="bg-red-100 border-b border-red-200 px-4 py-2">
+                    <p className="font-mono text-xs font-bold text-red-700 uppercase">
+                      Lease Revoked — Exclusive rights purchased
+                    </p>
+                    <p className="font-mono text-[10px] text-red-600">
+                      Revoked on {new Date(purchase.revoked_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}. Downloads are no longer available. See your license agreement for details.
+                    </p>
+                  </div>
+                )}
+
                 <div className="p-4 flex items-start gap-4">
                   {/* Cover art */}
-                  <div className="w-16 h-16 bg-black/5 flex-shrink-0 flex items-center justify-center overflow-hidden">
+                  <div className={`w-16 h-16 bg-black/5 flex-shrink-0 flex items-center justify-center overflow-hidden ${isRevoked ? 'opacity-50' : ''}`}>
                     {beat?.cover_image_url ? (
                       <img src={beat.cover_image_url} alt="" className="w-full h-full object-cover" />
                     ) : (
@@ -138,37 +153,51 @@ export default function PurchasesPage() {
 
                   {/* Info */}
                   <div className="flex-1 min-w-0">
-                    <p className="font-mono text-sm font-bold truncate">{beat?.title || 'Beat'}</p>
+                    <p className={`font-mono text-sm font-bold truncate ${isRevoked ? 'text-black/40 line-through' : ''}`}>{beat?.title || 'Beat'}</p>
                     <p className="font-mono text-xs text-black/70">
                       {beat?.producer || 'Producer'}
                       {beat?.genre && ` · ${beat.genre}`}
                     </p>
                     <div className="flex flex-wrap gap-2 mt-2">
-                      <span className="bg-accent/20 text-accent font-mono text-[10px] font-bold uppercase px-2 py-0.5">
-                        {license?.name || purchase.license_type}
-                      </span>
+                      {isRevoked ? (
+                        <span className="bg-red-100 text-red-700 font-mono text-[10px] font-bold uppercase px-2 py-0.5">
+                          Revoked
+                        </span>
+                      ) : (
+                        <span className="bg-accent/20 text-accent font-mono text-[10px] font-bold uppercase px-2 py-0.5">
+                          {license?.name || purchase.license_type}
+                        </span>
+                      )}
                       <span className="font-mono text-[10px] text-black/60">
                         {formatCents(purchase.amount_paid)}
                       </span>
                       <span className="font-mono text-[10px] text-black/60">
                         {new Date(purchase.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </span>
-                      <span className="font-mono text-[10px] text-black/60">
-                        {purchase.download_count}/10 downloads
-                      </span>
+                      {!isRevoked && (
+                        <span className="font-mono text-[10px] text-black/60">
+                          {purchase.download_count}/10 downloads
+                        </span>
+                      )}
                     </div>
                   </div>
 
                   {/* Actions */}
                   <div className="flex flex-col gap-2 flex-shrink-0">
-                    <button
-                      onClick={() => handleDownload(purchase.id)}
-                      disabled={downloading === purchase.id || purchase.download_count >= 10}
-                      className="bg-accent text-black font-mono text-[10px] font-bold uppercase px-3 py-2 hover:bg-accent/90 disabled:opacity-50 inline-flex items-center gap-1"
-                    >
-                      <Download className="w-3 h-3" />
-                      {downloading === purchase.id ? 'Loading...' : purchase.download_count >= 10 ? 'Limit Reached' : 'Download'}
-                    </button>
+                    {isRevoked ? (
+                      <span className="font-mono text-[10px] text-red-500 font-bold uppercase px-3 py-2">
+                        No Downloads
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handleDownload(purchase.id)}
+                        disabled={downloading === purchase.id || purchase.download_count >= 10}
+                        className="bg-accent text-black font-mono text-[10px] font-bold uppercase px-3 py-2 hover:bg-accent/90 disabled:opacity-50 inline-flex items-center gap-1"
+                      >
+                        <Download className="w-3 h-3" />
+                        {downloading === purchase.id ? 'Loading...' : purchase.download_count >= 10 ? 'Limit Reached' : 'Download'}
+                      </button>
+                    )}
                     <button
                       onClick={() => viewLicense(purchase.id)}
                       className="border border-black/20 text-black font-mono text-[10px] font-bold uppercase px-3 py-2 hover:border-black/40 inline-flex items-center gap-1"

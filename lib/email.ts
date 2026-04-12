@@ -794,3 +794,40 @@ export async function sendBeatRejectedNotification(to: string, details: {
     });
   } catch (e) { console.error('Email error (beat rejected):', e); }
 }
+
+// ── Lease Revocation Email ────────────────────────────────────────────
+
+export async function sendLeaseRevokedNotification(to: string, details: {
+  buyerName: string;
+  beatTitle: string;
+  producerName: string;
+  licenseType: string;
+  purchaseDate: string;
+}) {
+  try {
+    await resend.emails.send({
+      from: FROM,
+      to,
+      subject: `Lease Revoked — "${details.beatTitle}" Exclusive Purchased`,
+      html: wrap(
+        h1('LEASE REVOKED') +
+        p(`${details.buyerName}, we're writing to let you know that exclusive rights to the beat "${details.beatTitle}" have been purchased by another buyer.`) +
+        detailTable(
+          detail('Beat', details.beatTitle) +
+          detail('Producer', details.producerName) +
+          detail('Your License', details.licenseType) +
+          detail('Original Purchase', details.purchaseDate)
+        ) +
+        p('Per the terms of your lease agreement, when exclusive rights are purchased, all existing non-exclusive leases are revoked. This means:') +
+        `<ul style="color:#ccc;font-size:14px;line-height:1.8;padding-left:20px;margin:12px 0">
+          <li>You may no longer distribute new copies or stream this beat</li>
+          <li>Any existing published works using this beat should be taken down</li>
+          <li>Your download access for this beat has been disabled</li>
+        </ul>` +
+        p('We understand this may be inconvenient, and we appreciate your understanding. This policy is outlined in the lease agreement you signed at the time of purchase.') +
+        p('If you have any questions, please don\'t hesitate to reach out.') +
+        btn('VIEW MY PURCHASES', `${SITE_URL}/dashboard/purchases`)
+      ),
+    });
+  } catch (e) { console.error('Email error (lease revoked):', e); }
+}

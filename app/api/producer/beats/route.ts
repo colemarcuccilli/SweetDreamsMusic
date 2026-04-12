@@ -19,38 +19,30 @@ export async function GET() {
   return NextResponse.json({ beats: beats || [] });
 }
 
-// POST — producer uploads a beat (pending admin approval)
+// POST — producer creates a beat record (files already uploaded via signed URLs)
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const { isProducer, profileId } = await verifyProducerAccess(supabase);
   if (!isProducer || !profileId) return NextResponse.json({ error: 'Producer access required' }, { status: 401 });
 
   const serviceClient = createServiceClient();
-  const formData = await request.formData();
+  const body = await request.json();
 
-  const previewFile = formData.get('preview_file') as File;
-  const title = formData.get('title') as string;
-  const genre = formData.get('genre') as string;
-  const bpm = formData.get('bpm') as string;
-  const key = formData.get('key') as string;
-  const tags = formData.get('tags') as string;
-  const mp3LeasePrice = formData.get('mp3_lease_price') as string;
-  const trackoutLeasePrice = formData.get('trackout_lease_price') as string;
-  const exclusivePrice = formData.get('exclusive_price') as string;
-  const hasExclusive = formData.get('has_exclusive') === 'true';
-  const containsSamples = formData.get('contains_samples') === 'true';
-  const sampleDetails = formData.get('sample_details') as string;
-  const mp3File = formData.get('mp3_file') as File | null;
-  const trackoutFile = formData.get('trackout_file') as File | null;
+  const {
+    title, genre, bpm, key, tags,
+    mp3_lease_price, trackout_lease_price, exclusive_price,
+    has_exclusive, contains_samples, sample_details,
+    preview_file_path, mp3_file_path, trackout_file_path,
+  } = body;
 
-  if (!previewFile || !title) {
-    return NextResponse.json({ error: 'preview_file and title required' }, { status: 400 });
+  if (!preview_file_path || !title) {
+    return NextResponse.json({ error: 'preview_file_path and title required' }, { status: 400 });
   }
 
   // Convert dollar amounts to cents
-  function dollarsToCents(val: string): number | null {
-    if (!val) return null;
-    const num = parseFloat(val);
+  function dollarsToCents(val: string | number | null | undefined): number | null {
+    if (val === null || val === undefined || val === '') return null;
+    const num = typeof val === 'number' ? val : parseFloat(val);
     if (isNaN(num)) return null;
     return Math.round(num * 100);
   }
@@ -64,43 +56,10 @@ export async function POST(request: NextRequest) {
 
   const producerName = producerProfile?.producer_name || producerProfile?.display_name || 'Unknown';
 
-  const beatPrefix = `beats/${Date.now()}`;
-
-  // Upload preview audio
-  const previewPath = `${beatPrefix}/preview_${previewFile.name}`;
-  const { error: previewUploadError } = await serviceClient.storage
-    .from('media')
-    .upload(previewPath, previewFile);
-
-  if (previewUploadError) {
-    return NextResponse.json({ error: `Preview upload failed: ${previewUploadError.message}` }, { status: 500 });
-  }
-
+  // Get public URL for the preview
   const { data: { publicUrl: previewUrl } } = serviceClient.storage
     .from('media')
-    .getPublicUrl(previewPath);
-
-  // Upload MP3 master if provided
-  let mp3FilePath: string | null = null;
-  if (mp3File && mp3File.size > 0) {
-    mp3FilePath = `${beatPrefix}/mp3_${mp3File.name}`;
-    const { error: mp3Error } = await serviceClient.storage.from('media').upload(mp3FilePath, mp3File);
-    if (mp3Error) {
-      console.error('MP3 upload failed:', mp3Error);
-      mp3FilePath = null;
-    }
-  }
-
-  // Upload trackout/stems ZIP if provided
-  let trackoutFilePath: string | null = null;
-  if (trackoutFile && trackoutFile.size > 0) {
-    trackoutFilePath = `${beatPrefix}/trackout_${trackoutFile.name}`;
-    const { error: trackoutError } = await serviceClient.storage.from('media').upload(trackoutFilePath, trackoutFile);
-    if (trackoutError) {
-      console.error('Trackout upload failed:', trackoutError);
-      trackoutFilePath = null;
-    }
-  }
+    .getPublicUrl(preview_file_path);
 
   // Insert beat record
   const { data: beat, error: dbError } = await serviceClient
@@ -112,23 +71,30 @@ export async function POST(request: NextRequest) {
       genre: genre || null,
       bpm: bpm ? parseInt(bpm) : null,
       musical_key: key || null,
-      tags: tags ? tags.split(',').map((t: string) => t.trim()).filter(Boolean).concat(['Sweet Dreams']) : ['Sweet Dreams'],
+      tags: tags ? (typeof tags === 'string' ? tags.split(',') : tags).map((t: string) => t.trim()).filter(Boolean).concat(['Sweet Dreams']) : ['Sweet Dreams'],
       preview_url: previewUrl,
-      audio_file_path: previewPath,
-      mp3_file_path: mp3FilePath,
-      trackout_file_path: trackoutFilePath,
-      mp3_lease_price: dollarsToCents(mp3LeasePrice),
-      trackout_lease_price: dollarsToCents(trackoutLeasePrice),
-      exclusive_price: hasExclusive ? dollarsToCents(exclusivePrice) : null,
-      has_exclusive: hasExclusive,
-      contains_samples: containsSamples,
-      sample_details: containsSamples ? sampleDetails || null : null,
+      audio_file_path: preview_file_path,
+      mp3_file_path: mp3_file_path || null,
+      trackout_file_path: trackout_file_path || null,
+      mp3_lease_price: dollarsToCents(mp3_lease_price),
+      trackout_lease_price: dollarsToCents(trackout_lease_price),
+      exclusive_price: has_exclusive ? dollarsToCents(exclusive_price) : null,
+      has_exclusive: !!has_exclusive,
+      contains_samples: !!contains_samples,
+      sample_details: contains_samples ? sample_details || null : null,
       status: 'pending_approval',
     })
     .select()
     .single();
 
-  if (dbError) return NextResponse.json({ error: dbError.message }, { status: 500 });
+  if (dbError) {
+    // Clean up uploaded files since the DB insert failed
+    const pathsToRemove = [preview_file_path, mp3_file_path, trackout_file_path].filter(Boolean) as string[];
+    if (pathsToRemove.length > 0) {
+      await serviceClient.storage.from('media').remove(pathsToRemove);
+    }
+    return NextResponse.json({ error: dbError.message }, { status: 500 });
+  }
 
   // Notify admins that a new beat needs approval
   try {

@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { DollarSign, TrendingUp, Calendar, Music, Users, Filter, ChevronDown } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
-import { PRODUCER_COMMISSION, PLATFORM_COMMISSION, ENGINEER_SESSION_SPLIT, BUSINESS_SESSION_SPLIT, MEDIA_SELLER_COMMISSION, MEDIA_BUSINESS_CUT, MEDIA_WORKER_TOTAL } from '@/lib/constants';
+import { PRODUCER_COMMISSION, PLATFORM_COMMISSION, ENGINEER_SESSION_SPLIT, BUSINESS_SESSION_SPLIT, MEDIA_SELLER_COMMISSION, MEDIA_BUSINESS_CUT, MEDIA_WORKER_TOTAL, ENGINEERS } from '@/lib/constants';
 
 interface Booking {
   id: string;
@@ -90,6 +90,22 @@ const LICENSE_LABELS: Record<string, string> = {
   exclusive: 'Exclusive',
 };
 
+// Build name normalization map from ENGINEERS constant
+// Maps displayName -> name, and name -> name (identity), case-insensitive
+const NAME_MAP: Record<string, string> = {};
+ENGINEERS.forEach(eng => {
+  NAME_MAP[eng.name.toLowerCase()] = eng.name;
+  if (eng.displayName && eng.displayName !== eng.name) {
+    NAME_MAP[eng.displayName.toLowerCase()] = eng.name;
+  }
+});
+
+function normalizeName(raw: string | null): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  return NAME_MAP[trimmed.toLowerCase()] || trimmed;
+}
+
 export default function Accounting() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [beatPurchases, setBeatPurchases] = useState<BeatPurchase[]>([]);
@@ -107,8 +123,14 @@ export default function Accounting() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
 
+  // All-time data for payroll (never date-filtered)
+  const [allTimeBookings, setAllTimeBookings] = useState<Booking[]>([]);
+  const [allTimeMediaSales, setAllTimeMediaSales] = useState<typeof mediaSales>([]);
+  const [allTimeBeatPurchases, setAllTimeBeatPurchases] = useState<BeatPurchase[]>([]);
+  const [allTimeCancelledBookings, setAllTimeCancelledBookings] = useState<typeof cancelledBookings>([]);
+
   // Payout tracking
-  const [payouts, setPayouts] = useState<{ id: string; person_name: string; amount: number; method: string; note: string | null; created_at: string }[]>([]);
+  const [payouts, setPayouts] = useState<{ id: string; person_name: string; amount: number; method: string; note: string | null; period_label: string | null; created_at: string }[]>([]);
   const [showPayoutForm, setShowPayoutForm] = useState<string | null>(null); // person name
   const [payoutAmount, setPayoutAmount] = useState('');
   const [payoutMethod, setPayoutMethod] = useState('cash');
@@ -117,9 +139,32 @@ export default function Accounting() {
 
   const monthOptions = getMonthOptions();
 
+  // Fetch all-time data for payroll on mount
+  useEffect(() => {
+    fetchPayrollData();
+  }, []);
+
+  // Fetch date-filtered data for overview/sessions/beats/media
   useEffect(() => {
     fetchData();
   }, [datePreset, selectedMonth, customFrom, customTo]);
+
+  async function fetchPayrollData() {
+    const [accountingRes, payoutsRes, cashRes] = await Promise.all([
+      fetch('/api/admin/accounting'), // no date filter = all time
+      fetch('/api/admin/payouts'),
+      fetch('/api/admin/cash-ledger'),
+    ]);
+    const data = await accountingRes.json();
+    const payoutsData = await payoutsRes.json();
+    const cashData = await cashRes.json();
+    setAllTimeBookings(data.bookings || []);
+    setAllTimeBeatPurchases(data.beatPurchases || []);
+    setAllTimeMediaSales(data.mediaSales || []);
+    setAllTimeCancelledBookings(data.cancelledBookings || []);
+    setPayouts(payoutsData.payouts || []);
+    setCashLedger(cashData.entries || []);
+  }
 
   async function fetchData() {
     setLoading(true);
@@ -131,31 +176,14 @@ export default function Accounting() {
     if (range?.from) params.set('from', range.from);
     if (range?.to) params.set('to', range.to);
 
-    const [accountingRes, payoutsRes, cashRes] = await Promise.all([
-      fetch(`/api/admin/accounting?${params}`),
-      fetch('/api/admin/payouts'),
-      fetch('/api/admin/cash-ledger'),
-    ]);
+    const accountingRes = await fetch(`/api/admin/accounting?${params}`);
     const data = await accountingRes.json();
-    const payoutsData = await payoutsRes.json();
-    const cashData = await cashRes.json();
-    setCashLedger(cashData.entries || []);
     setBookings(data.bookings || []);
     setBeatPurchases(data.beatPurchases || []);
     setMediaSales(data.mediaSales || []);
     setCancelledBookings(data.cancelledBookings || []);
-    setPayouts(payoutsData.payouts || []);
     setLoading(false);
   }
-
-  // Payouts by person
-  const payoutsByPerson = useMemo(() => {
-    const map: Record<string, number> = {};
-    payouts.forEach(p => {
-      map[p.person_name] = (map[p.person_name] || 0) + p.amount;
-    });
-    return map;
-  }, [payouts]);
 
   async function recordPayout(personName: string) {
     if (!payoutAmount) return;
@@ -357,21 +385,21 @@ export default function Accounting() {
     };
   }, [mediaSales]);
 
-  // ===== PAYROLL: Combined per-person earnings across all revenue streams =====
+  // ===== PAYROLL: All-time cumulative per-person earnings (never date-filtered) =====
   const payrollData = useMemo(() => {
     const people: Record<string, {
       sessionCount: number; sessionRevenue: number; sessionPay: number; sessionHours: number;
       mediaCommission: number; mediaSoldCount: number;
       mediaWorkerPay: number; mediaFilmedCount: number; mediaEditedCount: number;
       beatSales: number; beatProducerPay: number; beatCount: number;
-      totalPay: number; totalPaid: number;
+      totalPay: number;
     }> = {};
 
-    const initPerson = () => ({ sessionCount: 0, sessionRevenue: 0, sessionPay: 0, sessionHours: 0, mediaCommission: 0, mediaSoldCount: 0, mediaWorkerPay: 0, mediaFilmedCount: 0, mediaEditedCount: 0, beatSales: 0, beatProducerPay: 0, beatCount: 0, totalPay: 0, totalPaid: 0 });
+    const initPerson = () => ({ sessionCount: 0, sessionRevenue: 0, sessionPay: 0, sessionHours: 0, mediaCommission: 0, mediaSoldCount: 0, mediaWorkerPay: 0, mediaFilmedCount: 0, mediaEditedCount: 0, beatSales: 0, beatProducerPay: 0, beatCount: 0, totalPay: 0 });
 
-    // Sessions: engineer gets 60%
-    bookings.forEach(b => {
-      const eng = b.engineer_name;
+    // Sessions: engineer gets 60% — use ALL-TIME data with name normalization
+    allTimeBookings.forEach(b => {
+      const eng = normalizeName(b.engineer_name);
       if (!eng || eng === 'Unassigned') return;
       if (!people[eng]) people[eng] = initPerson();
       people[eng].sessionCount++;
@@ -380,29 +408,32 @@ export default function Accounting() {
       people[eng].sessionHours += b.duration;
     });
 
-    // Media: seller gets 15%, workers split 50% (25% each if both, 50% if solo)
-    mediaSales.forEach(m => {
-      if (m.sold_by) {
-        if (!people[m.sold_by]) people[m.sold_by] = initPerson();
-        people[m.sold_by].mediaSoldCount++;
-        people[m.sold_by].mediaCommission += Math.round(m.amount * MEDIA_SELLER_COMMISSION);
+    // Media: seller gets 15%, workers split 50%
+    allTimeMediaSales.forEach(m => {
+      const seller = normalizeName(m.sold_by);
+      if (seller) {
+        if (!people[seller]) people[seller] = initPerson();
+        people[seller].mediaSoldCount++;
+        people[seller].mediaCommission += Math.round(m.amount * MEDIA_SELLER_COMMISSION);
       }
-      const wCount = (m.filmed_by ? 1 : 0) + (m.edited_by ? 1 : 0);
-      if (m.filmed_by) {
-        if (!people[m.filmed_by]) people[m.filmed_by] = initPerson();
-        people[m.filmed_by].mediaFilmedCount++;
-        people[m.filmed_by].mediaWorkerPay += Math.round(m.amount * MEDIA_WORKER_TOTAL / wCount);
+      const filmer = normalizeName(m.filmed_by);
+      const editor = normalizeName(m.edited_by);
+      const wCount = (filmer ? 1 : 0) + (editor ? 1 : 0);
+      if (filmer) {
+        if (!people[filmer]) people[filmer] = initPerson();
+        people[filmer].mediaFilmedCount++;
+        people[filmer].mediaWorkerPay += Math.round(m.amount * MEDIA_WORKER_TOTAL / wCount);
       }
-      if (m.edited_by) {
-        if (!people[m.edited_by]) people[m.edited_by] = initPerson();
-        people[m.edited_by].mediaEditedCount++;
-        people[m.edited_by].mediaWorkerPay += Math.round(m.amount * MEDIA_WORKER_TOTAL / wCount);
+      if (editor) {
+        if (!people[editor]) people[editor] = initPerson();
+        people[editor].mediaEditedCount++;
+        people[editor].mediaWorkerPay += Math.round(m.amount * MEDIA_WORKER_TOTAL / wCount);
       }
     });
 
     // Beat sales: producer gets 60%
-    beatPurchases.forEach(p => {
-      const prod = p.beats?.producer;
+    allTimeBeatPurchases.forEach(p => {
+      const prod = normalizeName(p.beats?.producer ?? null);
       if (!prod) return;
       if (!people[prod]) people[prod] = initPerson();
       people[prod].beatCount++;
@@ -415,16 +446,56 @@ export default function Accounting() {
       p.totalPay = p.sessionPay + p.mediaCommission + p.mediaWorkerPay + p.beatProducerPay;
     });
 
-    const entries = Object.entries(people).sort((a, b) => b[1].totalPay - a[1].totalPay);
-    const totalPayroll = entries.reduce((s, [, d]) => s + d.totalPay, 0);
+    // Apply normalized payout totals
+    const normalizedPayouts: Record<string, number> = {};
+    payouts.forEach(p => {
+      const name = normalizeName(p.person_name) || p.person_name;
+      normalizedPayouts[name] = (normalizedPayouts[name] || 0) + p.amount;
+    });
 
-    // Business keeps
-    const totalGrossRevenue = sessionStats.totalBooked + mediaStats.totalRevenue + beatStats.totalRevenue;
+    // Sort by balance owed (most owed first), then by total earned
+    const entries = Object.entries(people).sort((a, b) => {
+      const aRemaining = a[1].totalPay - (normalizedPayouts[a[0]] || 0);
+      const bRemaining = b[1].totalPay - (normalizedPayouts[b[0]] || 0);
+      if (bRemaining !== aRemaining) return bRemaining - aRemaining;
+      return b[1].totalPay - a[1].totalPay;
+    });
+    const totalPayroll = entries.reduce((s, [, d]) => s + d.totalPay, 0);
+    const totalPaid = Object.values(normalizedPayouts).reduce((s, v) => s + v, 0);
+
+    // Business keeps (all-time)
+    const allTimeSessionRevenue = allTimeBookings.reduce((s, b) => s + b.total_amount, 0);
+    const allTimeMediaRevenue = allTimeMediaSales.reduce((s, m) => s + m.amount, 0);
+    const allTimeBeatRevenue = allTimeBeatPurchases.reduce((s, p) => s + p.amount_paid, 0);
+    const totalGrossRevenue = allTimeSessionRevenue + allTimeMediaRevenue + allTimeBeatRevenue;
     const businessKeeps = totalGrossRevenue - totalPayroll;
+    const keptDeposits = allTimeCancelledBookings.reduce((s, b) => s + (b.actual_deposit_paid || 0), 0);
+
+    return { people: entries, totalPayroll, totalPaid, normalizedPayouts, totalGrossRevenue, businessKeeps, keptDeposits };
+  }, [allTimeBookings, allTimeMediaSales, allTimeBeatPurchases, allTimeCancelledBookings, payouts]);
+
+  // Payroll data for overview tab (date-filtered) - keep the existing behavior for overview
+  const filteredPayrollData = useMemo(() => {
+    const totalBooked = filteredBookings.reduce((s, b) => s + b.total_amount, 0);
+    const mediaRev = mediaSales.reduce((s, m) => s + m.amount, 0);
+    const beatRev = filteredPurchases.reduce((s, p) => s + p.amount_paid, 0);
+    const totalGross = totalBooked + mediaRev + beatRev;
+
+    // Simple payroll calc for overview
+    const sessionPayroll = Math.round(totalBooked * ENGINEER_SESSION_SPLIT);
+    const mediaPayroll = mediaSales.reduce((s, m) => {
+      let pay = m.sold_by ? Math.round(m.amount * MEDIA_SELLER_COMMISSION) : 0;
+      const wCount = (m.filmed_by ? 1 : 0) + (m.edited_by ? 1 : 0);
+      if (wCount > 0) pay += Math.round(m.amount * MEDIA_WORKER_TOTAL);
+      return s + pay;
+    }, 0);
+    const beatPayroll = Math.round(beatRev * PRODUCER_COMMISSION);
+    const totalPayroll = sessionPayroll + mediaPayroll + beatPayroll;
+    const businessKeeps = totalGross - totalPayroll;
     const keptDeposits = cancelledBookings.reduce((s, b) => s + (b.actual_deposit_paid || 0), 0);
 
-    return { people: entries, totalPayroll, totalGrossRevenue, businessKeeps, keptDeposits };
-  }, [bookings, mediaSales, beatPurchases, sessionStats, mediaStats, beatStats, cancelledBookings]);
+    return { totalGrossRevenue: totalGross, totalPayroll, businessKeeps, keptDeposits };
+  }, [filteredBookings, mediaSales, filteredPurchases, cancelledBookings]);
 
   const SALE_TYPE_LABELS: Record<string, string> = {
     video: 'Music Video',
@@ -533,7 +604,7 @@ export default function Accounting() {
             <div className="space-y-8">
               {/* Gross Revenue */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard icon={DollarSign} label="Gross Revenue (All)" value={formatCents(payrollData.totalGrossRevenue)} accent />
+                <StatCard icon={DollarSign} label="Gross Revenue (All)" value={formatCents(filteredPayrollData.totalGrossRevenue)} accent />
                 <StatCard icon={Calendar} label="Session Revenue" value={formatCents(sessionStats.totalBooked)} />
                 <StatCard icon={Music} label="Beat Sales" value={formatCents(beatStats.totalRevenue)} />
                 <StatCard icon={TrendingUp} label="Media Sales" value={formatCents(mediaStats.totalRevenue)} />
@@ -541,11 +612,11 @@ export default function Accounting() {
 
               {/* Business Profit */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatCard icon={DollarSign} label="Business Keeps" value={formatCents(payrollData.businessKeeps + payrollData.keptDeposits)} accent />
-                <StatCard icon={Users} label="Total Payroll Owed" value={formatCents(payrollData.totalPayroll)} />
+                <StatCard icon={DollarSign} label="Business Keeps" value={formatCents(filteredPayrollData.businessKeeps + filteredPayrollData.keptDeposits)} accent />
+                <StatCard icon={Users} label="Total Payroll Owed" value={formatCents(filteredPayrollData.totalPayroll)} />
                 <StatCard icon={DollarSign} label="Remainder Due" value={formatCents(sessionStats.remainderOutstanding)} />
-                {payrollData.keptDeposits > 0 && (
-                  <StatCard icon={DollarSign} label="Kept Deposits" value={formatCents(payrollData.keptDeposits)} />
+                {filteredPayrollData.keptDeposits > 0 && (
+                  <StatCard icon={DollarSign} label="Kept Deposits" value={formatCents(filteredPayrollData.keptDeposits)} />
                 )}
               </div>
 
@@ -565,15 +636,15 @@ export default function Accounting() {
                     <span className="text-black/60">Media Sales — Business {Math.round(MEDIA_BUSINESS_CUT * 100)}%</span>
                     <span className="font-bold">{formatCents(mediaStats.businessRevenue)}</span>
                   </div>
-                  {payrollData.keptDeposits > 0 && (
+                  {filteredPayrollData.keptDeposits > 0 && (
                     <div className="flex justify-between py-1 border-b border-black/5">
                       <span className="text-black/60">Kept Deposits (Cancelled Sessions)</span>
-                      <span className="font-bold">{formatCents(payrollData.keptDeposits)}</span>
+                      <span className="font-bold">{formatCents(filteredPayrollData.keptDeposits)}</span>
                     </div>
                   )}
                   <div className="flex justify-between py-2 border-t-2 border-black/20">
                     <span className="font-bold text-accent">Total Business Profit</span>
-                    <span className="font-bold text-accent text-lg">{formatCents(payrollData.businessKeeps + payrollData.keptDeposits)}</span>
+                    <span className="font-bold text-accent text-lg">{formatCents(filteredPayrollData.businessKeeps + filteredPayrollData.keptDeposits)}</span>
                   </div>
                 </div>
               </div>
@@ -722,61 +793,70 @@ export default function Accounting() {
           {/* ========= PAYROLL ========= */}
           {view === 'payroll' && (
             <div className="space-y-6">
+              {/* Note: payroll always shows all-time data */}
+              <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">
+                Showing all-time cumulative balances — date filter applies to other tabs only
+              </p>
+
               {/* Top summary */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <MiniStat label="Gross Revenue" value={formatCents(payrollData.totalGrossRevenue)} />
-                <MiniStat label="Total Payroll Owed" value={formatCents(payrollData.totalPayroll)} />
-                <MiniStat label="Business Keeps" value={formatCents(payrollData.businessKeeps)} />
+                <MiniStat label="Total Earned (All People)" value={formatCents(payrollData.totalPayroll)} />
+                <MiniStat label="Total Paid Out" value={formatCents(payrollData.totalPaid)} />
+                <MiniStat label="Outstanding Balance" value={formatCents(Math.max(0, payrollData.totalPayroll - payrollData.totalPaid))} />
                 <MiniStat label="People on Payroll" value={String(payrollData.people.length)} />
               </div>
 
-              {/* Per-Person Earnings Table */}
+              {/* Per-Person Balances Table */}
               <div className="border border-black/10 p-4">
-                <h3 className="font-mono text-sm font-bold uppercase tracking-wider mb-4">Earnings by Person</h3>
+                <h3 className="font-mono text-sm font-bold uppercase tracking-wider mb-4">Payroll Balances</h3>
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[700px]">
                     <thead>
                       <tr className="border-b-2 border-black/20">
                         <th className="text-left font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Person</th>
                         <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Sessions</th>
-                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Session Pay (60%)</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Session Pay</th>
                         <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Media Pay</th>
-                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Beat Payouts</th>
-                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2 border-l-2 border-black/10">Total Owed</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Beat Pay</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2 border-l-2 border-black/10">Total Earned</th>
                         <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Paid</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Balance</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {payrollData.people.map(([name, data]) => (
-                        <tr key={name} className="border-b border-black/5 hover:bg-black/[0.02]">
-                          <td className="font-mono text-sm font-semibold py-3">{name}</td>
-                          <td className="font-mono text-xs text-right text-black/70">
-                            {data.sessionCount > 0 ? `${data.sessionCount} · ${data.sessionHours}hr` : '—'}
-                          </td>
-                          <td className="font-mono text-sm text-right">
-                            {data.sessionPay > 0 ? formatCents(data.sessionPay) : '—'}
-                          </td>
-                          <td className="font-mono text-sm text-right">
-                            {(data.mediaCommission + data.mediaWorkerPay) > 0 ? (
-                              <span>{formatCents(data.mediaCommission + data.mediaWorkerPay)}</span>
-                            ) : '—'}
-                          </td>
-                          <td className="font-mono text-sm text-right">
-                            {data.beatProducerPay > 0 ? formatCents(data.beatProducerPay) : '—'}
-                          </td>
-                          <td className="font-mono text-sm text-right font-bold text-accent border-l-2 border-black/10">
-                            {formatCents(data.totalPay)}
-                          </td>
-                          <td className="font-mono text-sm text-right">
-                            {(payoutsByPerson[name] || 0) > 0 ? (
-                              <span className="text-green-600">{formatCents(payoutsByPerson[name])}</span>
-                            ) : '—'}
-                          </td>
-                        </tr>
-                      ))}
+                      {payrollData.people.map(([name, data]) => {
+                        const paid = payrollData.normalizedPayouts[name] || 0;
+                        const balance = Math.max(0, data.totalPay - paid);
+                        return (
+                          <tr key={name} className="border-b border-black/5 hover:bg-black/[0.02]">
+                            <td className="font-mono text-sm font-semibold py-3">{name}</td>
+                            <td className="font-mono text-xs text-right text-black/70">
+                              {data.sessionCount > 0 ? `${data.sessionCount} · ${data.sessionHours}hr` : '—'}
+                            </td>
+                            <td className="font-mono text-sm text-right">
+                              {data.sessionPay > 0 ? formatCents(data.sessionPay) : '—'}
+                            </td>
+                            <td className="font-mono text-sm text-right">
+                              {(data.mediaCommission + data.mediaWorkerPay) > 0 ? formatCents(data.mediaCommission + data.mediaWorkerPay) : '—'}
+                            </td>
+                            <td className="font-mono text-sm text-right">
+                              {data.beatProducerPay > 0 ? formatCents(data.beatProducerPay) : '—'}
+                            </td>
+                            <td className="font-mono text-sm text-right font-bold border-l-2 border-black/10">
+                              {formatCents(data.totalPay)}
+                            </td>
+                            <td className="font-mono text-sm text-right text-green-600">
+                              {paid > 0 ? formatCents(paid) : '—'}
+                            </td>
+                            <td className={`font-mono text-sm text-right font-bold ${balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                              {balance > 0 ? formatCents(balance) : 'PAID'}
+                            </td>
+                          </tr>
+                        );
+                      })}
                       {payrollData.people.length === 0 && (
                         <tr>
-                          <td colSpan={7} className="font-mono text-sm text-black/60 text-center py-12">No payroll data for this period</td>
+                          <td colSpan={8} className="font-mono text-sm text-black/60 text-center py-12">No payroll data yet</td>
                         </tr>
                       )}
                     </tbody>
@@ -791,13 +871,19 @@ export default function Accounting() {
                             {formatCents(payrollData.people.reduce((s, [, d]) => s + d.sessionPay, 0))}
                           </td>
                           <td className="font-mono text-sm text-right font-bold">
-                            {formatCents(payrollData.people.reduce((s, [, d]) => s + d.mediaCommission, 0))}
+                            {formatCents(payrollData.people.reduce((s, [, d]) => s + d.mediaCommission + d.mediaWorkerPay, 0))}
                           </td>
                           <td className="font-mono text-sm text-right font-bold">
                             {formatCents(payrollData.people.reduce((s, [, d]) => s + d.beatProducerPay, 0))}
                           </td>
-                          <td className="font-mono text-sm text-right font-bold text-accent border-l-2 border-black/10">
+                          <td className="font-mono text-sm text-right font-bold border-l-2 border-black/10">
                             {formatCents(payrollData.totalPayroll)}
+                          </td>
+                          <td className="font-mono text-sm text-right font-bold text-green-600">
+                            {formatCents(payrollData.totalPaid)}
+                          </td>
+                          <td className="font-mono text-sm text-right font-bold text-red-600">
+                            {formatCents(Math.max(0, payrollData.totalPayroll - payrollData.totalPaid))}
                           </td>
                         </tr>
                       </tfoot>
@@ -806,23 +892,28 @@ export default function Accounting() {
                 </div>
               </div>
 
-              {/* Per-Person Detail Cards with Payout */}
+              {/* Per-Person Detail Cards with Earnings + Payout History */}
               {payrollData.people.map(([name, data]) => {
-                const paid = payoutsByPerson[name] || 0;
+                const paid = payrollData.normalizedPayouts[name] || 0;
                 const remaining = Math.max(0, data.totalPay - paid);
+                // Get this person's payout history (normalize names for matching)
+                const personPayouts = payouts.filter(p => (normalizeName(p.person_name) || p.person_name) === name);
+
                 return (
                   <BreakdownSection
                     key={name}
-                    title={`${name} — ${formatCents(data.totalPay)} earned${paid > 0 ? ` · ${formatCents(paid)} paid · ${formatCents(remaining)} remaining` : ''}`}
+                    title={`${name} — ${formatCents(data.totalPay)} earned · ${formatCents(paid)} paid · ${remaining > 0 ? `${formatCents(remaining)} owed` : 'PAID IN FULL'}`}
                     expanded={expandedSection === `payroll-${name}`}
                     onToggle={() => toggleSection(`payroll-${name}`)}
                   >
                     <div className="space-y-3">
+                      {/* Earnings Breakdown */}
+                      <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider pt-1">Earnings</p>
                       {data.sessionPay > 0 && (
                         <div className="flex justify-between items-center py-2 border-b border-black/5">
                           <div>
                             <p className="font-mono text-sm font-semibold">Session Earnings</p>
-                            <p className="font-mono text-[10px] text-black/60">{data.sessionCount} sessions · {data.sessionHours}hr · {formatCents(data.sessionRevenue)} gross</p>
+                            <p className="font-mono text-[10px] text-black/60">{data.sessionCount} sessions · {data.sessionHours}hr · {formatCents(data.sessionRevenue)} gross · 60% cut</p>
                           </div>
                           <p className="font-mono text-sm font-bold">{formatCents(data.sessionPay)}</p>
                         </div>
@@ -860,21 +951,44 @@ export default function Accounting() {
                         </div>
                       )}
 
-                      {/* Payout status */}
+                      {/* Total Earned line */}
                       <div className="flex justify-between items-center py-2 border-t-2 border-black/20">
-                        <div>
-                          <p className="font-mono text-sm font-bold">Total Earned</p>
-                          {paid > 0 && <p className="font-mono text-[10px] text-green-600">Paid: {formatCents(paid)}</p>}
+                        <p className="font-mono text-sm font-bold">Total Earned</p>
+                        <p className="font-mono text-lg font-bold">{formatCents(data.totalPay)}</p>
+                      </div>
+
+                      {/* Payout History */}
+                      {personPayouts.length > 0 && (
+                        <div className="border border-black/10 p-3 space-y-2">
+                          <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">Payout History</p>
+                          {personPayouts.map((p, i) => (
+                            <div key={p.id || i} className="flex justify-between items-center py-1 border-b border-black/5 last:border-0">
+                              <div className="font-mono text-xs">
+                                <span className="text-black/70">
+                                  {new Date(p.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                </span>
+                                <span className="text-black/40 ml-2">via {p.method}</span>
+                                {p.note && <span className="text-black/40 ml-2">— {p.note}</span>}
+                                {p.period_label && <span className="text-black/30 ml-2">({p.period_label})</span>}
+                              </div>
+                              <span className="font-mono text-sm font-bold text-green-600">{formatCents(p.amount)}</span>
+                            </div>
+                          ))}
+                          <div className="flex justify-between items-center pt-2 border-t border-black/10">
+                            <span className="font-mono text-xs font-bold text-green-700">Total Paid</span>
+                            <span className="font-mono text-sm font-bold text-green-600">{formatCents(paid)}</span>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <p className="font-mono text-lg font-bold text-accent">{formatCents(data.totalPay)}</p>
-                          {paid > 0 && remaining > 0 && (
-                            <p className="font-mono text-xs text-red-600">Still owed: {formatCents(remaining)}</p>
-                          )}
-                          {paid > 0 && remaining === 0 && (
-                            <p className="font-mono text-xs text-green-600 font-bold">PAID IN FULL</p>
-                          )}
-                        </div>
+                      )}
+
+                      {/* Balance */}
+                      <div className={`flex justify-between items-center py-3 px-3 ${remaining > 0 ? 'bg-red-50 border border-red-200' : 'bg-green-50 border border-green-200'}`}>
+                        <p className={`font-mono text-sm font-bold ${remaining > 0 ? 'text-red-700' : 'text-green-700'}`}>
+                          {remaining > 0 ? 'Balance Owed' : 'Paid in Full'}
+                        </p>
+                        <p className={`font-mono text-lg font-bold ${remaining > 0 ? 'text-red-700' : 'text-green-700'}`}>
+                          {remaining > 0 ? formatCents(remaining) : formatCents(0)}
+                        </p>
                       </div>
 
                       {/* Record Payout button */}
@@ -931,12 +1045,15 @@ export default function Accounting() {
                 const owedEntries = cashLedger.filter(e => e.status === 'owed');
                 const byEngineer: Record<string, { total: number; entries: typeof owedEntries }> = {};
                 owedEntries.forEach(e => {
-                  if (!byEngineer[e.engineer_name]) byEngineer[e.engineer_name] = { total: 0, entries: [] };
-                  byEngineer[e.engineer_name].total += e.amount;
-                  byEngineer[e.engineer_name].entries.push(e);
+                  const engName = normalizeName(e.engineer_name) || e.engineer_name;
+                  if (!byEngineer[engName]) byEngineer[engName] = { total: 0, entries: [] };
+                  byEngineer[engName].total += e.amount;
+                  byEngineer[engName].entries.push(e);
                 });
                 const totalOwed = owedEntries.reduce((s, e) => s + e.amount, 0);
                 const totalCollected = cashLedger.filter(e => e.status === 'collected').reduce((s, e) => s + e.amount, 0);
+
+                if (totalOwed === 0) return null;
 
                 return (
                   <div className="border-2 border-red-200 bg-red-50/30 p-4 space-y-3">
@@ -971,7 +1088,7 @@ export default function Accounting() {
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ entryId: entry.id }),
                                   });
-                                  fetchData();
+                                  fetchPayrollData();
                                 }}
                                 className="text-[10px] font-bold uppercase bg-green-100 text-green-700 px-2 py-1 hover:bg-green-200"
                               >
@@ -988,16 +1105,24 @@ export default function Accounting() {
 
               {/* Business Summary at bottom of payroll */}
               <div className="border-2 border-accent p-4 space-y-2">
-                <h3 className="font-mono text-sm font-bold uppercase tracking-wider">Business Summary</h3>
+                <h3 className="font-mono text-sm font-bold uppercase tracking-wider">Business Summary (All Time)</h3>
                 <div className="space-y-1 font-mono text-sm">
                   <div className="flex justify-between"><span className="text-black/60">Gross Revenue</span><span>{formatCents(payrollData.totalGrossRevenue)}</span></div>
-                  <div className="flex justify-between"><span className="text-black/60">− Total Payroll</span><span className="text-red-600">−{formatCents(payrollData.totalPayroll)}</span></div>
+                  <div className="flex justify-between"><span className="text-black/60">− Total Payroll Earned</span><span className="text-red-600">−{formatCents(payrollData.totalPayroll)}</span></div>
                   {payrollData.keptDeposits > 0 && (
                     <div className="flex justify-between"><span className="text-black/60">+ Kept Deposits</span><span className="text-green-600">+{formatCents(payrollData.keptDeposits)}</span></div>
                   )}
                   <div className="flex justify-between pt-2 border-t-2 border-black/20">
                     <span className="font-bold text-accent">Business Profit</span>
                     <span className="font-bold text-accent text-lg">{formatCents(payrollData.businessKeeps + payrollData.keptDeposits)}</span>
+                  </div>
+                  <div className="flex justify-between pt-1">
+                    <span className="text-black/40 text-xs">Paid out so far</span>
+                    <span className="text-green-600 text-xs">{formatCents(payrollData.totalPaid)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-black/40 text-xs">Still owed to workers</span>
+                    <span className="text-red-600 text-xs">{formatCents(Math.max(0, payrollData.totalPayroll - payrollData.totalPaid))}</span>
                   </div>
                 </div>
               </div>

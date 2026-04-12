@@ -170,6 +170,7 @@ const PS_STATUS_BADGE: Record<string, { bg: string; text: string }> = {
 function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; onBeatsChange: (beats: Beat[]) => void; isAdmin?: boolean }) {
   const [showForm, setShowForm] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState('');
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [reviewBeat, setReviewBeat] = useState<Beat | null>(null);
 
@@ -226,25 +227,87 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
     if (!previewFile || !title) return;
     setUploading(true);
     setUploadError('');
-
-    const formData = new FormData();
-    formData.append('preview_file', previewFile);
-    formData.append('title', title);
-    formData.append('genre', genre);
-    formData.append('bpm', bpm);
-    formData.append('key', musicalKey);
-    formData.append('tags', tags);
-    formData.append('mp3_lease_price', mp3Price);
-    formData.append('trackout_lease_price', trackoutPrice);
-    formData.append('exclusive_price', exclusivePrice);
-    formData.append('has_exclusive', String(hasExclusive));
-    formData.append('contains_samples', String(containsSamples));
-    if (containsSamples && sampleDetails) formData.append('sample_details', sampleDetails);
-    if (mp3File) formData.append('mp3_file', mp3File);
-    if (trackoutFile) formData.append('trackout_file', trackoutFile);
+    setUploadStatus('Preparing upload...');
 
     try {
-      const res = await fetch('/api/producer/beats', { method: 'POST', body: formData });
+      // Step 1: Get signed upload URLs for all files
+      const filesToUpload: { type: string; fileName: string; file: File }[] = [
+        { type: 'preview', fileName: previewFile.name, file: previewFile },
+      ];
+      if (mp3File) filesToUpload.push({ type: 'mp3', fileName: mp3File.name, file: mp3File });
+      if (trackoutFile) filesToUpload.push({ type: 'trackout', fileName: trackoutFile.name, file: trackoutFile });
+
+      const urlRes = await fetch('/api/producer/beats/upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          files: filesToUpload.map(f => ({ type: f.type, fileName: f.fileName })),
+        }),
+      });
+      const urlData = await urlRes.json();
+
+      if (!urlRes.ok || !urlData.uploads) {
+        setUploadError(urlData.error || 'Failed to prepare upload. Please try again.');
+        setUploadStatus('');
+        setUploading(false);
+        return;
+      }
+
+      // Step 2: Upload each file directly to Supabase Storage via signed URLs
+      const filePaths: Record<string, string> = {};
+
+      for (const upload of urlData.uploads) {
+        const fileEntry = filesToUpload.find(f => f.type === upload.type);
+        if (!fileEntry) continue;
+
+        const label = upload.type === 'preview' ? 'preview audio' : upload.type === 'mp3' ? 'MP3 master' : 'trackout/stems';
+        setUploadStatus(`Uploading ${label}...`);
+
+        const uploadRes = await fetch(upload.signedUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': fileEntry.file.type || 'application/octet-stream' },
+          body: fileEntry.file,
+        });
+
+        if (!uploadRes.ok) {
+          const errText = await uploadRes.text().catch(() => 'Unknown error');
+          console.error(`${upload.type} upload failed:`, errText);
+          // Preview is required, others are optional
+          if (upload.type === 'preview') {
+            setUploadError('Preview upload failed. Please try again.');
+            setUploadStatus('');
+            setUploading(false);
+            return;
+          }
+          continue;
+        }
+
+        filePaths[upload.type] = upload.filePath;
+      }
+
+      setUploadStatus('Saving beat...');
+
+      // Step 3: Create the beat record with file paths
+      const res = await fetch('/api/producer/beats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          genre,
+          bpm,
+          key: musicalKey,
+          tags,
+          mp3_lease_price: mp3Price,
+          trackout_lease_price: trackoutPrice,
+          exclusive_price: exclusivePrice,
+          has_exclusive: hasExclusive,
+          contains_samples: containsSamples,
+          sample_details: containsSamples ? sampleDetails : null,
+          preview_file_path: filePaths.preview,
+          mp3_file_path: filePaths.mp3 || null,
+          trackout_file_path: filePaths.trackout || null,
+        }),
+      });
       const data = await res.json();
 
       if (data.beat) {
@@ -256,10 +319,13 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
       } else {
         setUploadError(data.error || 'Upload failed');
       }
-    } catch {
+    } catch (err) {
+      console.error('Beat upload error:', err);
       setUploadError('Upload failed. Please try again.');
+    } finally {
+      setUploadStatus('');
+      setUploading(false);
     }
-    setUploading(false);
   }
 
   async function deleteBeat(id: string) {
@@ -447,12 +513,16 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
             <p className="font-mono text-sm text-red-600">{uploadError}</p>
           )}
 
+          {uploading && uploadStatus && (
+            <p className="font-mono text-sm text-accent">{uploadStatus}</p>
+          )}
+
           <button
             onClick={handleUpload}
             disabled={!previewFile || !title || uploading}
             className="bg-black text-white font-mono text-sm font-bold uppercase tracking-wider px-6 py-3 hover:bg-black/80 disabled:opacity-50"
           >
-            {uploading ? 'Uploading...' : 'Upload Beat'}
+            {uploading ? (uploadStatus || 'Uploading...') : 'Upload Beat'}
           </button>
         </div>
       )}

@@ -27,6 +27,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
   }
 
+  // Check if lease has been revoked (exclusive was purchased)
+  if (purchase.revoked_at) {
+    return NextResponse.json({
+      error: 'This lease has been revoked because exclusive rights to this beat were purchased. Your lease agreement is no longer valid.',
+      revoked: true,
+      revoked_at: purchase.revoked_at,
+    }, { status: 403 });
+  }
+
   // Check download limit
   if (purchase.download_count >= 10) {
     return NextResponse.json({ error: 'Download limit reached (10 downloads). Contact support for assistance.' }, { status: 403 });
