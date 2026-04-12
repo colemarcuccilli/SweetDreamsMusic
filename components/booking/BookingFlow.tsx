@@ -705,7 +705,7 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
               className="w-full border-2 border-black px-4 py-3 font-mono text-sm bg-transparent focus:border-accent focus:outline-none">
               {Array.from({ length: MAX_GUESTS }, (_, i) => i + 1).map((n) => (
                 <option key={n} value={n}>
-                  {n === 1 ? '1 — Just me' : n === 2 ? '2 — Me + 1 guest' : `${n} — Me + ${n - 1} guests${n > FREE_GUESTS ? ` (+${formatCents(GUEST_FEE_PER_HOUR * (n - FREE_GUESTS))}/hr fee)` : ''}`}
+                  {n === 1 ? '1 — Just me' : n === 2 ? '2 — Me + 1 guest (free)' : `${n} — Me + ${n - 1} guests (+${formatCents(GUEST_FEE_PER_HOUR * (n - FREE_GUESTS))}/hr for ${n - FREE_GUESTS} extra)`}
                 </option>
               ))}
             </select>

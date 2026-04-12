@@ -75,6 +75,8 @@ export default function BookingManager() {
   const [showPaymentLink, setShowPaymentLink] = useState<string | null>(null);
   const [paymentLinkAmount, setPaymentLinkAmount] = useState('');
   const [paymentLinkSent, setPaymentLinkSent] = useState<string | null>(null);
+  const [editingGuests, setEditingGuests] = useState<string | null>(null);
+  const [guestInput, setGuestInput] = useState(1);
   const [showFileUpload, setShowFileUpload] = useState<string | null>(null);
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -567,6 +569,40 @@ export default function BookingManager() {
                           {(b.guest_fee_amount || 0) > 0 && <span className="block">Guests ({b.guest_count || 1} people): {formatCents(b.guest_fee_amount)}</span>}
                           {!b.night_fees_amount && !b.same_day_fee && !(b.guest_fee_amount || 0) && '—'}
                         </p>
+                        {/* Edit guests */}
+                        {editingGuests === b.id ? (
+                          <div className="mt-2 flex items-center gap-2">
+                            <select value={guestInput} onChange={(e) => setGuestInput(Number(e.target.value))}
+                              className="border border-black/20 px-2 py-1 font-mono text-xs">
+                              {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
+                                <option key={n} value={n}>{n} {n === 1 ? 'person' : 'people'}{n > 2 ? ` (+$${(n - 2) * 10}/hr)` : ''}</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={async () => {
+                                const res = await fetch('/api/booking/update-guests', {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ bookingId: b.id, guestCount: guestInput }),
+                                });
+                                const data = await res.json();
+                                if (data.success) {
+                                  fetchBookings();
+                                  setEditingGuests(null);
+                                } else {
+                                  alert(data.error || 'Failed to update guests');
+                                }
+                              }}
+                              className="font-mono text-[10px] font-bold bg-accent text-black px-2 py-1"
+                            >Save</button>
+                            <button onClick={() => setEditingGuests(null)} className="font-mono text-[10px] text-black/60 px-2 py-1">Cancel</button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => { setEditingGuests(b.id); setGuestInput(b.guest_count || 1); }}
+                            className="font-mono text-[10px] text-accent hover:underline mt-1"
+                          >Edit Guests</button>
+                        )}
                       </div>
                     </div>
 
