@@ -831,3 +831,41 @@ export async function sendLeaseRevokedNotification(to: string, details: {
     });
   } catch (e) { console.error('Email error (lease revoked):', e); }
 }
+
+// ── Payment Reminder ──────────────────────────────────────────────────
+
+export async function sendPaymentReminder(to: string, details: {
+  customerName: string;
+  sessionDate: string;
+  duration: number;
+  room: string;
+  totalAmount: number;
+  amountPaid: number;
+  remainingAmount: number;
+  paymentLink?: string;
+}) {
+  try {
+    await resend.emails.send({
+      from: FROM,
+      to,
+      subject: `Friendly Reminder — Session Balance Due`,
+      html: wrap(
+        h1('SESSION BALANCE DUE') +
+        p(`Hey ${details.customerName}, thanks for coming in! We hope you had a great session.`) +
+        p(`We wanted to reach out because there's a remaining balance from your recent session. Please take a moment to complete your payment when you get a chance.`) +
+        detailTable(
+          detail('Session', `${details.sessionDate} · ${details.duration}hr · ${ROOM_LABELS[details.room as Room] || details.room}`) +
+          detail('Total', formatMoney(details.totalAmount)) +
+          detail('Paid', formatMoney(details.amountPaid)) +
+          detail('Remaining Balance', formatMoney(details.remainingAmount))
+        ) +
+        (details.paymentLink
+          ? btn('PAY NOW', details.paymentLink) + '<br/><br/>'
+          : ''
+        ) +
+        p('If you\'ve already sent payment, please disregard this message. If you have any questions, feel free to reach out.') +
+        p('Please note that we are unable to deliver session files or accept new bookings until the balance is resolved.')
+      ),
+    });
+  } catch (e) { console.error('Email error (payment reminder):', e); }
+}

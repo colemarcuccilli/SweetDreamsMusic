@@ -30,6 +30,9 @@ interface Booking {
   same_day_fee: boolean;
   night_fees_amount: number;
   same_day_fee_amount: number;
+  guest_count: number | null;
+  guest_fee_amount: number;
+  payment_reminder_sent: boolean;
   admin_notes: string | null;
   created_at: string;
   claimed_at: string | null;
@@ -456,8 +459,10 @@ export default function BookingManager() {
             const date = new Date(b.start_time);
             const roomLabel = ROOM_LABELS[b.room as keyof typeof ROOM_LABELS] || b.room || '—';
 
+            const hasUnpaidBalance = b.status === 'completed' && b.remainder_amount > 0;
+
             return (
-              <div key={b.id} className="border-2 border-black/10 hover:border-black/20 transition-colors">
+              <div key={b.id} className={`border-2 transition-colors ${hasUnpaidBalance ? 'border-red-400 bg-red-50/30' : 'border-black/10 hover:border-black/20'}`}>
                 {/* Summary Row */}
                 <button
                   onClick={() => setExpandedId(isExpanded ? null : b.id)}
@@ -469,6 +474,11 @@ export default function BookingManager() {
                       <span className={`font-mono text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 ${STATUS_COLORS[b.status] || 'bg-black/5 text-black/70'}`}>
                         {b.status}
                       </span>
+                      {hasUnpaidBalance && (
+                        <span className="font-mono text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-red-600 text-white animate-pulse">
+                          UNPAID — {formatCents(b.remainder_amount)}
+                        </span>
+                      )}
                       {b.reschedule_requested && (
                         <span className="font-mono text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-amber-200 text-amber-800 animate-pulse">
                           Reschedule Requested
@@ -554,7 +564,8 @@ export default function BookingManager() {
                         <p className="font-semibold">
                           {b.night_fees_amount > 0 && <span>Night: {formatCents(b.night_fees_amount)}</span>}
                           {b.same_day_fee && <span className="block">Same-day: {formatCents(b.same_day_fee_amount)}</span>}
-                          {!b.night_fees_amount && !b.same_day_fee && '—'}
+                          {(b.guest_fee_amount || 0) > 0 && <span className="block">Guests ({b.guest_count || 1} people): {formatCents(b.guest_fee_amount)}</span>}
+                          {!b.night_fees_amount && !b.same_day_fee && !(b.guest_fee_amount || 0) && '—'}
                         </p>
                       </div>
                     </div>
@@ -998,9 +1009,15 @@ export default function BookingManager() {
 
                     {/* File Upload */}
                     <div className="flex flex-wrap gap-2 items-center">
+                      {hasUnpaidBalance && (
+                        <span className="font-mono text-[10px] text-red-600 font-bold uppercase px-3 py-2 border border-red-300 bg-red-50 inline-flex items-center gap-1">
+                          Payment required before file delivery
+                        </span>
+                      )}
                       <button
-                        onClick={() => { setShowFileUpload(showFileUpload === b.id ? null : b.id); setUploadFiles([]); setUploadSuccess(null); }}
-                        className="border border-black/20 text-black/60 font-mono text-[10px] font-bold uppercase px-3 py-2 hover:bg-black/5 inline-flex items-center gap-1"
+                        onClick={() => { if (hasUnpaidBalance) return; setShowFileUpload(showFileUpload === b.id ? null : b.id); setUploadFiles([]); setUploadSuccess(null); }}
+                        disabled={hasUnpaidBalance}
+                        className={`border font-mono text-[10px] font-bold uppercase px-3 py-2 inline-flex items-center gap-1 ${hasUnpaidBalance ? 'border-black/10 text-black/20 cursor-not-allowed' : 'border-black/20 text-black/60 hover:bg-black/5'}`}
                       >
                         <Upload className="w-3 h-3" /> Upload Files
                       </button>

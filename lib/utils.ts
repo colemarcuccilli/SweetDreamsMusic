@@ -1,4 +1,4 @@
-import { PRICING, ROOM_RATES, ROOM_RATES_SINGLE, SWEET_SPOTS, SUPER_ADMINS, type Room, type UserRole } from './constants';
+import { PRICING, ROOM_RATES, ROOM_RATES_SINGLE, SWEET_SPOTS, SUPER_ADMINS, GUEST_FEE_PER_HOUR, FREE_GUESTS, type Room, type UserRole } from './constants';
 
 export function formatCents(cents: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -45,6 +45,8 @@ export type SessionPricing = {
   hourBreakdown: HourBreakdown[];
   nightFees: number;
   sameDayFee: number;
+  guestFee: number;
+  guestCount: number;
   sweetSpot: boolean;
   total: number;
   deposit: number;
@@ -54,7 +56,8 @@ export function calculateSessionTotal(
   room: Room,
   hours: number,
   startHour: number,
-  isSameDayBooking: boolean
+  isSameDayBooking: boolean,
+  guestCount: number = 1
 ): SessionPricing {
   // Check for Sweet Spot deal (4 hours flat rate)
   const spot = SWEET_SPOTS[room];
@@ -95,10 +98,12 @@ export function calculateSessionTotal(
   }
 
   const subtotal = isSweetSpot ? spot.price : basePerHour * hours;
-  const total = subtotal + nightFees + sameDayFee;
+  const extraGuests = Math.max(0, guestCount - FREE_GUESTS);
+  const guestFee = extraGuests * GUEST_FEE_PER_HOUR * hours;
+  const total = subtotal + nightFees + sameDayFee + guestFee;
   const deposit = Math.round(total * (PRICING.depositPercent / 100));
 
-  return { subtotal, hourBreakdown, nightFees, sameDayFee, sweetSpot: isSweetSpot, total, deposit };
+  return { subtotal, hourBreakdown, nightFees, sameDayFee, guestFee, guestCount, sweetSpot: isSweetSpot, total, deposit };
 }
 
 export function getUserRole(email: string | undefined, profileRole?: string): UserRole {

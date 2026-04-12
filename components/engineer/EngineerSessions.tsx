@@ -657,6 +657,11 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
           }`}>
             {booking.status}
           </span>
+          {booking.status === 'completed' && remainder > 0 && (
+            <span className="font-mono text-[10px] font-bold uppercase tracking-wider px-2 py-1 bg-red-600 text-white inline-block mt-1 animate-pulse">
+              UNPAID — {formatCents(remainder)}
+            </span>
+          )}
           <p className="font-mono text-sm font-semibold mt-1">
             {formatCents(booking.total_amount)}
           </p>
@@ -1044,12 +1049,18 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
           ) : (
             <>
               <div className="flex flex-wrap gap-2">
+                {booking.status === 'completed' && remainder > 0 ? (
+                  <span className="font-mono text-[10px] text-red-600 font-bold uppercase px-4 py-2 border border-red-300 bg-red-50 inline-flex items-center">
+                    Payment required before sending files — {formatCents(remainder)} owed
+                  </span>
+                ) : (
                 <button
                   onClick={() => setShowFileUpload(!showFileUpload)}
                   className="font-mono text-xs font-bold uppercase tracking-wider bg-black text-white px-4 py-2 hover:bg-black/80 transition-colors"
                 >
                   {showFileUpload ? 'Cancel' : 'Send Files to Client'}
                 </button>
+                )}
                 <button
                   onClick={() => setShowDebug(!showDebug)}
                   className="font-mono text-xs uppercase tracking-wider text-black/60 px-3 py-2 hover:text-black/60 transition-colors"

@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
 import { createServiceClient } from '@/lib/supabase/server';
-import { PRICING, SITE_URL, ROOM_LABELS, STUDIO_A_WEEKDAY_START, type Room } from '@/lib/constants';
+import { PRICING, SITE_URL, ROOM_LABELS, STUDIO_A_WEEKDAY_START, MAX_GUESTS, type Room } from '@/lib/constants';
 import { calculateSessionTotal, parseTimeSlot } from '@/lib/utils';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { date, startTime, duration, room, engineer, customerName, customerEmail, customerPhone, notes } = body;
+    const { date, startTime, duration, room, engineer, customerName, customerEmail, customerPhone, guestCount: rawGuestCount, notes } = body;
+    const guestCount = Math.min(Math.max(1, Number(rawGuestCount) || 1), MAX_GUESTS);
 
     if (!date || !startTime || !duration || !room || !customerName || !customerEmail) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -66,7 +67,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const pricing = calculateSessionTotal(room as Room, duration, startHour, sameDayBooking);
+    // Check for unpaid balance from previous sessions
+    const { data: unpaidBookings } = await supabase
+      .from('bookings')
+      .select('id, remainder_amount')
+      .eq('customer_email', customerEmail)
+      .eq('status', 'completed')
+      .gt('remainder_amount', 0)
+      .limit(1);
+
+    if (unpaidBookings && unpaidBookings.length > 0) {
+      return NextResponse.json({
+        error: `You have an unpaid balance from a previous session. Please pay your outstanding balance before booking a new session.`,
+      }, { status: 400 });
+    }
+
+    const pricing = calculateSessionTotal(room as Room, duration, startHour, sameDayBooking, guestCount);
 
     const endDec = (startHour + duration) % 24;
     const endTime = `${Math.floor(endDec)}:${endDec % 1 >= 0.5 ? '30' : '00'}`;
@@ -133,6 +149,8 @@ export async function POST(request: NextRequest) {
         night_fees: String(pricing.nightFees),
         same_day: String(sameDayBooking),
         same_day_fee: String(pricing.sameDayFee),
+        guest_count: String(guestCount),
+        guest_fee: String(pricing.guestFee),
       },
     });
 

@@ -56,6 +56,8 @@ export async function POST(request: NextRequest) {
           night_fees_amount: parseInt(meta.night_fees || '0'),
           same_day_fee: meta.same_day === 'true',
           same_day_fee_amount: parseInt(meta.same_day_fee || '0'),
+          guest_count: parseInt(meta.guest_count || '1'),
+          guest_fee_amount: parseInt(meta.guest_fee || '0'),
           stripe_customer_id: session.customer as string,
           stripe_checkout_session_id: session.id,
           stripe_payment_intent_id: session.payment_intent as string,

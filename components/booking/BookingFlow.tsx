@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { Calendar, Clock, Home, User, ChevronLeft, ChevronRight, AlertTriangle, Star } from 'lucide-react';
-import { PRICING, ROOMS, ROOM_LABELS, ROOM_RATES, ROOM_RATES_SINGLE, SWEET_SPOTS, ENGINEERS, STUDIO_A_WEEKDAY_START, type Room } from '@/lib/constants';
+import { Calendar, Clock, Home, User, Users, ChevronLeft, ChevronRight, AlertTriangle, Star } from 'lucide-react';
+import { PRICING, ROOMS, ROOM_LABELS, ROOM_RATES, ROOM_RATES_SINGLE, SWEET_SPOTS, ENGINEERS, STUDIO_A_WEEKDAY_START, GUEST_FEE_PER_HOUR, FREE_GUESTS, MAX_GUESTS, type Room } from '@/lib/constants';
 import { formatCents, cn, isSameDay, calculateSessionTotal, formatTime, getHourSurcharge, parseTimeSlot, decimalToTimeStr } from '@/lib/utils';
 
 function getDaysInMonth(year: number, month: number) {
@@ -51,6 +51,7 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
   const [customerName, setCustomerName] = useState(userName);
   const [customerEmail] = useState(userEmail);
   const [customerPhone, setCustomerPhone] = useState('');
+  const [guestCount, setGuestCount] = useState(1);
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [bookedSlots, setBookedSlots] = useState<Record<string, number[]>>({});
@@ -69,8 +70,8 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
   const isSameDayBooking = selectedDate ? isSameDay(selectedDate) : false;
 
   const pricing = useMemo(() => {
-    return calculateSessionTotal(room, duration, startHour, isSameDayBooking);
-  }, [room, duration, startHour, isSameDayBooking]);
+    return calculateSessionTotal(room, duration, startHour, isSameDayBooking, guestCount);
+  }, [room, duration, startHour, isSameDayBooking, guestCount]);
 
   // Fetch month-level availability for heat map coloring
   useEffect(() => {
@@ -205,6 +206,7 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
           customerName,
           customerEmail,
           customerPhone,
+          guestCount,
           notes,
         }),
       });
@@ -646,6 +648,17 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
                 <span>+{formatCents(pricing.sameDayFee)}</span>
               </div>
             )}
+
+            {/* Guest fee */}
+            {pricing.guestFee > 0 && (
+              <div className="flex justify-between text-amber-700">
+                <span className="flex items-center gap-1">
+                  <Users className="w-3 h-3" />
+                  Guest fee ({guestCount - FREE_GUESTS} extra × {duration}hr × {formatCents(GUEST_FEE_PER_HOUR)})
+                </span>
+                <span>+{formatCents(pricing.guestFee)}</span>
+              </div>
+            )}
           </div>
 
           <hr className="border-black/10 my-6" />
@@ -683,6 +696,24 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
             <label htmlFor="customerPhone" className="block font-mono text-xs text-black/60 uppercase tracking-wider mb-1">Phone</label>
             <input type="tel" id="customerPhone" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)}
               className="w-full border-2 border-black px-4 py-3 font-mono text-sm bg-transparent focus:border-accent focus:outline-none" placeholder="(555) 123-4567" />
+          </div>
+          <div>
+            <label htmlFor="guestCount" className="block font-mono text-xs text-black/60 uppercase tracking-wider mb-1">
+              How many people total (including yourself)? *
+            </label>
+            <select id="guestCount" value={guestCount} onChange={(e) => setGuestCount(Number(e.target.value))}
+              className="w-full border-2 border-black px-4 py-3 font-mono text-sm bg-transparent focus:border-accent focus:outline-none">
+              {Array.from({ length: MAX_GUESTS }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>
+                  {n === 1 ? '1 — Just me' : n === 2 ? '2 — Me + 1 guest' : `${n} — Me + ${n - 1} guests${n > FREE_GUESTS ? ` (+${formatCents(GUEST_FEE_PER_HOUR * (n - FREE_GUESTS))}/hr fee)` : ''}`}
+                </option>
+              ))}
+            </select>
+            {guestCount > FREE_GUESTS && (
+              <p className="font-mono text-xs text-amber-700 mt-1">
+                {guestCount - FREE_GUESTS} extra guest{guestCount - FREE_GUESTS > 1 ? 's' : ''} at {formatCents(GUEST_FEE_PER_HOUR)}/hr each = {formatCents(pricing.guestFee)} added to your session
+              </p>
+            )}
           </div>
           <div>
             <label htmlFor="notes" className="block font-mono text-xs text-black/60 uppercase tracking-wider mb-1">Notes</label>

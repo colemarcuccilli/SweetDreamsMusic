@@ -12,6 +12,10 @@
     {
       "path": "/api/cron/priority-expiry",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/payment-reminders",
+      "schedule": "0 * * * *"
     }
   ]
 }
