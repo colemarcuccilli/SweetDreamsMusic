@@ -3,18 +3,23 @@ import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { verifyAdminAccess } from '@/lib/admin-auth';
 import { sendBeatReviewNotification } from '@/lib/email';
 
-// GET - list all beats with producer info
+// GET - list all beats with producer info (admin sees ALL statuses including pending_approval)
 export async function GET() {
   const supabase = await createClient();
+  const isAdmin = await verifyAdminAccess(supabase);
+  if (!isAdmin) return NextResponse.json({ error: 'Admins only' }, { status: 401 });
 
-  const { data: beats, error } = await supabase
+  // Use service client to bypass RLS (which only shows status='active' to regular users)
+  const serviceClient = createServiceClient();
+
+  const { data: beats, error } = await serviceClient
     .from('beats')
     .select('*, producer_profile:profiles!producer_id(display_name, producer_name)')
     .order('created_at', { ascending: false });
 
   if (error) {
     // Fallback without join if producer_id column doesn't exist yet
-    const { data: fallbackBeats, error: fallbackError } = await supabase
+    const { data: fallbackBeats, error: fallbackError } = await serviceClient
       .from('beats')
       .select('*')
       .order('created_at', { ascending: false });
