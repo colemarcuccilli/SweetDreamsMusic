@@ -654,7 +654,7 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
               <div className="flex justify-between text-amber-700">
                 <span className="flex items-center gap-1">
                   <Users className="w-3 h-3" />
-                  Guest fee ({guestCount - FREE_GUESTS} extra × {duration}hr × {formatCents(GUEST_FEE_PER_HOUR)})
+                  Extra guest fee ({guestCount - FREE_GUESTS} extra × {duration}hr × {formatCents(GUEST_FEE_PER_HOUR)})
                 </span>
                 <span>+{formatCents(pricing.guestFee)}</span>
               </div>
@@ -699,19 +699,28 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
           </div>
           <div>
             <label htmlFor="guestCount" className="block font-mono text-xs text-black/60 uppercase tracking-wider mb-1">
-              How many people total (including yourself)? *
+              How many guests are you bringing? *
             </label>
             <select id="guestCount" value={guestCount} onChange={(e) => setGuestCount(Number(e.target.value))}
               className="w-full border-2 border-black px-4 py-3 font-mono text-sm bg-transparent focus:border-accent focus:outline-none">
-              {Array.from({ length: MAX_GUESTS }, (_, i) => i + 1).map((n) => (
-                <option key={n} value={n}>
-                  {n === 1 ? '1 — Just me' : n === 2 ? '2 — Me + 1 guest (free)' : `${n} — Me + ${n - 1} guests (+${formatCents(GUEST_FEE_PER_HOUR * (n - FREE_GUESTS))}/hr for ${n - FREE_GUESTS} extra)`}
-                </option>
-              ))}
+              {Array.from({ length: MAX_GUESTS }, (_, i) => i).map((guests) => {
+                const totalPeople = guests + 1; // artist + guests
+                const extraPeople = Math.max(0, totalPeople - FREE_GUESTS);
+                return (
+                  <option key={guests} value={totalPeople}>
+                    {guests === 0
+                      ? 'No guests — just me'
+                      : guests <= 2
+                        ? `${guests} guest${guests > 1 ? 's' : ''} (free)`
+                        : `${guests} guests (+${formatCents(GUEST_FEE_PER_HOUR * extraPeople)}/hr for ${extraPeople} extra)`
+                    }
+                  </option>
+                );
+              })}
             </select>
             {guestCount > FREE_GUESTS && (
               <p className="font-mono text-xs text-amber-700 mt-1">
-                {guestCount - FREE_GUESTS} extra guest{guestCount - FREE_GUESTS > 1 ? 's' : ''} at {formatCents(GUEST_FEE_PER_HOUR)}/hr each = {formatCents(pricing.guestFee)} added to your session
+                {guestCount - FREE_GUESTS} extra guest{guestCount - FREE_GUESTS > 1 ? 's' : ''} beyond the included 2 — {formatCents(GUEST_FEE_PER_HOUR)}/hr each = {formatCents(pricing.guestFee)} added to your session
               </p>
             )}
           </div>

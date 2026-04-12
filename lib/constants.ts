@@ -126,10 +126,10 @@ export const SUPER_ADMINS = [
 
 export const TIMEZONE = 'America/Indiana/Indianapolis';
 
-// Guest fees — first 2 people (including artist) are free, $10/hr per extra person
+// Guest fees — artist + 2 guests (3 people) are free, $10/hr per extra person beyond that
 export const GUEST_FEE_PER_HOUR = 1000; // $10/hr in cents
-export const FREE_GUESTS = 2;           // artist + 1 friend free
-export const MAX_GUESTS = 10;           // max people allowed in a session
+export const FREE_GUESTS = 3;           // artist + 2 guests free (3 people total)
+export const MAX_GUESTS = 12;           // max people allowed in a session
 
 // Studio A is only available 6:30 PM+ on weekdays (Mon-Fri), all day on weekends
 export const STUDIO_A_WEEKDAY_START = 18.5; // 6:30 PM
