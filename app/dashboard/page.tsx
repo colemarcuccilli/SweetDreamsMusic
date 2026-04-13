@@ -10,6 +10,7 @@ import RescheduleButton from '@/components/dashboard/RescheduleButton';
 import XPWidget from '@/components/dashboard/XPWidget';
 import FileShowcaseToggle from '@/components/dashboard/FileShowcaseToggle';
 import PricingCalculator from '@/components/dashboard/PricingCalculator';
+import ProfileBeatGrid from '@/components/beats/ProfileBeatGrid';
 
 export const metadata: Metadata = {
   title: 'Dashboard',
@@ -40,7 +41,7 @@ export default async function DashboardPage() {
   // Fetch saved beats
   const { data: savedBeats } = await supabase
     .from('user_saved_beats')
-    .select('beat_id, beats(id, title, producer, genre, bpm, musical_key, preview_url)')
+    .select('beat_id, beats(id, title, producer, genre, bpm, musical_key, preview_url, cover_image_url, mp3_lease_price, trackout_lease_price, exclusive_price, has_exclusive, lease_count)')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(6);
@@ -267,37 +268,27 @@ export default async function DashboardPage() {
           </div>
 
           {/* Saved Beats */}
-          {savedBeats && savedBeats.length > 0 && (
-            <div className="mt-12">
-              <h2 className="text-heading-md mb-6 flex items-center gap-3">
-                <Heart className="w-6 h-6 text-accent" />
-                SAVED BEATS
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {savedBeats.map((saved) => {
-                  const beat = Array.isArray(saved.beats) ? saved.beats[0] : saved.beats;
-                  if (!beat) return null;
-                  return (
-                    <Link
-                      key={saved.beat_id}
-                      href={`/beats/${beat.id}`}
-                      className="border-2 border-black/10 p-4 hover:border-accent transition-colors no-underline"
-                    >
-                      <p className="font-mono text-sm font-bold truncate">{beat.title}</p>
-                      <p className="font-mono text-xs text-black/70 mt-1">
-                        {beat.producer}
-                        {beat.bpm && ` · ${beat.bpm} BPM`}
-                        {beat.genre && ` · ${beat.genre}`}
-                      </p>
-                    </Link>
-                  );
-                })}
+          {savedBeats && savedBeats.length > 0 && (() => {
+            const flatBeats = savedBeats
+              .map(saved => {
+                const beat = Array.isArray(saved.beats) ? saved.beats[0] : saved.beats;
+                return beat ? { ...beat, has_exclusive: beat.has_exclusive ?? true, lease_count: beat.lease_count ?? 0 } : null;
+              })
+              .filter(Boolean) as { id: string; title: string; producer: string; genre: string | null; bpm: number | null; musical_key: string | null; preview_url: string | null; cover_image_url: string | null; mp3_lease_price: number | null; trackout_lease_price: number | null; exclusive_price: number | null; has_exclusive: boolean; lease_count: number }[];
+
+            return flatBeats.length > 0 ? (
+              <div className="mt-12">
+                <h2 className="text-heading-md mb-6 flex items-center gap-3">
+                  <Heart className="w-6 h-6 text-accent" />
+                  SAVED BEATS
+                </h2>
+                <ProfileBeatGrid beats={flatBeats} producerName="" />
+                <Link href="/beats" className="font-mono text-xs text-accent hover:underline no-underline mt-3 inline-block">
+                  Browse more beats &rarr;
+                </Link>
               </div>
-              <Link href="/beats" className="font-mono text-xs text-accent hover:underline no-underline mt-3 inline-block">
-                Browse more beats &rarr;
-              </Link>
-            </div>
-          )}
+            ) : null;
+          })()}
 
           {/* My Purchases quick link */}
           <div className="mt-12">

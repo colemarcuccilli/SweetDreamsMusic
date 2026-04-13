@@ -95,6 +95,13 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
       audio.play();
       setCurrentTrack(track);
       setCurrentTime(0);
+
+      // Track play count (fire-and-forget)
+      fetch('/api/beats/track-play', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ beatId: track.id }),
+      }).catch(() => {});
     }
   }, [currentTrack?.id, isLooping]);
 

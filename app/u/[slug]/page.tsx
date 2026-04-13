@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { Music, ExternalLink, Settings } from 'lucide-react';
 import { createServiceClient, createClient } from '@/lib/supabase/server';
+import ProfileBeatGrid from '@/components/beats/ProfileBeatGrid';
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -392,37 +393,11 @@ export default async function PublicProfilePage({ params }: Props) {
         <section className="bg-white text-black py-16 sm:py-24">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
             <h2 className="text-heading-xl mb-8">BEATS</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {producerBeats.map((beat) => (
-                <Link
-                  key={beat.id}
-                  href={`/beats/${beat.id}`}
-                  className="border-2 border-black/10 p-5 hover:border-accent transition-colors no-underline"
-                >
-                  <p className="font-mono text-sm font-bold">{beat.title}</p>
-                  <p className="font-mono text-xs text-black/70 mt-1">
-                    {beat.genre}{beat.bpm ? ` · ${beat.bpm} BPM` : ''}{beat.musical_key ? ` · ${beat.musical_key}` : ''}
-                  </p>
-                  <div className="flex gap-3 mt-2">
-                    {beat.mp3_lease_price && (
-                      <span className="font-mono text-[10px] text-black/60">
-                        MP3 ${(beat.mp3_lease_price / 100).toFixed(2)}
-                      </span>
-                    )}
-                    {beat.trackout_lease_price && (
-                      <span className="font-mono text-[10px] text-black/60">
-                        Trackout ${(beat.trackout_lease_price / 100).toFixed(2)}
-                      </span>
-                    )}
-                    {beat.exclusive_price && beat.has_exclusive && (
-                      <span className="font-mono text-[10px] text-accent font-bold">
-                        Exclusive ${(beat.exclusive_price / 100).toFixed(2)}
-                      </span>
-                    )}
-                  </div>
-                </Link>
-              ))}
-            </div>
+            <ProfileBeatGrid
+              beats={producerBeats}
+              producerName={profile.producer_name || profile.display_name || ''}
+              producerSlug={profile.public_profile_slug || undefined}
+            />
           </div>
         </section>
       )}
