@@ -349,37 +349,76 @@ export async function POST() {
 
   for (const [key, met] of Object.entries(conditions)) {
     if (met && !existingKeys.has(key) && ACHIEVEMENTS[key]) {
-      newAchievements.push(key);
-      totalXpAwarded += ACHIEVEMENTS[key].xp;
-
-      // Insert achievement
-      await supabase.from('artist_achievements').insert({
+      // Use upsert with onConflict to prevent duplicate inserts
+      // If the achievement already exists (race condition), this is a no-op
+      const { error: insertError } = await supabase.from('artist_achievements').upsert({
         user_id: user.id,
         achievement_key: key,
-      });
+      }, { onConflict: 'user_id,achievement_key', ignoreDuplicates: true });
+
+      // Only count XP if the insert actually succeeded (not a duplicate)
+      if (!insertError) {
+        // Double-check it was actually inserted (not already there from a race)
+        const { count } = await supabase
+          .from('artist_achievements')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('achievement_key', key);
+
+        // Only award XP if this is genuinely new (check xp_log for prior award)
+        const { count: priorXpCount } = await supabase
+          .from('xp_log')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('action', 'unlock_achievement')
+          .eq('reference_id', `achievement_${key}`);
+
+        if (count && count > 0 && (!priorXpCount || priorXpCount === 0)) {
+          newAchievements.push(key);
+          totalXpAwarded += ACHIEVEMENTS[key].xp;
+        }
+      }
     }
   }
 
-  // Award XP for all new achievements at once
+  // Award XP for genuinely new achievements using atomic SQL increment
   if (totalXpAwarded > 0) {
-    const currentXp = profile?.total_xp || 0;
-    const newTotal = currentXp + totalXpAwarded;
-    const levelInfo = calculateLevel(newTotal);
+    // Atomic increment — prevents race condition where two requests read same value
+    try {
+      await supabase.rpc('increment_xp', {
+        p_user_id: user.id,
+        p_xp_amount: totalXpAwarded,
+      });
+      // Recalculate level from the updated total
+      const { data: updatedProfile } = await supabase
+        .from('profiles')
+        .select('total_xp')
+        .eq('user_id', user.id)
+        .single();
+      if (updatedProfile) {
+        const levelInfo = calculateLevel(updatedProfile.total_xp);
+        await supabase.from('profiles').update({ artist_level: levelInfo.level }).eq('user_id', user.id);
+      }
+    } catch {
+      // Fallback if RPC doesn't exist — use regular update
+      const { data: freshProfile } = await supabase
+        .from('profiles')
+        .select('total_xp')
+        .eq('user_id', user.id)
+        .single();
+      const currentXp = freshProfile?.total_xp || 0;
+      const newTotal = currentXp + totalXpAwarded;
+      const levelInfo = calculateLevel(newTotal);
+      await supabase.from('profiles').update({ total_xp: newTotal, artist_level: levelInfo.level }).eq('user_id', user.id);
+    }
 
-    await supabase
-      .from('profiles')
-      .update({
-        total_xp: newTotal,
-        artist_level: levelInfo.level,
-      })
-      .eq('user_id', user.id);
-
-    // Log XP entries for each achievement
+    // Log XP entries with reference_id for deduplication
     const xpLogs = newAchievements.map((key) => ({
       user_id: user.id,
       action: 'unlock_achievement',
       xp_amount: ACHIEVEMENTS[key].xp,
       label: `Unlocked: ${ACHIEVEMENTS[key].title}`,
+      reference_id: `achievement_${key}`,
       metadata: { achievement: key },
     }));
 
