@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Music, DollarSign, ShoppingCart, TrendingUp, Plus, X, Upload, Trash2, AlertCircle, CheckCircle, FileText, ImagePlus, Pencil } from 'lucide-react';
+import { Music, DollarSign, ShoppingCart, TrendingUp, Plus, X, Upload, Trash2, AlertCircle, CheckCircle, FileText, Pencil } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
 import { PRODUCER_COMMISSION, PLATFORM_COMMISSION, BEAT_LICENSES, BEAT_AGREEMENT_TEXT, BEAT_AGREEMENT_VERSION, BEAT_GENRES } from '@/lib/constants';
 import PrivateSaleModal from '@/components/beats/PrivateSaleModal';
@@ -814,19 +814,6 @@ function AgreementModal({ beat, onClose, onSigned }: { beat: Beat; onClose: () =
   const [editTags, setEditTags] = useState((beat.tags || []).join(', '));
   const [localBeat, setLocalBeat] = useState(beat);
 
-  // Cover image
-  const [coverFile, setCoverFile] = useState<File | null>(null);
-  const [coverPreview, setCoverPreview] = useState<string | null>(null);
-
-  function handleCoverSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setCoverFile(file);
-    const reader = new FileReader();
-    reader.onload = () => setCoverPreview(reader.result as string);
-    reader.readAsDataURL(file);
-  }
-
   function handleScroll() {
     const el = scrollRef.current;
     if (!el) return;
@@ -864,18 +851,15 @@ function AgreementModal({ beat, onClose, onSigned }: { beat: Beat; onClose: () =
   }
 
   async function handleSign() {
-    if (!agreed || !coverFile) return;
+    if (!agreed) return;
     setSigning(true);
     setError('');
 
     try {
-      const formData = new FormData();
-      formData.append('beat_id', localBeat.id);
-      formData.append('cover_image', coverFile);
-
       const res = await fetch('/api/producer/beats/review', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ beat_id: localBeat.id }),
       });
       const data = await res.json();
 
@@ -999,37 +983,6 @@ function AgreementModal({ beat, onClose, onSigned }: { beat: Beat; onClose: () =
           )}
         </div>
 
-        {/* Cover Image Upload — Required */}
-        <div className="px-6 py-4 border-b border-black/10">
-          <div className="flex items-center gap-2 mb-3">
-            <ImagePlus className="w-4 h-4 text-black/40" />
-            <p className="font-mono text-[10px] text-black/60 uppercase tracking-wider">
-              Cover Image <span className="text-red-500">*</span> — Required to go live
-            </p>
-          </div>
-          <div className="flex items-center gap-4">
-            {coverPreview ? (
-              <div className="relative w-24 h-24 flex-shrink-0">
-                <img src={coverPreview} alt="Cover preview" className="w-24 h-24 object-cover border-2 border-accent" />
-                <button onClick={() => { setCoverFile(null); setCoverPreview(null); }}
-                  className="absolute -top-2 -right-2 bg-red-500 text-white w-5 h-5 flex items-center justify-center text-xs hover:bg-red-600">
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ) : (
-              <label className="w-24 h-24 border-2 border-dashed border-black/20 flex flex-col items-center justify-center cursor-pointer hover:border-accent transition-colors flex-shrink-0">
-                <ImagePlus className="w-6 h-6 text-black/20 mb-1" />
-                <span className="font-mono text-[9px] text-black/60 uppercase">Upload</span>
-                <input type="file" accept="image/*" onChange={handleCoverSelect} className="hidden" />
-              </label>
-            )}
-            <div className="font-mono text-xs text-black/60 space-y-1">
-              <p>Upload artwork for this beat. This will show in the store and on your profile.</p>
-              <p className="text-[10px]">Recommended: square image, at least 500×500px. JPG or PNG.</p>
-            </div>
-          </div>
-        </div>
-
         {/* Agreement Text */}
         <div
           ref={scrollRef}
@@ -1055,12 +1008,6 @@ function AgreementModal({ beat, onClose, onSigned }: { beat: Beat; onClose: () =
             </p>
           )}
 
-          {!coverFile && scrolledToBottom && (
-            <p className="font-mono text-[10px] text-red-500 uppercase tracking-wider">
-              You must upload a cover image before signing
-            </p>
-          )}
-
           <label className={`flex items-start gap-3 cursor-pointer ${!scrolledToBottom ? 'opacity-50 pointer-events-none' : ''}`}>
             <input
               type="checkbox"
@@ -1081,11 +1028,11 @@ function AgreementModal({ beat, onClose, onSigned }: { beat: Beat; onClose: () =
           <div className="flex gap-3">
             <button
               onClick={handleSign}
-              disabled={!agreed || !coverFile || signing}
+              disabled={!agreed || signing}
               className="bg-accent text-black font-mono text-sm font-bold uppercase tracking-wider px-6 py-3 hover:bg-accent/90 disabled:opacity-50 inline-flex items-center gap-2"
             >
               <CheckCircle className="w-4 h-4" />
-              {signing ? 'Signing...' : 'Upload Cover & Sign'}
+              {signing ? 'Signing...' : 'Sign & Go Live'}
             </button>
             <button
               onClick={onClose}

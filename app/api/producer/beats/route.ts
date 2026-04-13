@@ -61,6 +61,21 @@ export async function POST(request: NextRequest) {
     .from('media')
     .getPublicUrl(preview_file_path);
 
+  // Auto-generate cover art based on genre
+  let coverImageUrl: string | null = null;
+  try {
+    const { generateBeatCover } = await import('@/lib/beat-cover');
+    const svg = generateBeatCover(genre || null);
+    const coverPath = `beats/covers/${Date.now()}_cover.svg`;
+    const { error: coverErr } = await serviceClient.storage
+      .from('media')
+      .upload(coverPath, Buffer.from(svg), { contentType: 'image/svg+xml', upsert: true });
+    if (!coverErr) {
+      const { data: coverUrlData } = serviceClient.storage.from('media').getPublicUrl(coverPath);
+      coverImageUrl = coverUrlData.publicUrl;
+    }
+  } catch (e) { console.error('Cover art generation error:', e); }
+
   // Insert beat record
   const { data: beat, error: dbError } = await serviceClient
     .from('beats')
@@ -82,6 +97,7 @@ export async function POST(request: NextRequest) {
       has_exclusive: !!has_exclusive,
       contains_samples: !!contains_samples,
       sample_details: contains_samples ? sample_details || null : null,
+      cover_image_url: coverImageUrl,
       status: 'pending_approval',
     })
     .select()

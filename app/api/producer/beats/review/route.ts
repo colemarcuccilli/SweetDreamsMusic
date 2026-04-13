@@ -86,31 +86,24 @@ export async function PATCH(request: NextRequest) {
   return NextResponse.json({ success: true, beat: updated });
 }
 
-// POST — producer uploads cover image, signs agreement, and beat goes active
+// POST — producer signs agreement and beat goes active (cover auto-generated on upload)
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const { isProducer, profileId } = await verifyProducerAccess(supabase);
   if (!isProducer || !profileId) return NextResponse.json({ error: 'Producer access required' }, { status: 401 });
 
   const serviceClient = createServiceClient();
-
-  // Accept FormData for cover image upload
-  const formData = await request.formData();
-  const beatId = formData.get('beat_id') as string;
-  const coverImage = formData.get('cover_image') as File | null;
+  const body = await request.json();
+  const beatId = body.beat_id;
 
   if (!beatId) {
     return NextResponse.json({ error: 'beat_id required' }, { status: 400 });
   }
 
-  if (!coverImage || coverImage.size === 0) {
-    return NextResponse.json({ error: 'Cover image is required to go live' }, { status: 400 });
-  }
-
   // Verify the beat exists, belongs to this producer, and is pending_review
   const { data: beat, error: beatError } = await serviceClient
     .from('beats')
-    .select('id, title, producer, producer_id, status')
+    .select('id, title, genre, producer, producer_id, status, cover_image_url')
     .eq('id', beatId)
     .single();
 
@@ -126,36 +119,22 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: `Beat is not pending review (current status: ${beat.status})` }, { status: 400 });
   }
 
-  // Upload cover image to storage
-  const ext = coverImage.name.split('.').pop()?.toLowerCase() || 'jpg';
-  const imagePath = `beats/covers/${beatId}.${ext}`;
-  const imageBuffer = Buffer.from(await coverImage.arrayBuffer());
-
-  // Validate file size (max 5MB)
-  if (imageBuffer.length > 5 * 1024 * 1024) {
-    return NextResponse.json({ error: 'Cover image must be under 5MB' }, { status: 400 });
+  // Generate cover art if not already set
+  let coverImageUrl = beat.cover_image_url;
+  if (!coverImageUrl) {
+    try {
+      const { generateBeatCover } = await import('@/lib/beat-cover');
+      const svg = generateBeatCover(beat.genre);
+      const coverPath = `beats/covers/${beatId}_cover.svg`;
+      const { error: coverErr } = await serviceClient.storage
+        .from('media')
+        .upload(coverPath, Buffer.from(svg), { contentType: 'image/svg+xml', upsert: true });
+      if (!coverErr) {
+        const { data: coverUrlData } = serviceClient.storage.from('media').getPublicUrl(coverPath);
+        coverImageUrl = coverUrlData.publicUrl;
+      }
+    } catch (e) { console.error('Cover art generation error:', e); }
   }
-
-  const { error: uploadError } = await serviceClient
-    .storage
-    .from('media')
-    .upload(imagePath, imageBuffer, {
-      contentType: coverImage.type || 'image/jpeg',
-      upsert: true,
-    });
-
-  if (uploadError) {
-    console.error('Cover image upload error:', uploadError);
-    return NextResponse.json({ error: 'Failed to upload cover image' }, { status: 500 });
-  }
-
-  // Get public URL for the cover image
-  const { data: urlData } = serviceClient
-    .storage
-    .from('media')
-    .getPublicUrl(imagePath);
-
-  const coverImageUrl = urlData.publicUrl;
 
   // Get producer name
   const { data: profile } = await serviceClient
@@ -195,14 +174,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to save agreement' }, { status: 500 });
   }
 
-  // Update beat status to active + set cover image
+  // Update beat status to active (+ cover if generated)
+  const updateData: Record<string, unknown> = { status: 'active' };
+  if (coverImageUrl) {
+    updateData.cover_image_url = coverImageUrl;
+  }
+
   const { error: updateError } = await serviceClient
     .from('beats')
-    .update({
-      status: 'active',
-      cover_image_url: coverImageUrl,
-      cover_image_path: imagePath,
-    })
+    .update(updateData)
     .eq('id', beat.id);
 
   if (updateError) {
@@ -210,5 +190,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Agreement saved but failed to activate beat' }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true, agreement, cover_image_url: coverImageUrl });
+  return NextResponse.json({ success: true, agreement });
 }
