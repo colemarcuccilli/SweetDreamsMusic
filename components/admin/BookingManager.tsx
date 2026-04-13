@@ -881,19 +881,12 @@ export default function BookingManager() {
                             const amt = parseFloat(cashAmount);
                             if (!amt || amt <= 0) { alert('Enter a valid amount'); return; }
                             setUpdatingId(b.id);
-                            const method = 'cash';
                             const note = cashNote || 'Additional cash payment recorded in session';
-                            // Update the booking total and record the payment
-                            const amtCents = Math.round(amt * 100);
-                            await fetch('/api/admin/bookings/update', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ bookingId: b.id, updates: { total_amount: b.total_amount + amtCents } }),
-                            });
+                            // Single API call: increases total AND records cash in one atomic operation
                             await fetch('/api/booking/record-payment', {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ bookingId: b.id, amount: amt, method, note }),
+                              body: JSON.stringify({ bookingId: b.id, amount: amt, method: 'cash', note, addToTotal: true }),
                             });
                             setShowCashPayment(null);
                             setCashAmount('');

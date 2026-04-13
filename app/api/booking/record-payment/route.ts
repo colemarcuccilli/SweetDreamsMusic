@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-  const { bookingId, amount, method, note } = await request.json();
+  const { bookingId, amount, method, note, addToTotal } = await request.json();
   if (!bookingId || !amount || !method) {
     return NextResponse.json({ error: 'bookingId, amount, and method required' }, { status: 400 });
   }
@@ -28,9 +28,24 @@ export async function POST(request: NextRequest) {
 
   const amountCents = Math.round(amount * 100);
 
-  // Update remainder
-  const newRemainder = Math.max(0, booking.remainder_amount - amountCents);
+  // If this is "Add Time" — increase total AND record the cash as paying for that added time
+  // The net effect on remainder is: remainder stays the same (total goes up, cash covers it)
+  // If this is a regular payment — just subtract from remainder
+  let newTotal = booking.total_amount;
+  let newRemainder = booking.remainder_amount;
+
+  if (addToTotal) {
+    // Added time/services: total increases, cash covers the increase
+    newTotal = booking.total_amount + amountCents;
+    // Remainder stays the same — the new charge is fully covered by the cash
+    newRemainder = booking.remainder_amount;
+  } else {
+    // Regular payment against existing remainder
+    newRemainder = Math.max(0, booking.remainder_amount - amountCents);
+  }
+
   await supabase.from('bookings').update({
+    total_amount: newTotal,
     remainder_amount: newRemainder,
     updated_at: new Date().toISOString(),
   }).eq('id', bookingId);
@@ -45,6 +60,9 @@ export async function POST(request: NextRequest) {
         amount: amountCents,
         method,
         note: note || '',
+        addToTotal: !!addToTotal,
+        previous_total: booking.total_amount,
+        new_total: newTotal,
         previous_remainder: booking.remainder_amount,
         new_remainder: newRemainder,
       },
