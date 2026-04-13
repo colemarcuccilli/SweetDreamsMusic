@@ -52,12 +52,15 @@ export async function GET(request: NextRequest) {
 
   const { data: bookings } = await bookingsQuery;
 
-  // Fetch media sales this engineer sold (check both sold_by and engineer_name for backward compat)
+  // Fetch media sales — admins see all, engineers see their own
   let mediaSalesQuery = supabase
     .from('media_sales')
     .select('*')
-    .or(`sold_by.in.(${[...matchNames].map(n => `"${n}"`).join(',')}),engineer_name.in.(${[...matchNames].map(n => `"${n}"`).join(',')})`)
     .order('created_at', { ascending: false });
+
+  if (!isAdmin) {
+    mediaSalesQuery = mediaSalesQuery.or(`sold_by.in.(${[...matchNames].map(n => `"${n}"`).join(',')}),engineer_name.in.(${[...matchNames].map(n => `"${n}"`).join(',')})`);
+  }
 
   if (from) mediaSalesQuery = mediaSalesQuery.gte('created_at', from);
   if (to) mediaSalesQuery = mediaSalesQuery.lte('created_at', `${to}T23:59:59`);
@@ -67,6 +70,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     bookings: bookings || [],
     mediaSales: mediaSales || [],
-    engineerName,
+    engineerName: isAdmin ? 'Admin (All Engineers)' : engineerName,
+    isAdmin,
   });
 }

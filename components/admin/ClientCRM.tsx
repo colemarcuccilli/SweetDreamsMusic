@@ -403,7 +403,7 @@ function ClientDetail({ client }: { client: Client }) {
               <div className="flex items-center gap-2">
                 <ExternalLink className="w-3.5 h-3.5 text-black/40" />
                 <a
-                  href={`/${client.public_profile_slug}`}
+                  href={`/u/${client.public_profile_slug}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-mono text-xs text-accent hover:underline"
