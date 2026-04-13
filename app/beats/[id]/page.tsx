@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { formatCents } from '@/lib/utils';
 import { BEAT_LICENSES, SITE_URL } from '@/lib/constants';
 import BeatDetailClient from '@/components/beats/BeatDetailClient';
+import BuyButton from '@/components/beats/BuyButton';
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -214,35 +215,3 @@ function LicenseOption({
   );
 }
 
-function BuyButton({ beatId, licenseType, isExclusive }: { beatId: string; licenseType: string; isExclusive?: boolean }) {
-  return (
-    <form action={`/api/beats/checkout`} method="POST">
-      <input type="hidden" name="beatId" value={beatId} />
-      <input type="hidden" name="licenseType" value={licenseType} />
-      <button
-        type="submit"
-        className={`w-full font-mono text-xs font-bold uppercase tracking-wider py-2.5 transition-colors ${
-          isExclusive
-            ? 'bg-accent text-black hover:bg-accent/90'
-            : 'bg-white text-black hover:bg-white/90'
-        }`}
-        onClick={async (e) => {
-          e.preventDefault();
-          const res = await fetch('/api/beats/checkout', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ beatId, licenseType }),
-          });
-          if (res.status === 401) {
-            window.location.href = `/login?redirect=/beats/${beatId}`;
-            return;
-          }
-          const data = await res.json();
-          if (data.url) window.location.href = data.url;
-        }}
-      >
-        Buy {isExclusive ? 'Exclusive' : 'License'}
-      </button>
-    </form>
-  );
-}
