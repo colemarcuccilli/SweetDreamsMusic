@@ -1105,66 +1105,101 @@ export default function Accounting() {
                 );
               })}
 
-              {/* Cash Owed by Engineers */}
-              {cashLedger.length > 0 && (() => {
+              {/* Cash Tracking */}
+              {(() => {
                 const owedEntries = cashLedger.filter(e => e.status === 'owed');
-                const byEngineer: Record<string, { total: number; entries: typeof owedEntries }> = {};
+                const collectedEntries = cashLedger.filter(e => e.status === 'collected');
+                const totalOwed = owedEntries.reduce((s, e) => s + e.amount, 0);
+                const totalCollected = collectedEntries.reduce((s, e) => s + e.amount, 0);
+
+                // Group owed by engineer
+                const owedByEngineer: Record<string, { total: number; entries: typeof owedEntries }> = {};
                 owedEntries.forEach(e => {
                   const engName = normalizeName(e.engineer_name) || e.engineer_name;
-                  if (!byEngineer[engName]) byEngineer[engName] = { total: 0, entries: [] };
-                  byEngineer[engName].total += e.amount;
-                  byEngineer[engName].entries.push(e);
+                  if (!owedByEngineer[engName]) owedByEngineer[engName] = { total: 0, entries: [] };
+                  owedByEngineer[engName].total += e.amount;
+                  owedByEngineer[engName].entries.push(e);
                 });
-                const totalOwed = owedEntries.reduce((s, e) => s + e.amount, 0);
-                const totalCollected = cashLedger.filter(e => e.status === 'collected').reduce((s, e) => s + e.amount, 0);
 
-                if (totalOwed === 0) return null;
+                // Group collected by engineer
+                const collectedByEngineer: Record<string, number> = {};
+                collectedEntries.forEach(e => {
+                  const engName = normalizeName(e.engineer_name) || e.engineer_name;
+                  collectedByEngineer[engName] = (collectedByEngineer[engName] || 0) + e.amount;
+                });
 
                 return (
-                  <div className="border-2 border-red-200 bg-red-50/30 p-4 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-mono text-sm font-bold uppercase tracking-wider text-red-700">Cash Owed to Business</h3>
-                      <span className="font-mono text-lg font-bold text-red-700">{formatCents(totalOwed)}</span>
-                    </div>
-                    <p className="font-mono text-xs text-black/60">Engineers collect cash and owe the full amount to the business. Business pays engineers through payroll.</p>
-                    {totalCollected > 0 && (
-                      <p className="font-mono text-xs text-green-700">Total collected so far: {formatCents(totalCollected)}</p>
-                    )}
-                    {Object.entries(byEngineer).map(([name, data]) => (
-                      <div key={name} className="border border-red-200 p-3 space-y-2">
-                        <div className="flex justify-between items-center">
-                          <span className="font-mono text-sm font-bold">{name}</span>
-                          <span className="font-mono text-sm font-bold text-red-700">Owes {formatCents(data.total)}</span>
+                  <>
+                    {/* Cash owed (only if there are outstanding entries) */}
+                    {totalOwed > 0 && (
+                      <div className="border-2 border-red-200 bg-red-50/30 p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-mono text-sm font-bold uppercase tracking-wider text-red-700">Cash Owed to Business</h3>
+                          <span className="font-mono text-lg font-bold text-red-700">{formatCents(totalOwed)}</span>
                         </div>
-                        {data.entries.map(entry => (
-                          <div key={entry.id} className="flex justify-between items-center text-xs font-mono border-t border-red-100 pt-1">
-                            <div>
-                              <span className="text-black/70">{entry.client_name}</span>
-                              <span className="text-black/60 ml-2">{new Date(entry.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                              {entry.note && <span className="text-black/60 ml-2">— {entry.note}</span>}
+                        <p className="font-mono text-xs text-black/60">Engineers collect cash and owe the full amount to the business. Business pays engineers through payroll.</p>
+                        {Object.entries(owedByEngineer).map(([name, data]) => (
+                          <div key={name} className="border border-red-200 p-3 space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="font-mono text-sm font-bold">{name}</span>
+                              <span className="font-mono text-sm font-bold text-red-700">Owes {formatCents(data.total)}</span>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold">{formatCents(entry.amount)}</span>
-                              <button
-                                onClick={async () => {
-                                  if (!confirm(`Mark ${formatCents(entry.amount)} as collected from ${name}?`)) return;
-                                  await fetch('/api/admin/cash-ledger', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ entryId: entry.id }),
-                                  });
-                                  fetchPayrollData();
-                                }}
-                                className="text-[10px] font-bold uppercase bg-green-100 text-green-700 px-2 py-1 hover:bg-green-200"
-                              >
-                                Mark Collected
-                              </button>
-                            </div>
+                            {data.entries.map(entry => (
+                              <div key={entry.id} className="flex justify-between items-center text-xs font-mono border-t border-red-100 pt-1">
+                                <div>
+                                  <span className="text-black/70">{entry.client_name}</span>
+                                  <span className="text-black/60 ml-2">{new Date(entry.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                  {entry.note && <span className="text-black/60 ml-2">— {entry.note}</span>}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold">{formatCents(entry.amount)}</span>
+                                  <button
+                                    onClick={async () => {
+                                      if (!confirm(`Mark ${formatCents(entry.amount)} as collected from ${name}?`)) return;
+                                      await fetch('/api/admin/cash-ledger', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ entryId: entry.id }),
+                                      });
+                                      fetchPayrollData();
+                                    }}
+                                    className="text-[10px] font-bold uppercase bg-green-100 text-green-700 px-2 py-1 hover:bg-green-200"
+                                  >
+                                    Mark Collected
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
                           </div>
                         ))}
                       </div>
-                    ))}
-                  </div>
+                    )}
+
+                    {/* Cash collected summary — always visible if any cash has been collected */}
+                    {totalCollected > 0 && (
+                      <div className="border-2 border-green-200 bg-green-50/30 p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-mono text-sm font-bold uppercase tracking-wider text-green-700">Cash Collected (On Hand)</h3>
+                          <span className="font-mono text-lg font-bold text-green-700">{formatCents(totalCollected)}</span>
+                        </div>
+                        <p className="font-mono text-xs text-black/60">Cash payments collected from engineers and turned in to the business.</p>
+                        <div className="space-y-1">
+                          {Object.entries(collectedByEngineer).sort((a, b) => b[1] - a[1]).map(([name, amount]) => (
+                            <div key={name} className="flex justify-between font-mono text-sm border-b border-green-100 py-1">
+                              <span className="text-black/70">{name}</span>
+                              <span className="font-bold text-green-700">{formatCents(amount)}</span>
+                            </div>
+                          ))}
+                        </div>
+                        {totalOwed > 0 && (
+                          <div className="flex justify-between font-mono text-xs pt-2 border-t border-green-200">
+                            <span className="text-black/60">Still outstanding from engineers</span>
+                            <span className="text-red-600 font-bold">{formatCents(totalOwed)}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
                 );
               })()}
 
