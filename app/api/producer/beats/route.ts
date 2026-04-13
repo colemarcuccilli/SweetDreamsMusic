@@ -9,7 +9,10 @@ export async function GET() {
   const { isProducer, profileId } = await verifyProducerAccess(supabase);
   if (!isProducer || !profileId) return NextResponse.json({ error: 'Producer access required' }, { status: 401 });
 
-  const { data: beats, error } = await supabase
+  // Use service client to bypass RLS — producers need to see their own beats in ALL statuses
+  // (pending_approval, pending_review, active, rejected, etc.)
+  const serviceClient = createServiceClient();
+  const { data: beats, error } = await serviceClient
     .from('beats')
     .select('id, title, genre, bpm, musical_key, tags, mp3_lease_price, trackout_lease_price, exclusive_price, has_exclusive, lease_count, total_lease_revenue, status, created_at, preview_url, cover_image_url, mp3_file_path, trackout_file_path, audio_file_path, contains_samples, sample_details')
     .eq('producer_id', profileId)
