@@ -408,6 +408,8 @@ export default function Accounting() {
     const init = (): PersonEarnings => ({ sessionCount: 0, sessionRevenue: 0, sessionPay: 0, sessionHours: 0, mediaCommission: 0, mediaSoldCount: 0, mediaWorkerPay: 0, mediaFilmedCount: 0, mediaEditedCount: 0, beatSales: 0, beatProducerPay: 0, beatCount: 0, totalPay: 0 });
 
     bks.forEach(b => {
+      // Only count completed sessions for payroll — pending/confirmed sessions haven't happened yet
+      if (b.status !== 'completed') return;
       const eng = normalizeName(b.engineer_name);
       if (!eng || eng === 'Unassigned') return;
       if (!people[eng]) people[eng] = init();
