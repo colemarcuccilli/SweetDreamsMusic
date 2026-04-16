@@ -138,25 +138,35 @@ export const STUDIO_A_WEEKDAY_START = 18.5; // 6:30 PM
 export const BEAT_LICENSES = {
   mp3_lease: {
     name: 'MP3 Lease',
-    description: 'MP3 download. Non-exclusive license for streaming and personal projects.',
+    description: '1-year license. MP3 download. Stream, distribute, and monetize.',
     deliveryFormat: 'MP3 (320kbps)',
     defaultPrice: 2999, // $29.99
   },
   trackout_lease: {
     name: 'Trackout Lease',
-    description: 'Stems/trackouts + MP3. Non-exclusive license for mixing, distribution, and streaming.',
+    description: '2-year license. Stems + MP3. Full mixing rights, distribution, and monetization.',
     deliveryFormat: 'Stems + MP3',
     defaultPrice: 7499, // $74.99
   },
   exclusive: {
     name: 'Exclusive Rights',
-    description: 'Full ownership. Beat removed from store. All rights transferred.',
+    description: 'Permanent ownership. Beat removed from store. All rights transferred.',
     deliveryFormat: 'WAV + Stems + Trackout + MP3',
     defaultPrice: 40000, // $400.00
   },
 } as const;
 
 export type BeatLicenseType = keyof typeof BEAT_LICENSES;
+
+// Lease duration in days per license type (null = permanent/no expiry)
+export const LEASE_DURATION_DAYS: Record<string, number | null> = {
+  mp3_lease: 365,       // 1 year
+  trackout_lease: 730,  // 2 years
+  exclusive: null,      // permanent
+};
+
+// Renewal discount — 75% of original price (pay 75%, save 25%)
+export const RENEWAL_DISCOUNT = 0.75;
 
 // Beat store commission rates
 export const PRODUCER_COMMISSION = 0.60; // 60% to producer

@@ -16,6 +16,8 @@ interface Purchase {
   payment_method: string | null;
   revoked_at: string | null;
   revoked_reason: string | null;
+  lease_expires_at: string | null;
+  renewal_blocked: boolean;
   created_at: string;
   beats: {
     id: string;
@@ -24,6 +26,10 @@ interface Purchase {
     genre: string | null;
     cover_image_url: string | null;
     preview_url: string | null;
+    trackout_lease_price: number | null;
+    exclusive_price: number | null;
+    has_exclusive: boolean;
+    status: string;
   } | null;
 }
 
@@ -32,6 +38,8 @@ export default function PurchasesPage() {
   const [loading, setLoading] = useState(true);
   const [expandedLicense, setExpandedLicense] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [renewing, setRenewing] = useState<string | null>(null);
+  const [upgrading, setUpgrading] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/dashboard/purchases')
@@ -92,6 +100,36 @@ export default function PurchasesPage() {
     setExpandedLicense(purchaseId);
   }
 
+  async function handleRenew(purchaseId: string) {
+    setRenewing(purchaseId);
+    try {
+      const res = await fetch('/api/beats/renew', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ purchaseId }),
+      });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+      else alert(data.error || 'Renewal failed');
+    } catch { alert('Renewal failed'); }
+    setRenewing(null);
+  }
+
+  async function handleUpgrade(purchaseId: string, targetLicenseType: string) {
+    setUpgrading(purchaseId);
+    try {
+      const res = await fetch('/api/beats/upgrade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ purchaseId, targetLicenseType }),
+      });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+      else alert(data.error || 'Upgrade failed');
+    } catch { alert('Upgrade failed'); }
+    setUpgrading(null);
+  }
+
   if (loading) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-12">
@@ -126,9 +164,16 @@ export default function PurchasesPage() {
             const license = BEAT_LICENSES[purchase.license_type as keyof typeof BEAT_LICENSES];
             const isExpanded = expandedLicense === purchase.id;
             const isRevoked = !!purchase.revoked_at;
+            const isExpired = !!purchase.lease_expires_at && new Date(purchase.lease_expires_at) < new Date();
+            const isExpiringSoon = !!purchase.lease_expires_at && !isExpired && new Date(purchase.lease_expires_at) < new Date(Date.now() + 30 * 86400000);
+            const canRenew = !isRevoked && !purchase.renewal_blocked && purchase.license_type !== 'exclusive';
+            const canDownload = !isRevoked && !isExpired;
+            const beatData = beat as { trackout_lease_price?: number | null; exclusive_price?: number | null; has_exclusive?: boolean; status?: string } | null;
+            const canUpgradeToTrackout = purchase.license_type === 'mp3_lease' && beatData?.trackout_lease_price && beatData?.status !== 'sold_exclusive';
+            const canUpgradeToExclusive = purchase.license_type !== 'exclusive' && beatData?.exclusive_price && beatData?.has_exclusive && beatData?.status !== 'sold_exclusive';
 
             return (
-              <div key={purchase.id} className={`border-2 overflow-hidden ${isRevoked ? 'border-red-200 bg-red-50/30' : 'border-black/10'}`}>
+              <div key={purchase.id} className={`border-2 overflow-hidden ${isRevoked ? 'border-red-200 bg-red-50/30' : isExpired ? 'border-amber-200 bg-amber-50/30' : 'border-black/10'}`}>
                 {/* Revoked banner */}
                 {purchase.revoked_at && (
                   <div className="bg-red-100 border-b border-red-200 px-4 py-2">
@@ -136,7 +181,51 @@ export default function PurchasesPage() {
                       Lease Revoked — Exclusive rights purchased
                     </p>
                     <p className="font-mono text-[10px] text-red-600">
-                      Revoked on {new Date(purchase.revoked_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}. Downloads are no longer available. See your license agreement for details.
+                      Revoked on {new Date(purchase.revoked_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}. Downloads are no longer available.
+                    </p>
+                  </div>
+                )}
+
+                {/* Expired banner */}
+                {isExpired && !isRevoked && (
+                  <div className="bg-amber-100 border-b border-amber-200 px-4 py-2 flex items-center justify-between">
+                    <div>
+                      <p className="font-mono text-xs font-bold text-amber-700 uppercase">
+                        Lease Expired
+                      </p>
+                      <p className="font-mono text-[10px] text-amber-600">
+                        Expired {new Date(purchase.lease_expires_at!).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}. {canRenew ? 'Renew to continue using this beat.' : 'Cannot renew — exclusive was purchased.'}
+                      </p>
+                    </div>
+                    {canRenew && (
+                      <button onClick={() => handleRenew(purchase.id)} disabled={renewing === purchase.id}
+                        className="bg-amber-600 text-white font-mono text-[10px] font-bold uppercase px-3 py-1.5 hover:bg-amber-700 disabled:opacity-50 flex-shrink-0">
+                        {renewing === purchase.id ? '...' : 'Renew (25% off)'}
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Expiring soon banner */}
+                {isExpiringSoon && !isRevoked && (
+                  <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2 flex items-center justify-between">
+                    <p className="font-mono text-[10px] text-yellow-700">
+                      Expires {new Date(purchase.lease_expires_at!).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </p>
+                    {canRenew && (
+                      <button onClick={() => handleRenew(purchase.id)} disabled={renewing === purchase.id}
+                        className="font-mono text-[10px] text-yellow-700 font-bold uppercase hover:underline disabled:opacity-50">
+                        Renew early (25% off)
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Grandfathered banner */}
+                {purchase.renewal_blocked && !isRevoked && !isExpired && (
+                  <div className="bg-blue-50 border-b border-blue-200 px-4 py-2">
+                    <p className="font-mono text-[10px] text-blue-700">
+                      Exclusive rights purchased by another buyer. Your lease is valid until {purchase.lease_expires_at ? new Date(purchase.lease_expires_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'its term'} but cannot be renewed.
                     </p>
                   </div>
                 )}
@@ -174,9 +263,14 @@ export default function PurchasesPage() {
                       <span className="font-mono text-[10px] text-black/60">
                         {new Date(purchase.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </span>
-                      {!isRevoked && (
+                      {canDownload && (
                         <span className="font-mono text-[10px] text-black/60">
                           {purchase.download_count}/10 downloads
+                        </span>
+                      )}
+                      {purchase.lease_expires_at && !isExpired && !isExpiringSoon && !isRevoked && (
+                        <span className="font-mono text-[10px] text-black/40">
+                          Expires {new Date(purchase.lease_expires_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                         </span>
                       )}
                     </div>
@@ -184,9 +278,9 @@ export default function PurchasesPage() {
 
                   {/* Actions */}
                   <div className="flex flex-col gap-2 flex-shrink-0">
-                    {isRevoked ? (
+                    {!canDownload ? (
                       <span className="font-mono text-[10px] text-red-500 font-bold uppercase px-3 py-2">
-                        No Downloads
+                        {isExpired ? 'Expired' : 'No Downloads'}
                       </span>
                     ) : (
                       <button
@@ -196,6 +290,19 @@ export default function PurchasesPage() {
                       >
                         <Download className="w-3 h-3" />
                         {downloading === purchase.id ? 'Loading...' : purchase.download_count >= 10 ? 'Limit Reached' : 'Download'}
+                      </button>
+                    )}
+                    {/* Upgrade buttons */}
+                    {canUpgradeToTrackout && !isRevoked && (
+                      <button onClick={() => handleUpgrade(purchase.id, 'trackout_lease')} disabled={upgrading === purchase.id}
+                        className="border border-accent text-accent font-mono text-[10px] font-bold uppercase px-3 py-1.5 hover:bg-accent/10 disabled:opacity-50">
+                        {upgrading === purchase.id ? '...' : 'Upgrade to Trackout'}
+                      </button>
+                    )}
+                    {canUpgradeToExclusive && !isRevoked && (
+                      <button onClick={() => handleUpgrade(purchase.id, 'exclusive')} disabled={upgrading === purchase.id}
+                        className="border border-accent text-accent font-mono text-[10px] font-bold uppercase px-3 py-1.5 hover:bg-accent/10 disabled:opacity-50">
+                        {upgrading === purchase.id ? '...' : 'Buy Exclusive'}
                       </button>
                     )}
                     <button

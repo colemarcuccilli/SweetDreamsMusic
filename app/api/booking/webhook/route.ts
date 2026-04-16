@@ -311,6 +311,23 @@ export async function POST(request: NextRequest) {
           });
         } catch { /* license gen failure shouldn't block purchase */ }
 
+        // Calculate lease expiration date
+        const { LEASE_DURATION_DAYS } = await import('@/lib/constants');
+        const durationDays = LEASE_DURATION_DAYS[meta.license_type as string] ?? null;
+        let leaseExpiresAt: string | null = null;
+        if (durationDays) {
+          const expiry = new Date();
+          expiry.setDate(expiry.getDate() + durationDays);
+          leaseExpiresAt = expiry.toISOString();
+        }
+        // Check if this is a lifetime lease beat (has_exclusive = false → no expiration)
+        if (meta.license_type !== 'exclusive') {
+          const { data: beatInfo } = await supabase.from('beats').select('has_exclusive').eq('id', meta.beat_id).single();
+          if (beatInfo && !beatInfo.has_exclusive) {
+            leaseExpiresAt = null; // Lifetime lease — never expires
+          }
+        }
+
         const { data: purchase } = await supabase.from('beat_purchases').insert({
           beat_id: meta.beat_id,
           buyer_id: meta.buyer_id || null,
@@ -321,9 +338,10 @@ export async function POST(request: NextRequest) {
           stripe_payment_intent_id: session.payment_intent as string,
           payment_method: 'stripe',
           license_text: licenseText || null,
+          lease_expires_at: leaseExpiresAt,
         }).select('id').single();
 
-        // If exclusive and purchase was created, mark beat as sold and revoke existing leases
+        // If exclusive and purchase was created, mark beat as sold + grandfather existing leases
         if (purchase && meta.license_type === 'exclusive') {
           await supabase.from('beats').update({
             status: 'sold_exclusive',
@@ -331,29 +349,33 @@ export async function POST(request: NextRequest) {
             exclusive_sold_at: new Date().toISOString(),
           }).eq('id', meta.beat_id);
 
-          // Revoke all existing leases for this beat
+          // Grandfather existing leases — block renewal but let them run until expiry
           try {
             const { data: existingLeases } = await supabase
               .from('beat_purchases')
-              .select('id, buyer_email, license_type, created_at')
+              .select('id, buyer_email, license_type, created_at, lease_expires_at')
               .eq('beat_id', meta.beat_id)
               .in('license_type', ['mp3_lease', 'trackout_lease'])
-              .is('revoked_at', null);
+              .is('revoked_at', null)
+              .neq('id', purchase.id);
 
             if (existingLeases && existingLeases.length > 0) {
-              // Mark all leases as revoked
+              // Block renewal but do NOT revoke — leases stay active until expiry
               const leaseIds = existingLeases.map(l => l.id);
               await supabase.from('beat_purchases').update({
-                revoked_at: new Date().toISOString(),
-                revoked_reason: 'Exclusive rights purchased',
+                renewal_blocked: true,
+                revoked_reason: 'Exclusive purchased — lease grandfathered until expiry',
               }).in('id', leaseIds);
 
-              // Notify each leaseholder (per-email isolation so one failure doesn't block others)
+              // Notify each leaseholder that their lease is grandfathered
               const { sendLeaseRevokedNotification } = await import('@/lib/email');
               for (const lease of existingLeases) {
                 if (lease.buyer_email) {
                   try {
                     const leaseName = lease.buyer_email.split('@')[0] || 'Customer';
+                    const expiryDate = lease.lease_expires_at
+                      ? new Date(lease.lease_expires_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+                      : 'your license term';
                     await sendLeaseRevokedNotification(lease.buyer_email, {
                       buyerName: leaseName,
                       beatTitle: meta.beat_title || 'Beat',
@@ -361,12 +383,12 @@ export async function POST(request: NextRequest) {
                       licenseType: lease.license_type === 'mp3_lease' ? 'MP3 Lease' : 'Trackout Lease',
                       purchaseDate: new Date(lease.created_at).toLocaleDateString('en-US'),
                     });
-                  } catch (emailErr) { console.error(`Failed to send revocation email to ${lease.buyer_email}:`, emailErr); }
+                  } catch (emailErr) { console.error(`Failed to send grandfathered email to ${lease.buyer_email}:`, emailErr); }
                 }
               }
-              console.log(`Revoked ${existingLeases.length} lease(s) for beat ${meta.beat_id} — exclusive purchased`);
+              console.log(`Grandfathered ${existingLeases.length} lease(s) for beat ${meta.beat_id} — exclusive purchased`);
             }
-          } catch (e) { console.error('Lease revocation error:', e); }
+          } catch (e) { console.error('Lease grandfathering error:', e); }
         }
 
         // Send purchase confirmation email to buyer
@@ -416,6 +438,92 @@ export async function POST(request: NextRequest) {
             });
           } catch { /* buyer may not have a profile — skip XP */ }
         }
+      } else if (meta.type === 'beat_renewal') {
+        // Lease renewal — create new purchase record linked to original
+        const { LEASE_DURATION_DAYS } = await import('@/lib/constants');
+        const durationDays = LEASE_DURATION_DAYS[meta.license_type as string] ?? 365;
+        const newExpiry = new Date();
+        if (durationDays) newExpiry.setDate(newExpiry.getDate() + durationDays);
+
+        await supabase.from('beat_purchases').insert({
+          beat_id: meta.beat_id,
+          buyer_id: meta.buyer_id || null,
+          buyer_email: meta.buyer_email,
+          license_type: meta.license_type,
+          amount_paid: session.amount_total,
+          stripe_checkout_session_id: session.id,
+          stripe_payment_intent_id: session.payment_intent as string,
+          payment_method: 'stripe',
+          renewed_from_id: meta.original_purchase_id,
+          lease_expires_at: durationDays ? newExpiry.toISOString() : null,
+        });
+
+      } else if (meta.type === 'beat_upgrade') {
+        // License upgrade — create new purchase with upgraded license type
+        const { LEASE_DURATION_DAYS } = await import('@/lib/constants');
+        const durationDays = LEASE_DURATION_DAYS[meta.license_type as string] ?? null;
+        let newExpiry: string | null = null;
+        if (durationDays) {
+          const exp = new Date();
+          exp.setDate(exp.getDate() + durationDays);
+          newExpiry = exp.toISOString();
+        }
+
+        // Generate license text for the new license type
+        let licenseText = '';
+        try {
+          const { generateLicenseText } = await import('@/lib/license-templates');
+          licenseText = generateLicenseText({
+            buyerName: meta.buyer_email?.split('@')[0] || 'Buyer',
+            buyerEmail: meta.buyer_email,
+            beatTitle: meta.beat_title || 'Beat',
+            producerName: meta.producer || 'Unknown',
+            licenseType: meta.license_type as 'mp3_lease' | 'trackout_lease' | 'exclusive',
+            amountPaid: session.amount_total || 0,
+            purchaseDate: new Date().toLocaleDateString('en-US'),
+            purchaseId: session.id,
+          });
+        } catch { /* */ }
+
+        const { data: upgradePurchase } = await supabase.from('beat_purchases').insert({
+          beat_id: meta.beat_id,
+          buyer_id: meta.buyer_id || null,
+          buyer_email: meta.buyer_email,
+          license_type: meta.license_type,
+          amount_paid: session.amount_total,
+          stripe_checkout_session_id: session.id,
+          stripe_payment_intent_id: session.payment_intent as string,
+          payment_method: 'stripe',
+          upgraded_from_id: meta.original_purchase_id,
+          lease_expires_at: newExpiry,
+          license_text: licenseText || null,
+        }).select('id').single();
+
+        // If upgraded to exclusive, run the grandfathering logic
+        if (upgradePurchase && meta.license_type === 'exclusive') {
+          await supabase.from('beats').update({
+            status: 'sold_exclusive',
+            exclusive_buyer_id: meta.buyer_id || null,
+            exclusive_sold_at: new Date().toISOString(),
+          }).eq('id', meta.beat_id);
+
+          // Grandfather other leases
+          const { data: otherLeases } = await supabase
+            .from('beat_purchases')
+            .select('id')
+            .eq('beat_id', meta.beat_id)
+            .in('license_type', ['mp3_lease', 'trackout_lease'])
+            .is('revoked_at', null)
+            .neq('id', meta.original_purchase_id);
+
+          if (otherLeases && otherLeases.length > 0) {
+            await supabase.from('beat_purchases').update({
+              renewal_blocked: true,
+              revoked_reason: 'Exclusive purchased — lease grandfathered until expiry',
+            }).in('id', otherLeases.map(l => l.id));
+          }
+        }
+
       } else if (meta.type === 'private_beat_sale') {
         // Private beat sale — buyer paid via Stripe after signing agreement
         const privateSaleId = meta.private_sale_id;
@@ -450,18 +558,18 @@ export async function POST(request: NextRequest) {
             purchase_id: purchase?.id || null,
           }).eq('id', privateSaleId);
 
-          // If exclusive and has a beat_id and purchase was created, mark beat as sold + revoke leases
+          // If exclusive and has a beat_id and purchase was created, mark beat as sold + grandfather leases
           if (purchase && sale.license_type === 'exclusive' && sale.beat_id) {
             await supabase.from('beats').update({
               status: 'sold_exclusive',
               exclusive_sold_at: new Date().toISOString(),
             }).eq('id', sale.beat_id);
 
-            // Revoke all existing leases for this beat
+            // Grandfather existing leases — block renewal but keep active until expiry
             try {
               const { data: existingLeases } = await supabase
                 .from('beat_purchases')
-                .select('id, buyer_email, license_type, created_at')
+                .select('id, buyer_email, license_type, created_at, lease_expires_at')
                 .eq('beat_id', sale.beat_id)
                 .in('license_type', ['mp3_lease', 'trackout_lease'])
                 .is('revoked_at', null);
@@ -469,8 +577,8 @@ export async function POST(request: NextRequest) {
               if (existingLeases && existingLeases.length > 0) {
                 const leaseIds = existingLeases.map(l => l.id);
                 await supabase.from('beat_purchases').update({
-                  revoked_at: new Date().toISOString(),
-                  revoked_reason: 'Exclusive rights purchased',
+                  renewal_blocked: true,
+                  revoked_reason: 'Exclusive purchased — lease grandfathered until expiry',
                 }).in('id', leaseIds);
 
                 const { sendLeaseRevokedNotification } = await import('@/lib/email');
@@ -485,12 +593,12 @@ export async function POST(request: NextRequest) {
                         licenseType: lease.license_type === 'mp3_lease' ? 'MP3 Lease' : 'Trackout Lease',
                         purchaseDate: new Date(lease.created_at).toLocaleDateString('en-US'),
                       });
-                    } catch (emailErr) { console.error(`Failed to send revocation email to ${lease.buyer_email}:`, emailErr); }
+                    } catch (emailErr) { console.error(`Failed to send grandfathered email to ${lease.buyer_email}:`, emailErr); }
                   }
                 }
-                console.log(`Revoked ${existingLeases.length} lease(s) for beat ${sale.beat_id} — exclusive purchased (private sale)`);
+                console.log(`Grandfathered ${existingLeases.length} lease(s) for beat ${sale.beat_id} — exclusive purchased (private sale)`);
               }
-            } catch (e) { console.error('Private sale lease revocation error:', e); }
+            } catch (e) { console.error('Private sale lease grandfathering error:', e); }
           }
 
           // Send completion emails

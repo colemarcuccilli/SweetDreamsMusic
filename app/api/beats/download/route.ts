@@ -27,12 +27,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
   }
 
-  // Check if lease has been revoked (exclusive was purchased)
+  // Check if lease has been revoked (immediate revocation — legacy)
   if (purchase.revoked_at) {
     return NextResponse.json({
       error: 'This lease has been revoked because exclusive rights to this beat were purchased. Your lease agreement is no longer valid.',
       revoked: true,
       revoked_at: purchase.revoked_at,
+    }, { status: 403 });
+  }
+
+  // Check if lease has expired
+  if (purchase.lease_expires_at && new Date(purchase.lease_expires_at) < new Date()) {
+    return NextResponse.json({
+      error: `Your lease expired on ${new Date(purchase.lease_expires_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}. Renew your license to continue downloading.`,
+      expired: true,
+      lease_expires_at: purchase.lease_expires_at,
     }, { status: 403 });
   }
 

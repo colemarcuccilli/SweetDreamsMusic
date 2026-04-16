@@ -926,3 +926,70 @@ export async function sendPaystubEmail(to: string, details: {
     });
   } catch (e) { console.error('Email error (paystub):', e); }
 }
+
+// ── Lease Expiry Emails ───────────────────────────────────────────────
+
+export async function sendLeaseExpiryWarning(to: string, details: {
+  buyerName: string;
+  beatTitle: string;
+  producerName: string;
+  licenseType: string;
+  expiresAt: string;
+  renewalPrice: number;
+}) {
+  try {
+    await resend.emails.send({
+      from: FROM,
+      to,
+      subject: `Your Lease Expires Soon — "${details.beatTitle}"`,
+      html: wrap(
+        h1('LEASE EXPIRING SOON') +
+        p(`Hey ${details.buyerName}, your ${details.licenseType} for "${details.beatTitle}" by ${details.producerName} expires on <strong>${details.expiresAt}</strong>.`) +
+        p(`Renew your license to continue streaming, distributing, and monetizing your music with this beat.`) +
+        detailTable(
+          detail('Beat', details.beatTitle) +
+          detail('Producer', details.producerName) +
+          detail('License', details.licenseType) +
+          detail('Expires', details.expiresAt) +
+          detail('Renewal Price', formatMoney(details.renewalPrice))
+        ) +
+        p('You can also upgrade to a Trackout Lease or Exclusive Rights from your purchases dashboard.') +
+        btn('RENEW LICENSE', `${SITE_URL}/dashboard/purchases`) +
+        '<br/><br/>' +
+        p('For exclusive rights or questions, contact jayvalleo@sweetdreamsmusic.com or cole@sweetdreams.us')
+      ),
+    });
+  } catch (e) { console.error('Email error (lease expiry warning):', e); }
+}
+
+export async function sendLeaseExpiredNotice(to: string, details: {
+  buyerName: string;
+  beatTitle: string;
+  producerName: string;
+  licenseType: string;
+  renewalPrice: number;
+  canRenew: boolean;
+}) {
+  try {
+    await resend.emails.send({
+      from: FROM,
+      to,
+      subject: `Lease Expired — "${details.beatTitle}"`,
+      html: wrap(
+        h1('LEASE EXPIRED') +
+        p(`Hey ${details.buyerName}, your ${details.licenseType} for "${details.beatTitle}" by ${details.producerName} has expired.`) +
+        (details.canRenew ? (
+          p('Your license terms are no longer active. To continue using this beat in your music, please renew your license.') +
+          detailTable(
+            detail('Renewal Price', `${formatMoney(details.renewalPrice)} (25% off original)`)
+          ) +
+          btn('RENEW LICENSE', `${SITE_URL}/dashboard/purchases`)
+        ) : (
+          p('This beat has been sold exclusively to another buyer. Your license cannot be renewed. Please remove any content using this beat from distribution platforms.')
+        )) +
+        '<br/><br/>' +
+        p('For questions, contact jayvalleo@sweetdreamsmusic.com or cole@sweetdreams.us')
+      ),
+    });
+  } catch (e) { console.error('Email error (lease expired):', e); }
+}

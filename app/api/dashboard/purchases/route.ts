@@ -12,13 +12,13 @@ export async function GET() {
   // Using separate queries to avoid string interpolation in .or()
   const { data: byId } = await serviceClient
     .from('beat_purchases')
-    .select('*, beats(id, title, producer, genre, cover_image_url, preview_url, mp3_file_path, trackout_file_path, audio_file_path)')
+    .select('*, beats(id, title, producer, genre, cover_image_url, preview_url, mp3_file_path, trackout_file_path, audio_file_path, trackout_lease_price, exclusive_price, has_exclusive, status)')
     .eq('buyer_id', user.id)
     .order('created_at', { ascending: false });
 
   const { data: byEmail } = await serviceClient
     .from('beat_purchases')
-    .select('*, beats(id, title, producer, genre, cover_image_url, preview_url, mp3_file_path, trackout_file_path, audio_file_path)')
+    .select('*, beats(id, title, producer, genre, cover_image_url, preview_url, mp3_file_path, trackout_file_path, audio_file_path, trackout_lease_price, exclusive_price, has_exclusive, status)')
     .eq('buyer_email', user.email || '')
     .order('created_at', { ascending: false });
 
