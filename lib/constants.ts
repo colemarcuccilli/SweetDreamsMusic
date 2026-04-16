@@ -202,7 +202,7 @@ export const NAV_LINKS = [
 export type UserRole = 'user' | 'engineer' | 'admin';
 
 // Beat agreement
-export const BEAT_AGREEMENT_VERSION = '1.0';
+export const BEAT_AGREEMENT_VERSION = '1.1';
 
 export const BEAT_AGREEMENT_TEXT = `BEAT LICENSING & DISTRIBUTION AGREEMENT
 Version ${BEAT_AGREEMENT_VERSION} — Sweet Dreams Music LLC
@@ -220,7 +220,9 @@ By listing a Beat on the Platform, you grant Sweet Dreams Music LLC a non-exclus
 - Display, promote, and distribute the Beat through the Platform's beat store
 - Facilitate licensing transactions (MP3 Lease, Trackout Lease, Exclusive Rights) on your behalf
 - Use the Beat title, audio preview, and your producer name in marketing materials related to the Platform
-This license is non-exclusive. You retain ownership of your Beats and may sell or license them through other channels.
+- Upload and publish the Beat's tagged/watermarked preview to the Platform's YouTube channel and social media accounts for promotional purposes
+- List and sell the Beat through affiliated studio locations and partner platforms operated under the Platform's network, with the same revenue split applied
+This license is non-exclusive. You retain ownership of your Beats and may sell or license them through other channels. Beats sold through affiliated studio locations are subject to the same 60/40 revenue split and all earnings are credited to your producer account regardless of which studio location facilitates the sale.
 
 3. PRODUCER WARRANTIES
 You represent and warrant that:
@@ -231,10 +233,11 @@ You represent and warrant that:
 
 4. PLATFORM RESPONSIBILITIES
 The Platform agrees to:
-- List and promote approved Beats on the beat store
+- List and promote approved Beats on the beat store and affiliated studio platforms
+- Promote Beats via the Platform's YouTube channel and social media presence
 - Handle all payment processing, licensing documentation, and file delivery to buyers
 - Provide a producer dashboard with sales tracking, earnings reports, and payout history
-- Remit the Producer's share of revenue according to the agreed split
+- Remit the Producer's share of revenue according to the agreed split, including sales made through affiliated studio locations
 
 5. SAMPLE CLEARANCE
 You are solely responsible for ensuring all samples used in your Beats are properly cleared for commercial licensing. The Platform is not liable for any copyright claims arising from uncleared samples. If a Beat is found to contain uncleared samples, the Platform reserves the right to immediately remove it from the store.
