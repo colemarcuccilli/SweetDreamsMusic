@@ -981,82 +981,98 @@ export default function Accounting() {
                     onToggle={() => toggleSection(`payroll-${name}`)}
                   >
                     <div className="space-y-3">
-                      {/* Current period earnings */}
+                      {/* Period total header */}
                       {data.periodTotal > 0 && (
-                        <>
-                          <p className="font-mono text-[10px] text-accent uppercase tracking-wider pt-1">This Period ({payrollData.periodLabel})</p>
-                          {data.sessionPay > 0 && (
-                            <div className="flex justify-between items-center py-2 border-b border-black/5">
-                              <div>
-                                <p className="font-mono text-sm font-semibold">Session Earnings</p>
-                                <p className="font-mono text-[10px] text-black/60">{data.sessionCount} sessions · {data.sessionHours}hr · {formatCents(data.sessionRevenue)} gross · 60% cut</p>
-                              </div>
-                              <p className="font-mono text-sm font-bold">{formatCents(data.sessionPay)}</p>
-                            </div>
-                          )}
-                          {data.mediaCommission > 0 && (
-                            <div className="flex justify-between items-center py-2 border-b border-black/5">
-                              <div>
-                                <p className="font-mono text-sm font-semibold">Media Sales Commission</p>
-                                <p className="font-mono text-[10px] text-black/60">{data.mediaSoldCount} sale{data.mediaSoldCount !== 1 ? 's' : ''} · 15% commission</p>
-                              </div>
-                              <p className="font-mono text-sm font-bold">{formatCents(data.mediaCommission)}</p>
-                            </div>
-                          )}
-                          {data.mediaWorkerPay > 0 && (
-                            <div className="flex justify-between items-center py-2 border-b border-black/5">
-                              <div>
-                                <p className="font-mono text-sm font-semibold">Media Work Pay</p>
-                                <p className="font-mono text-[10px] text-black/60">
-                                  {data.mediaFilmedCount > 0 ? `${data.mediaFilmedCount} filmed` : ''}
-                                  {data.mediaFilmedCount > 0 && data.mediaEditedCount > 0 ? ' · ' : ''}
-                                  {data.mediaEditedCount > 0 ? `${data.mediaEditedCount} edited` : ''}
-                                  {' · 50% worker split'}
-                                </p>
-                              </div>
-                              <p className="font-mono text-sm font-bold">{formatCents(data.mediaWorkerPay)}</p>
-                            </div>
-                          )}
-                          {data.beatProducerPay > 0 && (
-                            <div className="flex justify-between items-center py-2 border-b border-black/5">
-                              <div>
-                                <p className="font-mono text-sm font-semibold">Beat Sales</p>
-                                <p className="font-mono text-[10px] text-black/60">{data.beatCount} sale{data.beatCount !== 1 ? 's' : ''} · {formatCents(data.beatSales)} gross · 60% producer cut</p>
-                              </div>
-                              <p className="font-mono text-sm font-bold">{formatCents(data.beatProducerPay)}</p>
-                            </div>
-                          )}
-                          <div className="flex justify-between items-center py-2 border-t border-black/10">
-                            <p className="font-mono text-xs font-bold">Period Total</p>
-                            <p className="font-mono text-sm font-bold">{formatCents(data.periodTotal)}</p>
-                          </div>
-                        </>
+                        <div className="flex justify-between items-center py-2 border-b border-accent/20">
+                          <p className="font-mono text-xs font-bold text-accent">This Period ({payrollData.periodLabel})</p>
+                          <p className="font-mono text-sm font-bold text-accent">{formatCents(data.periodTotal)}</p>
+                        </div>
                       )}
 
-                      {/* All-time earnings breakdown */}
-                      <div className="bg-black/[0.02] border border-black/10 p-3 space-y-2">
-                        <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">All-Time Earnings Breakdown</p>
-                        {data.allTimeData.sessionPay > 0 && (
-                          <div className="flex justify-between font-mono text-sm border-b border-black/5 pb-1">
-                            <span className="text-black/60">Sessions ({data.allTimeData.sessionCount} · {data.allTimeData.sessionHours}hr · {formatCents(data.allTimeData.sessionRevenue)} gross)</span>
-                            <span className="font-bold">{formatCents(data.allTimeData.sessionPay)}</span>
+                      {/* Current period individual line items */}
+                      {data.periodTotal > 0 && (() => {
+                        const periodStart = payrollData.periodStart;
+                        const periodEnd = payrollData.periodEnd;
+                        const personSessions = allTimeBookings
+                          .filter(b => b.status === 'completed' && (normalizeName(b.engineer_name) || '') === name && b.start_time >= periodStart && b.start_time <= periodEnd)
+                          .sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime());
+                        const personMediaSold = allTimeMediaSales
+                          .filter(m => normalizeName(m.sold_by) === name && m.created_at >= periodStart && m.created_at <= periodEnd);
+                        const personMediaWork = allTimeMediaSales
+                          .filter(m => (normalizeName(m.filmed_by) === name || normalizeName(m.edited_by) === name) && m.created_at >= periodStart && m.created_at <= periodEnd);
+
+                        return (
+                          <div className="border border-black/10 p-3 space-y-3">
+                            <p className="font-mono text-[10px] text-accent uppercase tracking-wider">Period Detail ({payrollData.periodLabel})</p>
+
+                            {personSessions.length > 0 && (
+                              <div>
+                                <p className="font-mono text-xs font-bold mb-1">Sessions</p>
+                                <div className="ml-2 space-y-0.5">
+                                  {personSessions.map(s => (
+                                    <div key={s.id} className="flex justify-between font-mono text-[11px] text-black/60">
+                                      <span>{new Date(s.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · {s.customer_name} · {s.duration}hr · {formatCents(s.total_amount)}</span>
+                                      <span className="text-black/80 font-semibold">{formatCents(Math.round(s.total_amount * ENGINEER_SESSION_SPLIT))}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {personMediaSold.length > 0 && (
+                              <div>
+                                <p className="font-mono text-xs font-bold mb-1">Media Commission (15%)</p>
+                                <div className="ml-2 space-y-0.5">
+                                  {personMediaSold.map(m => (
+                                    <div key={m.id} className="flex justify-between font-mono text-[11px] text-black/60">
+                                      <span>{new Date(m.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · {m.description || m.sale_type} · {formatCents(m.amount)}</span>
+                                      <span className="text-black/80 font-semibold">{formatCents(Math.round(m.amount * MEDIA_SELLER_COMMISSION))}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {personMediaWork.length > 0 && (
+                              <div>
+                                <p className="font-mono text-xs font-bold mb-1">Media Work (50% split)</p>
+                                <div className="ml-2 space-y-0.5">
+                                  {personMediaWork.map(m => {
+                                    const filmer = normalizeName(m.filmed_by);
+                                    const editor = normalizeName(m.edited_by);
+                                    const wCount = (filmer ? 1 : 0) + (editor ? 1 : 0);
+                                    const pay = Math.round(m.amount * MEDIA_WORKER_TOTAL / wCount);
+                                    const role = filmer === name && editor === name ? 'filmed + edited' : filmer === name ? 'filmed' : 'edited';
+                                    return (
+                                      <div key={`work-${m.id}`} className="flex justify-between font-mono text-[11px] text-black/60">
+                                        <span>{new Date(m.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · {m.description || m.sale_type} · {role}</span>
+                                        <span className="text-black/80 font-semibold">{formatCents(pay)}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        )}
-                        {data.allTimeData.mediaCommission > 0 && (
-                          <div className="flex justify-between font-mono text-sm border-b border-black/5 pb-1">
-                            <span className="text-black/60">Media Commission ({data.allTimeData.mediaSoldCount} sale{data.allTimeData.mediaSoldCount !== 1 ? 's' : ''} · 15%)</span>
-                            <span className="font-bold">{formatCents(data.allTimeData.mediaCommission)}</span>
-                          </div>
-                        )}
-                        {data.allTimeData.mediaWorkerPay > 0 && (
-                          <div className="flex justify-between font-mono text-sm border-b border-black/5 pb-1">
-                            <span className="text-black/60">Media Work ({data.allTimeData.mediaFilmedCount > 0 ? `${data.allTimeData.mediaFilmedCount} filmed` : ''}{data.allTimeData.mediaFilmedCount > 0 && data.allTimeData.mediaEditedCount > 0 ? ' · ' : ''}{data.allTimeData.mediaEditedCount > 0 ? `${data.allTimeData.mediaEditedCount} edited` : ''})</span>
-                            <span className="font-bold">{formatCents(data.allTimeData.mediaWorkerPay)}</span>
+                        );
+                      })()}
+
+                      {/* All-time running totals */}
+                      <div className="bg-black/[0.02] border border-black/10 p-3 space-y-1">
+                        <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">All-Time Totals</p>
+                        <div className="flex justify-between font-mono text-sm">
+                          <span className="text-black/60">Sessions ({data.allTimeData.sessionCount} · {data.allTimeData.sessionHours}hr)</span>
+                          <span className="font-bold">{formatCents(data.allTimeData.sessionPay)}</span>
+                        </div>
+                        {(data.allTimeData.mediaCommission + data.allTimeData.mediaWorkerPay) > 0 && (
+                          <div className="flex justify-between font-mono text-sm">
+                            <span className="text-black/60">Media ({data.allTimeData.mediaSoldCount > 0 ? `${data.allTimeData.mediaSoldCount} commission` : ''}{data.allTimeData.mediaSoldCount > 0 && (data.allTimeData.mediaFilmedCount + data.allTimeData.mediaEditedCount) > 0 ? ' + ' : ''}{(data.allTimeData.mediaFilmedCount + data.allTimeData.mediaEditedCount) > 0 ? `${data.allTimeData.mediaFilmedCount + data.allTimeData.mediaEditedCount} work` : ''})</span>
+                            <span className="font-bold">{formatCents(data.allTimeData.mediaCommission + data.allTimeData.mediaWorkerPay)}</span>
                           </div>
                         )}
                         {data.allTimeData.beatProducerPay > 0 && (
-                          <div className="flex justify-between font-mono text-sm border-b border-black/5 pb-1">
-                            <span className="text-black/60">Beat Sales ({data.allTimeData.beatCount} · {formatCents(data.allTimeData.beatSales)} gross · 60%)</span>
+                          <div className="flex justify-between font-mono text-sm">
+                            <span className="text-black/60">Beat Sales ({data.allTimeData.beatCount})</span>
                             <span className="font-bold">{formatCents(data.allTimeData.beatProducerPay)}</span>
                           </div>
                         )}
