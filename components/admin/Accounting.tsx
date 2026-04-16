@@ -215,7 +215,7 @@ export default function Accounting() {
   const filteredBookings = useMemo(() => {
     let result = bookings;
     if (engineerFilter !== 'all') {
-      result = result.filter((b) => (b.engineer_name || 'Unassigned') === engineerFilter);
+      result = result.filter((b) => (normalizeName(b.engineer_name) || 'Unassigned') === engineerFilter);
     }
     if (statusFilter !== 'all') {
       result = result.filter((b) => b.status === statusFilter);
@@ -228,9 +228,9 @@ export default function Accounting() {
     return beatPurchases.filter((p) => (p.beats?.producer || 'Unknown') === producerFilter);
   }, [beatPurchases, producerFilter]);
 
-  // Engineers list
+  // Engineers list (normalized names)
   const engineers = useMemo(() => {
-    const set = new Set(bookings.map((b) => b.engineer_name || 'Unassigned'));
+    const set = new Set(bookings.map((b) => normalizeName(b.engineer_name) || 'Unassigned'));
     return Array.from(set).sort();
   }, [bookings]);
 
@@ -270,7 +270,7 @@ export default function Accounting() {
   const sessionsByEngineer = useMemo(() => {
     const map: Record<string, { count: number; revenue: number; hours: number; deposits: number }> = {};
     filteredBookings.forEach((b) => {
-      const eng = b.engineer_name || 'Unassigned';
+      const eng = normalizeName(b.engineer_name) || 'Unassigned';
       if (!map[eng]) map[eng] = { count: 0, revenue: 0, hours: 0, deposits: 0 };
       map[eng].count++;
       map[eng].revenue += b.total_amount;
@@ -640,6 +640,17 @@ export default function Accounting() {
               {p.label}
             </button>
           ))}
+          {/* Engineer filter — visible on overview, sessions, payroll */}
+          {(view === 'overview' || view === 'sessions' || view === 'payroll') && engineers.length > 0 && (
+            <select
+              value={engineerFilter}
+              onChange={(e) => setEngineerFilter(e.target.value)}
+              className="border border-black/20 px-3 py-1.5 font-mono text-[10px] font-bold uppercase tracking-wider focus:border-accent focus:outline-none bg-white"
+            >
+              <option value="all">All Engineers</option>
+              {engineers.map((e) => <option key={e} value={e}>{e}</option>)}
+            </select>
+          )}
         </div>
       </div>
 
