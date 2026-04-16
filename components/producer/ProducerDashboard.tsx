@@ -201,6 +201,7 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [mp3File, setMp3File] = useState<File | null>(null);
   const [trackoutFile, setTrackoutFile] = useState<File | null>(null);
+  const [saleMode, setSaleMode] = useState<'full' | 'lifetime'>('full');
   const [mp3Price, setMp3Price] = useState('29.99');
   const [trackoutPrice, setTrackoutPrice] = useState('74.99');
   const [exclusivePrice, setExclusivePrice] = useState('400.00');
@@ -218,7 +219,7 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
   function resetForm() {
     setTitle(''); setGenre(''); setBpm(''); setMusicalKey('');
     setTags(''); setPreviewFile(null); setMp3File(null); setTrackoutFile(null);
-    setMp3Price('29.99'); setTrackoutPrice('74.99'); setExclusivePrice('400.00');
+    setSaleMode('full'); setMp3Price('29.99'); setTrackoutPrice('74.99'); setExclusivePrice('400.00');
     setHasExclusive(true); setContainsSamples(false); setSampleDetails('');
     setUploadError(''); setUploadSuccess(false);
   }
@@ -235,7 +236,7 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
         { type: 'preview', fileName: previewFile.name, file: previewFile },
       ];
       if (mp3File) filesToUpload.push({ type: 'mp3', fileName: mp3File.name, file: mp3File });
-      if (trackoutFile) filesToUpload.push({ type: 'trackout', fileName: trackoutFile.name, file: trackoutFile });
+      if (trackoutFile && saleMode !== 'lifetime') filesToUpload.push({ type: 'trackout', fileName: trackoutFile.name, file: trackoutFile });
 
       const urlRes = await fetch('/api/producer/beats/upload-url', {
         method: 'POST',
@@ -298,9 +299,9 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
           key: musicalKey,
           tags,
           mp3_lease_price: mp3Price,
-          trackout_lease_price: trackoutPrice,
-          exclusive_price: exclusivePrice,
-          has_exclusive: hasExclusive,
+          trackout_lease_price: saleMode === 'lifetime' ? null : trackoutPrice,
+          exclusive_price: saleMode === 'lifetime' ? null : exclusivePrice,
+          has_exclusive: saleMode === 'lifetime' ? false : hasExclusive,
           contains_samples: containsSamples,
           sample_details: containsSamples ? sampleDetails : null,
           preview_file_path: filePaths.preview,
@@ -441,6 +442,7 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
                   <input type="file" accept=".mp3,audio/mpeg" onChange={(e) => setMp3File(e.target.files?.[0] || null)} className="hidden" />
                 </label>
               </div>
+              {saleMode !== 'lifetime' && (
               <div>
                 <label className="block font-mono text-[10px] text-black/60 uppercase mb-1">Trackout / Stems (ZIP)</label>
                 <label className="border border-dashed border-black/20 p-3 flex items-center gap-2 cursor-pointer hover:border-accent transition-colors">
@@ -451,48 +453,74 @@ function BeatsTab({ beats, onBeatsChange, isAdmin = false }: { beats: Beat[]; on
                   <input type="file" accept=".zip,.rar" onChange={(e) => setTrackoutFile(e.target.files?.[0] || null)} className="hidden" />
                 </label>
               </div>
+              )}
+            </div>
+          </div>
+
+          {/* Sale Mode */}
+          <div>
+            <label className="block font-mono text-xs text-black/60 uppercase tracking-wider mb-2">Sale Mode</label>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setSaleMode('full')}
+                className={`flex-1 border-2 p-3 text-left transition-colors ${saleMode === 'full' ? 'border-accent bg-accent/10' : 'border-black/10 hover:border-black/20'}`}>
+                <p className="font-mono text-xs font-bold uppercase">Full Licensing</p>
+                <p className="font-mono text-[10px] text-black/60 mt-0.5">MP3 Lease + Trackout + Exclusive options</p>
+              </button>
+              <button type="button" onClick={() => setSaleMode('lifetime')}
+                className={`flex-1 border-2 p-3 text-left transition-colors ${saleMode === 'lifetime' ? 'border-accent bg-accent/10' : 'border-black/10 hover:border-black/20'}`}>
+                <p className="font-mono text-xs font-bold uppercase">Lifetime Lease</p>
+                <p className="font-mono text-[10px] text-black/60 mt-0.5">MP3 only — no exclusive, no stems. Beat stays on the store forever.</p>
+              </button>
             </div>
           </div>
 
           {/* Pricing */}
           <div>
-            <label className="block font-mono text-xs text-black/60 uppercase tracking-wider mb-2">License Prices ($)</label>
-            <div className="grid grid-cols-3 gap-3">
+            <label className="block font-mono text-xs text-black/60 uppercase tracking-wider mb-2">
+              {saleMode === 'lifetime' ? 'Lease Price ($)' : 'License Prices ($)'}
+            </label>
+            <div className={`grid gap-3 ${saleMode === 'lifetime' ? 'grid-cols-1 max-w-xs' : 'grid-cols-3'}`}>
               <div>
-                <label className="font-mono text-[10px] text-black/60">{BEAT_LICENSES.mp3_lease.name}</label>
+                <label className="font-mono text-[10px] text-black/60">{saleMode === 'lifetime' ? 'Lifetime Lease' : BEAT_LICENSES.mp3_lease.name}</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-sm text-black/30">$</span>
                   <input type="text" inputMode="decimal" value={mp3Price} onChange={(e) => setMp3Price(e.target.value)}
                     className="w-full border border-black/20 pl-7 pr-3 py-2 font-mono text-sm focus:border-accent focus:outline-none" placeholder="29.99" />
                 </div>
               </div>
-              <div>
-                <label className="font-mono text-[10px] text-black/60">{BEAT_LICENSES.trackout_lease.name}</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-sm text-black/30">$</span>
-                  <input type="text" inputMode="decimal" value={trackoutPrice} onChange={(e) => setTrackoutPrice(e.target.value)}
-                    className="w-full border border-black/20 pl-7 pr-3 py-2 font-mono text-sm focus:border-accent focus:outline-none" placeholder="74.99" />
-                </div>
-              </div>
-              <div>
-                <label className="font-mono text-[10px] text-black/60">{BEAT_LICENSES.exclusive.name}</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-sm text-black/30">$</span>
-                  <input type="text" inputMode="decimal" value={exclusivePrice} onChange={(e) => setExclusivePrice(e.target.value)}
-                    disabled={!hasExclusive}
-                    className="w-full border border-black/20 pl-7 pr-3 py-2 font-mono text-sm focus:border-accent focus:outline-none disabled:opacity-30" placeholder="400.00" />
-                </div>
-              </div>
+              {saleMode !== 'lifetime' && (
+                <>
+                  <div>
+                    <label className="font-mono text-[10px] text-black/60">{BEAT_LICENSES.trackout_lease.name}</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-sm text-black/30">$</span>
+                      <input type="text" inputMode="decimal" value={trackoutPrice} onChange={(e) => setTrackoutPrice(e.target.value)}
+                        className="w-full border border-black/20 pl-7 pr-3 py-2 font-mono text-sm focus:border-accent focus:outline-none" placeholder="74.99" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="font-mono text-[10px] text-black/60">{BEAT_LICENSES.exclusive.name}</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-sm text-black/30">$</span>
+                      <input type="text" inputMode="decimal" value={exclusivePrice} onChange={(e) => setExclusivePrice(e.target.value)}
+                        disabled={!hasExclusive}
+                        className="w-full border border-black/20 pl-7 pr-3 py-2 font-mono text-sm focus:border-accent focus:outline-none disabled:opacity-30" placeholder="400.00" />
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
           {/* Options */}
           <div className="flex flex-wrap gap-6">
+            {saleMode !== 'lifetime' && (
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={hasExclusive} onChange={(e) => setHasExclusive(e.target.checked)}
                 className="w-4 h-4 accent-accent" />
               <span className="font-mono text-xs text-black/60">Exclusive available</span>
             </label>
+            )}
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" checked={containsSamples} onChange={(e) => setContainsSamples(e.target.checked)}
                 className="w-4 h-4 accent-accent" />
