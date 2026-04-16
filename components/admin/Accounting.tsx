@@ -436,16 +436,24 @@ export default function Accounting() {
       }
       const filmer = normalizeName(m.filmed_by);
       const editor = normalizeName(m.edited_by);
-      const wCount = (filmer ? 1 : 0) + (editor ? 1 : 0);
-      if (filmer) {
+      if (filmer && editor && filmer === editor) {
+        // Same person filmed AND edited — they get the full 50%
         if (!people[filmer]) people[filmer] = init();
         people[filmer].mediaFilmedCount++;
-        people[filmer].mediaWorkerPay += Math.round(m.amount * MEDIA_WORKER_TOTAL / wCount);
-      }
-      if (editor) {
-        if (!people[editor]) people[editor] = init();
-        people[editor].mediaEditedCount++;
-        people[editor].mediaWorkerPay += Math.round(m.amount * MEDIA_WORKER_TOTAL / wCount);
+        people[filmer].mediaEditedCount++;
+        people[filmer].mediaWorkerPay += Math.round(m.amount * MEDIA_WORKER_TOTAL);
+      } else {
+        // Different people — each gets 25%
+        if (filmer) {
+          if (!people[filmer]) people[filmer] = init();
+          people[filmer].mediaFilmedCount++;
+          people[filmer].mediaWorkerPay += Math.round(m.amount * MEDIA_WORKER_TOTAL / 2);
+        }
+        if (editor) {
+          if (!people[editor]) people[editor] = init();
+          people[editor].mediaEditedCount++;
+          people[editor].mediaWorkerPay += Math.round(m.amount * MEDIA_WORKER_TOTAL / 2);
+        }
       }
     });
 
@@ -1040,27 +1048,33 @@ export default function Accounting() {
 
                         // Calculate per-sale earnings for this person
                         const mediaItems = personMedia.map(m => {
-                          let commission = 0;
-                          let workPay = 0;
                           const roles: string[] = [];
-                          if (normalizeName(m.sold_by) === name) {
-                            commission = Math.round(m.amount * MEDIA_SELLER_COMMISSION);
-                            roles.push('sold');
+                          const isSeller = normalizeName(m.sold_by) === name;
+                          const isFilmer = normalizeName(m.filmed_by) === name;
+                          const isEditor = normalizeName(m.edited_by) === name;
+                          if (isSeller) roles.push('sold');
+                          if (isFilmer) roles.push('filmed');
+                          if (isEditor) roles.push('edited');
+
+                          // Simple: if one person did everything, they get 65% (seller 15% + worker 50%)
+                          // If they only sold, 15%. If they only worked, 50% split by worker count.
+                          let totalPay = 0;
+                          if (isSeller) totalPay += Math.round(m.amount * MEDIA_SELLER_COMMISSION);
+                          if (isFilmer || isEditor) {
+                            // Worker gets 50% total. If both filmed_by and edited_by are different people, split 25/25.
+                            // If same person filmed AND edited, they get the full 50%.
+                            const filmer = normalizeName(m.filmed_by);
+                            const editor = normalizeName(m.edited_by);
+                            const bothSamePerson = filmer === editor;
+                            if (bothSamePerson) {
+                              totalPay += Math.round(m.amount * MEDIA_WORKER_TOTAL); // full 50%
+                            } else {
+                              // Different people — each gets 25%
+                              totalPay += Math.round(m.amount * MEDIA_WORKER_TOTAL / 2);
+                            }
                           }
-                          const filmer = normalizeName(m.filmed_by);
-                          const editor = normalizeName(m.edited_by);
-                          const wCount = (filmer ? 1 : 0) + (editor ? 1 : 0);
-                          if (filmer === name) {
-                            workPay += Math.round(m.amount * MEDIA_WORKER_TOTAL / wCount);
-                            roles.push('filmed');
-                          }
-                          if (editor === name && editor !== filmer) {
-                            workPay += Math.round(m.amount * MEDIA_WORKER_TOTAL / wCount);
-                            roles.push('edited');
-                          } else if (editor === name && editor === filmer) {
-                            roles.push('edited');
-                          }
-                          return { ...m, commission, workPay, totalPay: commission + workPay, roles };
+                          const pct = Math.round((totalPay / m.amount) * 100);
+                          return { ...m, totalPay, roles, pct };
                         });
                         const mediaTotal = mediaItems.reduce((s, m) => s + m.totalPay, 0);
 
@@ -1100,8 +1114,7 @@ export default function Accounting() {
                                     <div key={m.id} className="flex justify-between items-start font-mono text-[11px] py-0.5">
                                       <div className="text-black/60">
                                         <span>{new Date(m.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · {m.description || m.sale_type}</span>
-                                        <span className="text-black/40 ml-1">({m.roles.join(' + ')})</span>
-                                        <span className="text-black/40 ml-1">· {formatCents(m.amount)} sale</span>
+                                        <span className="text-black/40 ml-1">· {formatCents(m.amount)} × {m.pct}%</span>
                                       </div>
                                       <span className="text-black/80 font-semibold flex-shrink-0 ml-2">{formatCents(m.totalPay)}</span>
                                     </div>
