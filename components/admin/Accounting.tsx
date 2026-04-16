@@ -1025,18 +1025,46 @@ export default function Accounting() {
                         const sessionPay = Math.round(sessionGross * ENGINEER_SESSION_SPLIT);
                         const sessionHours = personSessions.reduce((s, b) => s + b.duration, 0);
 
-                        const personMediaSold = allTimeMediaSales
-                          .filter(m => normalizeName(m.sold_by) === name && m.created_at >= ps && m.created_at <= pe);
-                        const mediaCommTotal = personMediaSold.reduce((s, m) => s + Math.round(m.amount * MEDIA_SELLER_COMMISSION), 0);
+                        // Combine all media sales where this person earned money (sold, filmed, or edited)
+                        const personMediaAll = allTimeMediaSales
+                          .filter(m => (normalizeName(m.sold_by) === name || normalizeName(m.filmed_by) === name || normalizeName(m.edited_by) === name) && m.created_at >= ps && m.created_at <= pe)
+                          .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
-                        const personMediaWork = allTimeMediaSales
-                          .filter(m => (normalizeName(m.filmed_by) === name || normalizeName(m.edited_by) === name) && m.created_at >= ps && m.created_at <= pe);
-                        const mediaWorkTotal = personMediaWork.reduce((s, m) => {
-                          const wCount = (normalizeName(m.filmed_by) ? 1 : 0) + (normalizeName(m.edited_by) ? 1 : 0);
-                          return s + Math.round(m.amount * MEDIA_WORKER_TOTAL / wCount);
-                        }, 0);
+                        // Deduplicate (same sale can appear if person sold AND worked)
+                        const seenMedia = new Set<string>();
+                        const personMedia = personMediaAll.filter(m => {
+                          if (seenMedia.has(m.id)) return false;
+                          seenMedia.add(m.id);
+                          return true;
+                        });
 
-                        const hasActivity = personSessions.length > 0 || personMediaSold.length > 0 || personMediaWork.length > 0;
+                        // Calculate per-sale earnings for this person
+                        const mediaItems = personMedia.map(m => {
+                          let commission = 0;
+                          let workPay = 0;
+                          const roles: string[] = [];
+                          if (normalizeName(m.sold_by) === name) {
+                            commission = Math.round(m.amount * MEDIA_SELLER_COMMISSION);
+                            roles.push('sold');
+                          }
+                          const filmer = normalizeName(m.filmed_by);
+                          const editor = normalizeName(m.edited_by);
+                          const wCount = (filmer ? 1 : 0) + (editor ? 1 : 0);
+                          if (filmer === name) {
+                            workPay += Math.round(m.amount * MEDIA_WORKER_TOTAL / wCount);
+                            roles.push('filmed');
+                          }
+                          if (editor === name && editor !== filmer) {
+                            workPay += Math.round(m.amount * MEDIA_WORKER_TOTAL / wCount);
+                            roles.push('edited');
+                          } else if (editor === name && editor === filmer) {
+                            roles.push('edited');
+                          }
+                          return { ...m, commission, workPay, totalPay: commission + workPay, roles };
+                        });
+                        const mediaTotal = mediaItems.reduce((s, m) => s + m.totalPay, 0);
+
+                        const hasActivity = personSessions.length > 0 || personMedia.length > 0;
 
                         return (
                           <div className="border border-black/10 p-3 space-y-4">
@@ -1064,45 +1092,24 @@ export default function Accounting() {
                               </div>
                             )}
 
-                            {/* Media Commission */}
-                            {personMediaSold.length > 0 && (
+                            {/* Media Sales — combined commission + work per sale */}
+                            {personMedia.length > 0 && (
                               <div>
-                                <div className="space-y-0.5">
-                                  {personMediaSold.map(m => (
-                                    <div key={m.id} className="flex justify-between font-mono text-[11px] text-black/60">
-                                      <span>{new Date(m.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · {m.description || m.sale_type}</span>
-                                      <span className="text-black/50">{formatCents(m.amount)}</span>
+                                <div className="space-y-1">
+                                  {mediaItems.map(m => (
+                                    <div key={m.id} className="flex justify-between items-start font-mono text-[11px] py-0.5">
+                                      <div className="text-black/60">
+                                        <span>{new Date(m.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · {m.description || m.sale_type}</span>
+                                        <span className="text-black/40 ml-1">({m.roles.join(' + ')})</span>
+                                        <span className="text-black/40 ml-1">· {formatCents(m.amount)} sale</span>
+                                      </div>
+                                      <span className="text-black/80 font-semibold flex-shrink-0 ml-2">{formatCents(m.totalPay)}</span>
                                     </div>
                                   ))}
                                 </div>
                                 <div className="flex justify-between font-mono text-xs font-bold mt-1 pt-1 border-t border-black/10">
-                                  <span>Media Commission ({personMediaSold.length} sale{personMediaSold.length !== 1 ? 's' : ''})</span>
-                                  <span>15% → {formatCents(mediaCommTotal)}</span>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Media Work */}
-                            {personMediaWork.length > 0 && (
-                              <div>
-                                <div className="space-y-0.5">
-                                  {personMediaWork.map(m => {
-                                    const filmer = normalizeName(m.filmed_by);
-                                    const editor = normalizeName(m.edited_by);
-                                    const wCount = (filmer ? 1 : 0) + (editor ? 1 : 0);
-                                    const pay = Math.round(m.amount * MEDIA_WORKER_TOTAL / wCount);
-                                    const role = filmer === name && editor === name ? 'filmed + edited' : filmer === name ? 'filmed' : 'edited';
-                                    return (
-                                      <div key={`work-${m.id}`} className="flex justify-between font-mono text-[11px] text-black/60">
-                                        <span>{new Date(m.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · {m.description || m.sale_type} · {role}</span>
-                                        <span className="text-black/50">{formatCents(pay)}</span>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                                <div className="flex justify-between font-mono text-xs font-bold mt-1 pt-1 border-t border-black/10">
-                                  <span>Media Work ({personMediaWork.length})</span>
-                                  <span>50% → {formatCents(mediaWorkTotal)}</span>
+                                  <span>Media ({personMedia.length} sale{personMedia.length !== 1 ? 's' : ''})</span>
+                                  <span>{formatCents(mediaTotal)}</span>
                                 </div>
                               </div>
                             )}
@@ -1111,7 +1118,7 @@ export default function Accounting() {
                             {hasActivity && (
                               <div className="flex justify-between font-mono text-sm font-bold pt-2 border-t-2 border-black/20">
                                 <span>Period Total</span>
-                                <span>{formatCents(sessionPay + mediaCommTotal + mediaWorkTotal)}</span>
+                                <span>{formatCents(sessionPay + mediaTotal)}</span>
                               </div>
                             )}
                           </div>
