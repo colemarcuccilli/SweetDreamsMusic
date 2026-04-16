@@ -190,13 +190,20 @@ export default function Accounting() {
     setLoading(false);
   }
 
-  async function recordPayout(personName: string) {
+  async function recordPayout(personName: string, earningsData?: { sessionPay: number; sessionCount: number; sessionHours: number; mediaCommission: number; mediaWorkerPay: number; beatProducerPay: number; totalEarned: number; totalPaid: number }) {
     if (!payoutAmount) return;
     setRecordingPayout(true);
     const res = await fetch('/api/admin/payouts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ personName, amount: parseFloat(payoutAmount), method: payoutMethod, note: payoutNote || null }),
+      body: JSON.stringify({
+        personName,
+        amount: parseFloat(payoutAmount),
+        method: payoutMethod,
+        note: payoutNote || null,
+        periodLabel: payrollData.periodLabel,
+        earnings: earningsData || null,
+      }),
     });
     const data = await res.json();
     if (data.success) {
@@ -502,21 +509,21 @@ export default function Accounting() {
 
     // Build combined entries: all people who have either all-time earnings or current period earnings
     const allNames = new Set([...Object.keys(allTimePeople), ...Object.keys(periodPeople)]);
-    const entries: [string, PersonEarnings & { allTimeTotal: number; allTimePaid: number; balance: number; periodTotal: number }][] = [];
+    const initEmpty = (): PersonEarnings => ({ sessionCount: 0, sessionRevenue: 0, sessionPay: 0, sessionHours: 0, mediaCommission: 0, mediaSoldCount: 0, mediaWorkerPay: 0, mediaFilmedCount: 0, mediaEditedCount: 0, beatSales: 0, beatProducerPay: 0, beatCount: 0, totalPay: 0 });
+    const entries: [string, PersonEarnings & { allTimeTotal: number; allTimePaid: number; balance: number; periodTotal: number; allTimeData: PersonEarnings }][] = [];
 
     for (const name of allNames) {
-      const allTime = allTimePeople[name];
+      const allTime = allTimePeople[name] || initEmpty();
       const period = periodPeople[name];
       const allTimePaid = normalizedPayouts[name] || 0;
-      const allTimeTotal = allTime?.totalPay || 0;
+      const allTimeTotal = allTime.totalPay;
       const balance = Math.max(0, allTimeTotal - allTimePaid);
       const periodTotal = period?.totalPay || 0;
 
-      // Use period data if available, otherwise all-time for the breakdown
+      // Use period data for "this period" display, store allTime separately for full breakdown
       const display = period || allTime;
-      if (!display) continue;
 
-      entries.push([name, { ...display, allTimeTotal, allTimePaid, balance, periodTotal }]);
+      entries.push([name, { ...display, allTimeTotal, allTimePaid, balance, periodTotal, allTimeData: allTime }]);
     }
 
     // Sort by balance owed (most owed first)
@@ -1026,16 +1033,40 @@ export default function Accounting() {
                         </>
                       )}
 
-                      {/* All-time summary */}
-                      <div className="bg-black/[0.02] border border-black/10 p-3 space-y-1">
-                        <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">All-Time Summary</p>
-                        <div className="flex justify-between font-mono text-sm">
-                          <span className="text-black/60">Total Earned</span>
+                      {/* All-time earnings breakdown */}
+                      <div className="bg-black/[0.02] border border-black/10 p-3 space-y-2">
+                        <p className="font-mono text-[10px] text-black/40 uppercase tracking-wider">All-Time Earnings Breakdown</p>
+                        {data.allTimeData.sessionPay > 0 && (
+                          <div className="flex justify-between font-mono text-sm border-b border-black/5 pb-1">
+                            <span className="text-black/60">Sessions ({data.allTimeData.sessionCount} · {data.allTimeData.sessionHours}hr · {formatCents(data.allTimeData.sessionRevenue)} gross)</span>
+                            <span className="font-bold">{formatCents(data.allTimeData.sessionPay)}</span>
+                          </div>
+                        )}
+                        {data.allTimeData.mediaCommission > 0 && (
+                          <div className="flex justify-between font-mono text-sm border-b border-black/5 pb-1">
+                            <span className="text-black/60">Media Commission ({data.allTimeData.mediaSoldCount} sale{data.allTimeData.mediaSoldCount !== 1 ? 's' : ''} · 15%)</span>
+                            <span className="font-bold">{formatCents(data.allTimeData.mediaCommission)}</span>
+                          </div>
+                        )}
+                        {data.allTimeData.mediaWorkerPay > 0 && (
+                          <div className="flex justify-between font-mono text-sm border-b border-black/5 pb-1">
+                            <span className="text-black/60">Media Work ({data.allTimeData.mediaFilmedCount > 0 ? `${data.allTimeData.mediaFilmedCount} filmed` : ''}{data.allTimeData.mediaFilmedCount > 0 && data.allTimeData.mediaEditedCount > 0 ? ' · ' : ''}{data.allTimeData.mediaEditedCount > 0 ? `${data.allTimeData.mediaEditedCount} edited` : ''})</span>
+                            <span className="font-bold">{formatCents(data.allTimeData.mediaWorkerPay)}</span>
+                          </div>
+                        )}
+                        {data.allTimeData.beatProducerPay > 0 && (
+                          <div className="flex justify-between font-mono text-sm border-b border-black/5 pb-1">
+                            <span className="text-black/60">Beat Sales ({data.allTimeData.beatCount} · {formatCents(data.allTimeData.beatSales)} gross · 60%)</span>
+                            <span className="font-bold">{formatCents(data.allTimeData.beatProducerPay)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between font-mono text-sm pt-1 border-t border-black/10">
+                          <span className="font-bold">Total Earned</span>
                           <span className="font-bold">{formatCents(data.allTimeTotal)}</span>
                         </div>
                         <div className="flex justify-between font-mono text-sm">
-                          <span className="text-black/60">Total Paid</span>
-                          <span className="text-green-600">{formatCents(data.allTimePaid)}</span>
+                          <span className="text-green-600">Total Paid</span>
+                          <span className="text-green-600 font-bold">{formatCents(data.allTimePaid)}</span>
                         </div>
                       </div>
 
@@ -1097,7 +1128,16 @@ export default function Accounting() {
                               <input type="text" value={payoutNote} onChange={(e) => setPayoutNote(e.target.value)}
                                 placeholder="Note (optional)" className="w-full border border-black/20 px-2 py-1.5 font-mono text-xs" />
                               <div className="flex gap-2">
-                                <button onClick={() => recordPayout(name)} disabled={!payoutAmount || recordingPayout}
+                                <button onClick={() => recordPayout(name, {
+                                    sessionPay: data.allTimeData.sessionPay,
+                                    sessionCount: data.allTimeData.sessionCount,
+                                    sessionHours: data.allTimeData.sessionHours,
+                                    mediaCommission: data.allTimeData.mediaCommission,
+                                    mediaWorkerPay: data.allTimeData.mediaWorkerPay,
+                                    beatProducerPay: data.allTimeData.beatProducerPay,
+                                    totalEarned: data.allTimeTotal,
+                                    totalPaid: data.allTimePaid,
+                                  })} disabled={!payoutAmount || recordingPayout}
                                   className="bg-green-600 text-white font-mono text-xs font-bold px-4 py-2 hover:bg-green-700 disabled:opacity-50">
                                   {recordingPayout ? 'Recording...' : 'Record Payout'}
                                 </button>

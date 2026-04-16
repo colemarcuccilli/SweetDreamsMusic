@@ -869,3 +869,60 @@ export async function sendPaymentReminder(to: string, details: {
     });
   } catch (e) { console.error('Email error (payment reminder):', e); }
 }
+
+// ── Paystub Email ─────────────────────────────────────────────────────
+
+export async function sendPaystubEmail(to: string, details: {
+  recipientName: string;
+  payoutAmount: number;
+  method: string;
+  note: string | null;
+  periodLabel: string | null;
+  sessionPay: number;
+  sessionCount: number;
+  sessionHours: number;
+  mediaCommission: number;
+  mediaWorkerPay: number;
+  beatProducerPay: number;
+  totalEarned: number;
+  totalPaid: number;
+  balanceAfter: number;
+}) {
+  try {
+    const d = details;
+    let earningsRows = '';
+    if (d.sessionPay > 0) earningsRows += detail('Session Pay', `${d.sessionCount} sessions · ${d.sessionHours}hr — ${formatMoney(d.sessionPay)}`);
+    if (d.mediaCommission > 0) earningsRows += detail('Media Commission', formatMoney(d.mediaCommission));
+    if (d.mediaWorkerPay > 0) earningsRows += detail('Media Work Pay', formatMoney(d.mediaWorkerPay));
+    if (d.beatProducerPay > 0) earningsRows += detail('Beat Sales', formatMoney(d.beatProducerPay));
+
+    await resend.emails.send({
+      from: FROM,
+      to,
+      subject: `Paystub — ${formatMoney(d.payoutAmount)} Payment${d.periodLabel ? ` (${d.periodLabel})` : ''}`,
+      html: wrap(
+        h1('PAYSTUB') +
+        p(`${d.recipientName}, a payout of ${formatMoney(d.payoutAmount)} has been recorded for you.`) +
+        detailTable(
+          detail('Payout Amount', formatMoney(d.payoutAmount)) +
+          detail('Method', d.method.charAt(0).toUpperCase() + d.method.slice(1).replace('_', ' ')) +
+          (d.periodLabel ? detail('Period', d.periodLabel) : '') +
+          (d.note ? detail('Note', d.note) : '') +
+          detail('Date', new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }))
+        ) +
+        (earningsRows ? (
+          '<div style="margin:24px 0;padding:16px;border:1px solid #333;border-radius:4px">' +
+          '<p style="color:#888;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;margin:0 0 12px">Earnings Summary</p>' +
+          `<table style="width:100%;border-collapse:collapse">${earningsRows}</table>` +
+          `<table style="width:100%;border-collapse:collapse;margin-top:12px;border-top:1px solid #444;padding-top:8px">` +
+          detail('All-Time Earned', formatMoney(d.totalEarned)) +
+          detail('All-Time Paid', formatMoney(d.totalPaid)) +
+          detail('Remaining Balance', formatMoney(d.balanceAfter)) +
+          '</table></div>'
+        ) : '') +
+        p('This paystub is for your records. If you have any questions about this payment, please reach out.') +
+        btn('VIEW DASHBOARD', `${SITE_URL}/engineer`)
+      ),
+    });
+  } catch (e) { console.error('Email error (paystub):', e); }
+}
