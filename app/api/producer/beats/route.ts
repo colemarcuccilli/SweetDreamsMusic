@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
   const {
     title, genre, bpm, key, tags,
     mp3_lease_price, trackout_lease_price, exclusive_price,
-    has_exclusive, contains_samples, sample_details,
+    has_exclusive, is_lifetime_lease, contains_samples, sample_details,
     preview_file_path, mp3_file_path, trackout_file_path,
   } = body;
 
@@ -98,6 +98,7 @@ export async function POST(request: NextRequest) {
       trackout_lease_price: dollarsToCents(trackout_lease_price),
       exclusive_price: has_exclusive ? dollarsToCents(exclusive_price) : null,
       has_exclusive: !!has_exclusive,
+      is_lifetime_lease: !!is_lifetime_lease,
       contains_samples: !!contains_samples,
       sample_details: contains_samples ? sample_details || null : null,
       cover_image_url: coverImageUrl,

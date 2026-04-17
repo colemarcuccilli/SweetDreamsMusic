@@ -320,10 +320,11 @@ export async function POST(request: NextRequest) {
           expiry.setDate(expiry.getDate() + durationDays);
           leaseExpiresAt = expiry.toISOString();
         }
-        // Check if this is a lifetime lease beat (has_exclusive = false → no expiration)
+        // Check if this is a lifetime lease beat (explicit flag — never expires)
+        // Producer can also offer "Lease Only" mode (MP3-only, no exclusive, but still 1yr expiring).
         if (meta.license_type !== 'exclusive') {
-          const { data: beatInfo } = await supabase.from('beats').select('has_exclusive').eq('id', meta.beat_id).single();
-          if (beatInfo && !beatInfo.has_exclusive) {
+          const { data: beatInfo } = await supabase.from('beats').select('is_lifetime_lease').eq('id', meta.beat_id).single();
+          if (beatInfo && beatInfo.is_lifetime_lease) {
             leaseExpiresAt = null; // Lifetime lease — never expires
           }
         }
