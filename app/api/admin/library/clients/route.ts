@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { verifyEngineerAccess } from '@/lib/admin-auth';
+import { verifyEngineerAccess, isAdmin } from '@/lib/admin-auth';
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const hasAccess = await verifyEngineerAccess(supabase);
   if (!hasAccess) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  // Balance-edit UI should only render for super-admins. Engineers see the
+  // CRM but cannot mutate remainder amounts (finance-sensitive action).
+  const { data: { user: viewer } } = await supabase.auth.getUser();
+  const viewerIsAdmin = isAdmin(viewer?.email);
 
   const { searchParams } = new URL(request.url);
   const detailed = searchParams.get('detailed') === 'true';
@@ -136,5 +141,5 @@ export async function GET(request: NextRequest) {
     return base;
   }) || [];
 
-  return NextResponse.json({ clients });
+  return NextResponse.json({ clients, viewer_is_admin: viewerIsAdmin });
 }

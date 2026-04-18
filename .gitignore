@@ -39,3 +39,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# firebase — not used on this project; prevent stray CLI droppings from
+# appearing in git status if anyone accidentally runs `firebase …`
+.firebase/
+firebase-debug.log*
+.firebaserc
+firebase.json
+firestore.rules
+firestore.indexes.json
+
+# superpowers brainstorming sessions — local-only, ephemeral mockups
+.superpowers/

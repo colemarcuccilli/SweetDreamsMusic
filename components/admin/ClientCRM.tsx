@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, Copy, Check, ChevronDown, ChevronUp, ArrowUpDown, ExternalLink, Phone, Mail, User, FileText } from 'lucide-react';
+import { Search, Copy, Check, ChevronDown, ChevronUp, ArrowUpDown, ExternalLink, Phone, Mail, User, FileText, Pencil, X as XIcon } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
 
 interface Client {
@@ -54,14 +54,22 @@ export default function ClientCRM() {
   const [sortKey, setSortKey] = useState<SortKey>('display_name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [viewerIsAdmin, setViewerIsAdmin] = useState(false);
 
-  useEffect(() => {
+  const refreshClients = useCallback(() => {
     fetch('/api/admin/library/clients?detailed=true')
       .then(r => r.json())
-      .then(data => setClients(data.clients || []))
+      .then(data => {
+        setClients(data.clients || []);
+        setViewerIsAdmin(Boolean(data.viewer_is_admin));
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    refreshClients();
+  }, [refreshClients]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -208,7 +216,7 @@ export default function ClientCRM() {
                 {expandedId === c.id && (
                   <tr key={`${c.id}-detail`}>
                     <td colSpan={8} className="p-0">
-                      <ClientDetail client={c} />
+                      <ClientDetail client={c} viewerIsAdmin={viewerIsAdmin} onBalanceUpdated={refreshClients} />
                     </td>
                   </tr>
                 )}
@@ -260,7 +268,7 @@ export default function ClientCRM() {
             </button>
             {expandedId === c.id && (
               <div className="border-t border-black/10">
-                <ClientDetail client={c} />
+                <ClientDetail client={c} viewerIsAdmin={viewerIsAdmin} onBalanceUpdated={refreshClients} />
               </div>
             )}
           </div>
@@ -324,14 +332,23 @@ function CopyCell({ value }: { value: string | null }) {
   );
 }
 
-function ClientDetail({ client }: { client: Client }) {
+function ClientDetail({
+  client,
+  viewerIsAdmin,
+  onBalanceUpdated,
+}: {
+  client: Client;
+  viewerIsAdmin: boolean;
+  onBalanceUpdated: () => void;
+}) {
   const [bookings, setBookings] = useState<ClientBooking[]>([]);
   const [loadingBookings, setLoadingBookings] = useState(true);
   const [note, setNote] = useState('');
   const [addingNote, setAddingNote] = useState(false);
   const [noteSuccess, setNoteSuccess] = useState(false);
+  const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadBookings = useCallback(() => {
     if (!client.email) {
       setLoadingBookings(false);
       return;
@@ -342,6 +359,19 @@ function ClientDetail({ client }: { client: Client }) {
       .catch(() => {})
       .finally(() => setLoadingBookings(false));
   }, [client.email]);
+
+  useEffect(() => {
+    loadBookings();
+  }, [loadBookings]);
+
+  function handleBalanceSaved(bookingId: string, newRemainderCents: number) {
+    setBookings((prev) =>
+      prev.map((b) => (b.id === bookingId ? { ...b, remainder_amount: newRemainderCents } : b))
+    );
+    setEditingBookingId(null);
+    // Refresh the parent client list so the summary balance column updates.
+    onBalanceUpdated();
+  }
 
   const totalPaid = bookings.reduce((s, b) => {
     if (['confirmed', 'completed', 'approved'].includes(b.status)) {
@@ -460,11 +490,14 @@ function ClientDetail({ client }: { client: Client }) {
                   <th className="px-2 py-1.5 font-semibold uppercase tracking-wider">Engineer</th>
                   <th className="px-2 py-1.5 font-semibold uppercase tracking-wider">Status</th>
                   <th className="px-2 py-1.5 font-semibold uppercase tracking-wider text-right">Amount</th>
+                  <th className="px-2 py-1.5 font-semibold uppercase tracking-wider text-right">Balance</th>
                 </tr>
               </thead>
               <tbody>
                 {bookings.map((b) => {
                   const d = new Date(b.start_time);
+                  const isEditing = editingBookingId === b.id;
+                  const isCancelled = b.status === 'cancelled';
                   return (
                     <tr key={b.id} className="border-t border-black/5">
                       <td className="px-2 py-1.5">
@@ -482,6 +515,21 @@ function ClientDetail({ client }: { client: Client }) {
                         <StatusBadge status={b.status} />
                       </td>
                       <td className="px-2 py-1.5 text-right font-semibold">{formatCents(b.total_amount)}</td>
+                      <td className="px-2 py-1.5 text-right">
+                        {isEditing ? (
+                          <BalanceEditor
+                            booking={b}
+                            onSaved={(newCents) => handleBalanceSaved(b.id, newCents)}
+                            onCancel={() => setEditingBookingId(null)}
+                          />
+                        ) : (
+                          <BalanceCell
+                            remainderCents={b.remainder_amount || 0}
+                            canEdit={viewerIsAdmin && !isCancelled}
+                            onEditClick={() => setEditingBookingId(b.id)}
+                          />
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
@@ -514,6 +562,133 @@ function ClientDetail({ client }: { client: Client }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function BalanceCell({
+  remainderCents,
+  canEdit,
+  onEditClick,
+}: {
+  remainderCents: number;
+  canEdit: boolean;
+  onEditClick: () => void;
+}) {
+  const hasBalance = remainderCents > 0;
+
+  if (!canEdit) {
+    return hasBalance ? (
+      <span className="text-red-600 font-semibold">{formatCents(remainderCents)}</span>
+    ) : (
+      <span className="text-black/30">—</span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onEditClick}
+      className="group inline-flex items-center gap-1 hover:text-black transition-colors"
+      title="Click to edit balance"
+    >
+      {hasBalance ? (
+        <span className="text-red-600 font-semibold">{formatCents(remainderCents)}</span>
+      ) : (
+        <span className="text-black/30">—</span>
+      )}
+      <Pencil className="w-3 h-3 text-black/20 group-hover:text-black/60 transition-colors" />
+    </button>
+  );
+}
+
+function BalanceEditor({
+  booking,
+  onSaved,
+  onCancel,
+}: {
+  booking: ClientBooking;
+  onSaved: (newRemainderCents: number) => void;
+  onCancel: () => void;
+}) {
+  // Ceiling matches the server-side validation in /api/admin/bookings/adjust-balance
+  const depositPaid = booking.actual_deposit_paid ?? booking.deposit_amount ?? 0;
+  const maxCents = Math.max(0, (booking.total_amount || 0) - depositPaid);
+  const [dollarsInput, setDollarsInput] = useState(((booking.remainder_amount || 0) / 100).toFixed(2));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    const parsed = Number(dollarsInput);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      setError('Must be a non-negative number');
+      return;
+    }
+    const cents = Math.round(parsed * 100);
+    if (cents > maxCents) {
+      setError(`Max $${(maxCents / 100).toFixed(2)}`);
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/admin/bookings/adjust-balance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId: booking.id, newRemainderCents: cents }),
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        setError(payload.error || 'Failed to save');
+        setSaving(false);
+        return;
+      }
+      onSaved(cents);
+    } catch (e) {
+      setError('Network error');
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="inline-flex items-center gap-1 justify-end">
+      <span className="text-black/40">$</span>
+      <input
+        type="number"
+        step="0.01"
+        min="0"
+        max={(maxCents / 100).toString()}
+        value={dollarsInput}
+        onChange={(e) => setDollarsInput(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') save();
+          if (e.key === 'Escape') onCancel();
+        }}
+        autoFocus
+        className="w-16 px-1 py-0.5 border border-black/30 font-mono text-[11px] text-right outline-none focus:border-black"
+        disabled={saving}
+      />
+      <button
+        type="button"
+        onClick={save}
+        disabled={saving}
+        className="p-0.5 text-green-600 hover:bg-green-100 disabled:opacity-50"
+        title="Save"
+      >
+        <Check className="w-3 h-3" />
+      </button>
+      <button
+        type="button"
+        onClick={onCancel}
+        disabled={saving}
+        className="p-0.5 text-black/50 hover:bg-black/5 disabled:opacity-50"
+        title="Cancel"
+      >
+        <XIcon className="w-3 h-3" />
+      </button>
+      {error && (
+        <span className="text-red-600 text-[10px] ml-1" title={error}>!</span>
+      )}
     </div>
   );
 }
