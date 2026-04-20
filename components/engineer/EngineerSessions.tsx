@@ -880,7 +880,10 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
 
       {/* Completion checklist — visible on active (non-completed) sessions so
           the engineer knows exactly what blocks completion. Hidden when the
-          card is unclaimed (they can't complete something they don't own). */}
+          card is unclaimed (they can't complete something they don't own).
+          Failed gates use amber ⚠ (not a subtle empty circle) so the engineer
+          spots them at a glance — the pre-compaction version used ○/dim-gray
+          which read as "optional" rather than "blocking". */}
       {!completed && !unclaimed && canComplete && (
         <div className="mt-3 pt-3 border-t border-black/10">
           <p className="font-mono text-[10px] uppercase tracking-wider text-black/60 mb-1.5">
@@ -889,11 +892,11 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
           <div className="space-y-1">
             {/* Time gate */}
             <div className="flex items-start gap-2">
-              <span className={`font-mono text-xs ${completionCheck?.details.timeGatePassed ? 'text-green-600' : 'text-black/40'}`}>
-                {completionCheck?.details.timeGatePassed ? '✓' : '○'}
+              <span className={`font-mono text-sm font-bold ${completionCheck?.details.timeGatePassed ? 'text-green-600' : 'text-amber-600'}`}>
+                {completionCheck?.details.timeGatePassed ? '✓' : '⚠'}
               </span>
               <div className="flex-1">
-                <p className="font-mono text-xs">
+                <p className={`font-mono text-xs ${completionCheck?.details.timeGatePassed === false ? 'text-amber-800 font-semibold' : ''}`}>
                   Within 30 min of scheduled end
                 </p>
                 {completionCheck?.details.scheduledEnd && (
@@ -912,11 +915,11 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
             </div>
             {/* Files gate */}
             <div className="flex items-start gap-2">
-              <span className={`font-mono text-xs ${completionCheck?.details.filesGatePassed ? 'text-green-600' : 'text-black/40'}`}>
-                {completionCheck?.details.filesGatePassed ? '✓' : '○'}
+              <span className={`font-mono text-sm font-bold ${completionCheck?.details.filesGatePassed ? 'text-green-600' : 'text-amber-600'}`}>
+                {completionCheck?.details.filesGatePassed ? '✓' : '⚠'}
               </span>
               <div className="flex-1">
-                <p className="font-mono text-xs">
+                <p className={`font-mono text-xs ${completionCheck?.details.filesGatePassed === false ? 'text-amber-800 font-semibold' : ''}`}>
                   At least one session file uploaded
                 </p>
                 <p className="font-mono text-[10px] text-black/50">
@@ -1037,31 +1040,51 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
             </button>
           )}
           {canComplete && (() => {
+            // Completion gates live in lib/booking-completion.ts and are
+            // surfaced via /api/booking/can-complete. When any gate fails
+            // we MUST show the reason inline near the button — tooltips
+            // alone are invisible on touch devices and fragile on desktop,
+            // which is how an engineer ends up staring at "locked" with
+            // no actionable feedback. The detailed banner lives as a
+            // sibling block below the action row; this button also pops
+            // an alert on tap as a last-resort fallback for mobile users
+            // who scroll past the banner.
             const gatesReady = completionCheck?.canComplete === true;
             const reasons = completionCheck?.reasonMessages ?? [];
-            const disabled = actionLoading === 'complete' || !gatesReady;
-            const tooltip = gatesReady
-              ? 'All completion requirements met.'
-              : reasons.length
-                ? `Blocked:\n${reasons.map(r => `• ${r}`).join('\n')}`
-                : 'Checking completion requirements…';
+            const isLoading = actionLoading === 'complete';
+            const clickableWhenLocked = !isLoading && !gatesReady;
             return (
               <button
-                onClick={handleComplete}
-                disabled={disabled}
-                title={tooltip}
+                onClick={() => {
+                  if (clickableWhenLocked) {
+                    const body = reasons.length
+                      ? reasons.map(r => `• ${r}`).join('\n')
+                      : 'Checking completion requirements — try again in a moment.';
+                    alert(`Cannot complete yet:\n\n${body}`);
+                    return;
+                  }
+                  handleComplete();
+                }}
+                disabled={isLoading}
+                title={
+                  gatesReady
+                    ? 'All completion requirements met.'
+                    : reasons.length
+                      ? `Blocked:\n${reasons.map(r => `• ${r}`).join('\n')}`
+                      : 'Checking completion requirements…'
+                }
                 className={
                   `font-mono text-xs font-bold uppercase tracking-wider border-2 px-4 py-2 disabled:opacity-50 transition-colors ` +
                   (gatesReady
                     ? 'border-green-600 text-green-700 hover:bg-green-50'
-                    : 'border-black/20 text-black/40 cursor-not-allowed')
+                    : 'border-amber-400 text-amber-700 hover:bg-amber-50')
                 }
               >
-                {actionLoading === 'complete'
+                {isLoading
                   ? 'Updating...'
                   : gatesReady
                     ? 'Mark Complete'
-                    : 'Mark Complete (locked)'}
+                    : 'Mark Complete (locked — tap for why)'}
               </button>
             );
           })()}
@@ -1099,6 +1122,37 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
           >
             {showDebug ? 'Hide Details' : 'Debug'}
           </button>
+        </div>
+      )}
+
+      {/* Blocked-reasons banner — sibling to the action row. Shown whenever
+          the engineer *could* complete (canComplete is true) but at least
+          one gate is still failing. Listed item-by-item so the engineer
+          sees exactly what's missing without having to tap the locked
+          button. Also surfaces a direct "Upload Files" CTA when the files
+          gate is the blocker — that's the single most common cause and
+          the UI should make fixing it one click away. */}
+      {!completed && canComplete && completionCheck && !completionCheck.canComplete && (
+        <div className="mt-3 p-3 border-2 border-amber-400 bg-amber-50">
+          <p className="font-mono text-xs font-bold uppercase tracking-wider text-amber-800">
+            Completion locked — {completionCheck.reasonMessages.length === 1 ? '1 issue' : `${completionCheck.reasonMessages.length} issues`} to resolve
+          </p>
+          <ul className="mt-1.5 space-y-1">
+            {completionCheck.reasonMessages.map((msg, idx) => (
+              <li key={idx} className="font-mono text-[11px] text-amber-900 flex items-start gap-2">
+                <span className="font-bold">⚠</span>
+                <span>{msg}</span>
+              </li>
+            ))}
+          </ul>
+          {completionCheck.details.filesGatePassed === false && (
+            <button
+              onClick={() => { setUploadSuccess(false); setShowFileUpload(true); }}
+              className="mt-2 font-mono text-xs font-bold uppercase tracking-wider border-2 border-amber-700 text-amber-900 bg-white px-3 py-1.5 hover:bg-amber-100 transition-colors"
+            >
+              Upload Files →
+            </button>
+          )}
         </div>
       )}
 
@@ -1312,8 +1366,14 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
         </div>
       )}
 
-      {/* Send Files (for completed sessions) */}
-      {completed && (
+      {/* Send Files panel — visible both BEFORE and AFTER completion.
+          Pre-completion is critical: the files-gate requires at least one
+          deliverable exists before Mark Complete is allowed (see
+          lib/booking-completion.ts), so hiding this panel until the
+          session is completed creates a chicken-and-egg where the
+          engineer can neither upload nor complete. Panel stays hidden on
+          cancelled/unclaimed sessions where uploads aren't valid. */}
+      {!unclaimed && (completed || canComplete) && (
         <div className="mt-3 pt-3 border-t border-black/10">
           {uploadSuccess ? (
             <div className="bg-green-50 border border-green-200 p-4 text-center">
@@ -1337,7 +1397,11 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
                   onClick={() => setShowFileUpload(!showFileUpload)}
                   className="font-mono text-xs font-bold uppercase tracking-wider bg-black text-white px-4 py-2 hover:bg-black/80 transition-colors"
                 >
-                  {showFileUpload ? 'Cancel' : 'Send Files to Client'}
+                  {showFileUpload
+                    ? 'Cancel'
+                    : completed
+                      ? 'Send Files to Client'
+                      : 'Upload Session Files'}
                 </button>
                 )}
                 <button
