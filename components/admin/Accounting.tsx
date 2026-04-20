@@ -116,7 +116,7 @@ export default function Accounting() {
   const [beatPurchases, setBeatPurchases] = useState<BeatPurchase[]>([]);
   const [mediaSales, setMediaSales] = useState<{ id: string; description: string; amount: number; sale_type: string; sold_by: string | null; filmed_by: string | null; edited_by: string | null; client_name: string | null; notes: string | null; created_at: string }[]>([]);
   const [cancelledBookings, setCancelledBookings] = useState<{ id: string; customer_name: string; start_time: string; total_amount: number; deposit_amount: number; actual_deposit_paid: number | null }[]>([]);
-  const [cashLedger, setCashLedger] = useState<{ id: string; engineer_name: string; amount: number; client_name: string; note: string | null; status: string; created_at: string; booking_id: string | null }[]>([]);
+  const [cashLedger, setCashLedger] = useState<{ id: string; engineer_name: string; amount: number; client_name: string; note: string | null; status: string; created_at: string; booking_id: string | null; deposit_event_id?: string | null; deposited_at?: string | null; collection_event_id?: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>('overview');
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth');
@@ -142,6 +142,20 @@ export default function Accounting() {
   const [payoutMethod, setPayoutMethod] = useState('cash');
   const [payoutNote, setPayoutNote] = useState('');
   const [recordingPayout, setRecordingPayout] = useState(false);
+
+  // Deposit modal state — admins use this to move cash from 'collected' to 'deposited'
+  // in a single audit-trailed batch. The modal is rendered near the bottom of the
+  // component; state lives here so the trigger button (inside the cash panel IIFE)
+  // can open it and pre-populate with the engineer's collected-but-not-deposited rows.
+  const [showDepositModal, setShowDepositModal] = useState(false);
+  const [depositSelectedIds, setDepositSelectedIds] = useState<Set<string>>(new Set());
+  const [depositReference, setDepositReference] = useState('');
+  const [depositNote, setDepositNote] = useState('');
+  const [depositSubmitting, setDepositSubmitting] = useState(false);
+  const [depositError, setDepositError] = useState<{
+    warning: string;
+    issues: Array<{ entryId: string; reason: string }>;
+  } | null>(null);
 
   const monthOptions = getMonthOptions();
 
@@ -217,6 +231,56 @@ export default function Accounting() {
       alert(`Failed: ${data.error}`);
     }
     setRecordingPayout(false);
+  }
+
+  /**
+   * Submit a bank deposit for the currently selected cash_ledger entries.
+   *
+   * The server rejects the entire batch if any entry is not in status='collected'
+   * (e.g., an entry that never had its collection recorded, or a double-deposit
+   * attempt). We surface that warning inline rather than hiding it — the whole
+   * point of this flow is to catch accounting errors, not paper over them.
+   */
+  async function submitDeposit() {
+    if (depositSelectedIds.size === 0) return;
+    setDepositSubmitting(true);
+    setDepositError(null);
+    try {
+      const res = await fetch('/api/admin/cash-deposits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          entryIds: Array.from(depositSelectedIds),
+          reference: depositReference.trim() || undefined,
+          note: depositNote.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        // The server speaks in 'issues' when the batch contains non-collected rows.
+        // If issues exist, render them in the warning panel; otherwise show a
+        // generic error.
+        if (Array.isArray(data.issues)) {
+          setDepositError({
+            warning: data.warning || data.error || 'Accounting issues detected.',
+            issues: data.issues,
+          });
+        } else {
+          alert(`Deposit failed: ${data.error || 'Unknown error'}`);
+        }
+        return;
+      }
+      // Success — refresh cash ledger, close modal, reset form.
+      await fetchPayrollData();
+      setShowDepositModal(false);
+      setDepositSelectedIds(new Set());
+      setDepositReference('');
+      setDepositNote('');
+    } catch (e) {
+      alert(`Deposit failed: ${e instanceof Error ? e.message : 'Network error'}`);
+    } finally {
+      setDepositSubmitting(false);
+    }
   }
 
   // Derived data
@@ -533,15 +597,39 @@ export default function Accounting() {
     const periodBeats = allTimeBeatPurchases.filter(p => p.created_at >= periodStartStr && p.created_at <= periodEndStr);
     const periodPeople = computeEarnings(periodBookings, periodMedia, periodBeats);
 
+    // Pending sessions this period — bookings scheduled within the period that
+    // have NOT yet been marked completed. These don't add to earned/balance
+    // (the engineer hasn't done the work yet in the accounting sense), but we
+    // surface them so admins can see engineers who have upcoming/ongoing work.
+    // Without this, an engineer whose sessions are still 'confirmed' is
+    // invisible on the payroll screen even though their sessions are this
+    // period — which caused the "Jay isn't showing up" bug.
+    const pendingByEngineer: Record<string, { count: number; potentialPay: number; hours: number }> = {};
+    periodBookings.forEach(b => {
+      if (b.status === 'completed' || b.status === 'cancelled') return;
+      const eng = normalizeName(b.engineer_name);
+      if (!eng || eng === 'Unassigned') return;
+      if (!pendingByEngineer[eng]) pendingByEngineer[eng] = { count: 0, potentialPay: 0, hours: 0 };
+      pendingByEngineer[eng].count++;
+      pendingByEngineer[eng].potentialPay += Math.round((b.total_amount || 0) * ENGINEER_SESSION_SPLIT);
+      pendingByEngineer[eng].hours += (b.duration || 0);
+    });
+
     // Payouts during this period
     const periodPayoutTotal = payouts
       .filter(p => p.created_at >= periodStartStr && p.created_at <= periodEndStr)
       .reduce((s, p) => s + p.amount, 0);
 
-    // Build combined entries: all people who have either all-time earnings or current period earnings
-    const allNames = new Set([...Object.keys(allTimePeople), ...Object.keys(periodPeople)]);
+    // Build combined entries: all people who have either all-time earnings,
+    // current period earnings, OR pending activity this period
+    const allNames = new Set([
+      ...Object.keys(allTimePeople),
+      ...Object.keys(periodPeople),
+      ...Object.keys(pendingByEngineer),
+    ]);
     const initEmpty = (): PersonEarnings => ({ sessionCount: 0, sessionRevenue: 0, sessionPay: 0, sessionHours: 0, mediaCommission: 0, mediaSoldCount: 0, mediaWorkerPay: 0, mediaFilmedCount: 0, mediaEditedCount: 0, beatSales: 0, beatProducerPay: 0, beatCount: 0, totalPay: 0 });
-    const entries: [string, PersonEarnings & { allTimeTotal: number; allTimePaid: number; balance: number; periodTotal: number; allTimeData: PersonEarnings }][] = [];
+    type PeriodPending = { count: number; potentialPay: number; hours: number };
+    const entries: [string, PersonEarnings & { allTimeTotal: number; allTimePaid: number; balance: number; periodTotal: number; allTimeData: PersonEarnings; periodPending: PeriodPending }][] = [];
 
     for (const name of allNames) {
       const allTime = allTimePeople[name] || initEmpty();
@@ -550,21 +638,27 @@ export default function Accounting() {
       const allTimeTotal = allTime.totalPay;
       const balance = Math.max(0, allTimeTotal - allTimePaid);
       const periodTotal = period?.totalPay || 0;
+      const periodPending = pendingByEngineer[name] || { count: 0, potentialPay: 0, hours: 0 };
 
       // Use period data for "this period" display, store allTime separately for full breakdown
       const display = period || allTime;
 
-      entries.push([name, { ...display, allTimeTotal, allTimePaid, balance, periodTotal, allTimeData: allTime }]);
+      entries.push([name, { ...display, allTimeTotal, allTimePaid, balance, periodTotal, allTimeData: allTime, periodPending }]);
     }
 
-    // Sort by balance owed (most owed first)
+    // Sort by balance owed (most owed first), then by pending count so
+    // engineers with upcoming sessions-to-complete surface above idle zeros
     entries.sort((a, b) => {
       if (b[1].balance !== a[1].balance) return b[1].balance - a[1].balance;
+      if (b[1].periodTotal !== a[1].periodTotal) return b[1].periodTotal - a[1].periodTotal;
+      if (b[1].periodPending.count !== a[1].periodPending.count) return b[1].periodPending.count - a[1].periodPending.count;
       return b[1].allTimeTotal - a[1].allTimeTotal;
     });
 
-    // Only show people who have a balance or earned this period
-    const activeEntries = entries.filter(([, d]) => d.balance > 0 || d.periodTotal > 0);
+    // Show anyone who has a balance, earned this period, OR has pending work this period
+    const activeEntries = entries.filter(
+      ([, d]) => d.balance > 0 || d.periodTotal > 0 || d.periodPending.count > 0
+    );
 
     const totalPayroll = entries.reduce((s, [, d]) => s + d.allTimeTotal, 0);
     const totalPaid = Object.values(normalizedPayouts).reduce((s, v) => s + v, 0);
@@ -660,26 +754,34 @@ export default function Accounting() {
           ))}
         </div>
         <div className="flex flex-wrap gap-2 items-center">
-          <Filter className="w-4 h-4 text-black/30" />
-          {([
-            { key: 'thisMonth' as DatePreset, label: 'This Month' },
-            { key: 'lastMonth' as DatePreset, label: 'Last Month' },
-            { key: 'month' as DatePreset, label: 'Pick Month' },
-            { key: '30d' as DatePreset, label: '30 Days' },
-            { key: '90d' as DatePreset, label: '90 Days' },
-            { key: 'year' as DatePreset, label: '1 Year' },
-            { key: 'custom' as DatePreset, label: 'Custom' },
-          ]).map((p) => (
-            <button
-              key={p.key}
-              onClick={() => setDatePreset(p.key)}
-              className={`font-mono text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 transition-colors ${
-                datePreset === p.key ? 'bg-accent text-black' : 'bg-black/5 text-black/70 hover:bg-black/10'
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
+          {/* Date presets — hidden on payroll because the pay-period dropdown
+              inside that view IS the time control. Two time filters on the
+              same screen was causing "why do I have a month selector AND a
+              pay period AND they disagree?" confusion. */}
+          {view !== 'payroll' && (
+            <>
+              <Filter className="w-4 h-4 text-black/30" />
+              {([
+                { key: 'thisMonth' as DatePreset, label: 'This Month' },
+                { key: 'lastMonth' as DatePreset, label: 'Last Month' },
+                { key: 'month' as DatePreset, label: 'Pick Month' },
+                { key: '30d' as DatePreset, label: '30 Days' },
+                { key: '90d' as DatePreset, label: '90 Days' },
+                { key: 'year' as DatePreset, label: '1 Year' },
+                { key: 'custom' as DatePreset, label: 'Custom' },
+              ]).map((p) => (
+                <button
+                  key={p.key}
+                  onClick={() => setDatePreset(p.key)}
+                  className={`font-mono text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 transition-colors ${
+                    datePreset === p.key ? 'bg-accent text-black' : 'bg-black/5 text-black/70 hover:bg-black/10'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </>
+          )}
           {/* Engineer filter — visible on overview, sessions, payroll */}
           {(view === 'overview' || view === 'sessions' || view === 'payroll') && engineers.length > 0 && (
             <select
@@ -694,7 +796,7 @@ export default function Accounting() {
         </div>
       </div>
 
-      {datePreset === 'month' && (
+      {view !== 'payroll' && datePreset === 'month' && (
         <div className="mb-6">
           <select
             value={selectedMonth}
@@ -709,7 +811,7 @@ export default function Accounting() {
         </div>
       )}
 
-      {datePreset === 'custom' && (
+      {view !== 'payroll' && datePreset === 'custom' && (
         <div className="flex gap-3 mb-6 items-center">
           <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)}
             className="border border-black/20 px-3 py-2 font-mono text-xs focus:border-accent focus:outline-none" />
@@ -949,15 +1051,23 @@ export default function Accounting() {
                 <MiniStat label="People Owed" value={String(payrollData.people.filter(([, d]) => d.balance > 0).length)} />
               </div>
 
-              {/* Per-Person Balances Table */}
+              {/* Per-Person Balances Table.
+                  "This Period" = earnings from sessions/media/beats already
+                  completed within the period. "Pending (period)" = scheduled
+                  but not-yet-completed sessions in the period — money the
+                  engineer *will* earn once the session is marked complete.
+                  Engineers with only pending work still show up here so
+                  admins can see they have upcoming activity and know to
+                  mark sessions complete once done. */}
               <div className="border border-black/10 p-4">
                 <h3 className="font-mono text-sm font-bold uppercase tracking-wider mb-4">What We Owe</h3>
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[700px]">
+                  <table className="w-full min-w-[820px]">
                     <thead>
                       <tr className="border-b-2 border-black/20">
                         <th className="text-left font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Person</th>
                         <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">This Period</th>
+                        <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">Pending (period)</th>
                         <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2 border-l border-black/10">All-Time Earned</th>
                         <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2">All-Time Paid</th>
                         <th className="text-right font-mono text-[10px] text-black/60 uppercase tracking-wider py-2 border-l-2 border-black/10">Balance Owed</th>
@@ -970,6 +1080,16 @@ export default function Accounting() {
                           <td className="font-mono text-sm text-right">
                             {data.periodTotal > 0 ? formatCents(data.periodTotal) : <span className="text-black/30">—</span>}
                           </td>
+                          <td className="font-mono text-xs text-right">
+                            {data.periodPending.count > 0 ? (
+                              <span className="text-amber-700" title={`${data.periodPending.count} session${data.periodPending.count !== 1 ? 's' : ''} · ${data.periodPending.hours}hr scheduled`}>
+                                {formatCents(data.periodPending.potentialPay)}
+                                <span className="text-[10px] text-amber-600/70 ml-1">({data.periodPending.count})</span>
+                              </span>
+                            ) : (
+                              <span className="text-black/30">—</span>
+                            )}
+                          </td>
                           <td className="font-mono text-sm text-right border-l border-black/10">
                             {formatCents(data.allTimeTotal)}
                           </td>
@@ -977,13 +1097,13 @@ export default function Accounting() {
                             {data.allTimePaid > 0 ? formatCents(data.allTimePaid) : <span className="text-black/30">—</span>}
                           </td>
                           <td className={`font-mono text-sm text-right font-bold border-l-2 border-black/10 ${data.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                            {data.balance > 0 ? formatCents(data.balance) : 'PAID'}
+                            {data.balance > 0 ? formatCents(data.balance) : (data.periodPending.count > 0 ? <span className="text-amber-700 text-xs">AWAITING</span> : 'PAID')}
                           </td>
                         </tr>
                       ))}
                       {payrollData.people.length === 0 && (
                         <tr>
-                          <td colSpan={5} className="font-mono text-sm text-black/60 text-center py-12">No outstanding balances</td>
+                          <td colSpan={6} className="font-mono text-sm text-black/60 text-center py-12">No outstanding balances or scheduled sessions this period</td>
                         </tr>
                       )}
                     </tbody>
@@ -993,6 +1113,12 @@ export default function Accounting() {
                           <td className="font-mono text-sm font-bold py-3">TOTAL</td>
                           <td className="font-mono text-sm text-right font-bold">
                             {formatCents(payrollData.people.reduce((s, [, d]) => s + d.periodTotal, 0))}
+                          </td>
+                          <td className="font-mono text-xs text-right font-bold text-amber-700">
+                            {(() => {
+                              const t = payrollData.people.reduce((s, [, d]) => s + d.periodPending.potentialPay, 0);
+                              return t > 0 ? formatCents(t) : '—';
+                            })()}
                           </td>
                           <td className="font-mono text-sm text-right font-bold border-l border-black/10">
                             {formatCents(payrollData.totalPayroll)}
@@ -1008,6 +1134,11 @@ export default function Accounting() {
                     )}
                   </table>
                 </div>
+                {payrollData.people.some(([, d]) => d.periodPending.count > 0) && (
+                  <p className="font-mono text-[11px] text-black/50 mt-3">
+                    <span className="text-amber-700 font-bold">Pending (period)</span> = scheduled sessions not yet marked completed. Mark sessions complete in the Sessions tab to move them into &quot;This Period&quot; earned.
+                  </p>
+                )}
               </div>
 
               {/* Per-Person Detail Cards — Paystub View */}
@@ -1017,7 +1148,17 @@ export default function Accounting() {
                 return (
                   <BreakdownSection
                     key={name}
-                    title={`${name} — ${data.balance > 0 ? `${formatCents(data.balance)} owed` : 'PAID IN FULL'}${data.periodTotal > 0 ? ` · ${formatCents(data.periodTotal)} this period` : ''}`}
+                    title={`${name} — ${
+                      data.balance > 0
+                        ? `${formatCents(data.balance)} owed`
+                        : data.periodPending.count > 0 && data.periodTotal === 0
+                        ? `AWAITING · ${data.periodPending.count} session${data.periodPending.count !== 1 ? 's' : ''} scheduled`
+                        : 'PAID IN FULL'
+                    }${data.periodTotal > 0 ? ` · ${formatCents(data.periodTotal)} this period` : ''}${
+                      data.periodPending.count > 0 && data.periodTotal > 0
+                        ? ` · ${formatCents(data.periodPending.potentialPay)} pending`
+                        : ''
+                    }`}
                     expanded={expandedSection === `payroll-${name}`}
                     onToggle={() => toggleSection(`payroll-${name}`)}
                   >
@@ -1078,13 +1219,31 @@ export default function Accounting() {
                         });
                         const mediaTotal = mediaItems.reduce((s, m) => s + m.totalPay, 0);
 
+                        // Pending (not-yet-completed) sessions in this period.
+                        // Shown separately so admins can see upcoming work and
+                        // know they need to mark sessions complete to move them
+                        // into "earned." Doesn't count toward period total.
+                        const personPendingSessions = allTimeBookings
+                          .filter(b =>
+                            b.status !== 'completed' &&
+                            b.status !== 'cancelled' &&
+                            (normalizeName(b.engineer_name) || '') === name &&
+                            b.start_time >= ps &&
+                            b.start_time <= pe
+                          )
+                          .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+                        const pendingGross = personPendingSessions.reduce((s, b) => s + (b.total_amount || 0), 0);
+                        const pendingPotentialPay = Math.round(pendingGross * ENGINEER_SESSION_SPLIT);
+                        const pendingHours = personPendingSessions.reduce((s, b) => s + (b.duration || 0), 0);
+
                         const hasActivity = personSessions.length > 0 || personMedia.length > 0;
+                        const hasAnything = hasActivity || personPendingSessions.length > 0;
 
                         return (
                           <div className="border border-black/10 p-3 space-y-4">
                             <p className="font-mono text-[10px] text-accent uppercase tracking-wider font-bold">{payrollData.periodLabel}</p>
 
-                            {!hasActivity && (
+                            {!hasAnything && (
                               <p className="font-mono text-xs text-black/40">No activity this period</p>
                             )}
 
@@ -1127,10 +1286,39 @@ export default function Accounting() {
                               </div>
                             )}
 
+                            {/* Pending sessions — scheduled but not yet
+                                completed. Shown in amber to visually
+                                distinguish from confirmed earnings. */}
+                            {personPendingSessions.length > 0 && (
+                              <div className="border border-amber-200 bg-amber-50/50 p-2 rounded-sm">
+                                <p className="font-mono text-[10px] text-amber-700 uppercase tracking-wider font-bold mb-1">
+                                  Pending — not yet completed
+                                </p>
+                                <div className="space-y-0.5">
+                                  {personPendingSessions.map(s => (
+                                    <div key={s.id} className="flex justify-between font-mono text-[11px] text-black/60">
+                                      <span>
+                                        {new Date(s.start_time).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · {s.customer_name} · {s.duration}hr
+                                        <span className="ml-2 text-[10px] uppercase text-amber-700/80">{s.status}</span>
+                                      </span>
+                                      <span className="text-black/50">{formatCents(s.total_amount)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="flex justify-between font-mono text-xs font-bold mt-1 pt-1 border-t border-amber-200 text-amber-800">
+                                  <span>Scheduled ({personPendingSessions.length} · {pendingHours}hr · {formatCents(pendingGross)} gross)</span>
+                                  <span>60% → {formatCents(pendingPotentialPay)}</span>
+                                </div>
+                                <p className="font-mono text-[10px] text-black/40 mt-1">
+                                  Earnings apply once the session is marked completed.
+                                </p>
+                              </div>
+                            )}
+
                             {/* Period total */}
                             {hasActivity && (
                               <div className="flex justify-between font-mono text-sm font-bold pt-2 border-t-2 border-black/20">
-                                <span>Period Total</span>
+                                <span>Period Total (earned)</span>
                                 <span>{formatCents(sessionPay + mediaTotal)}</span>
                               </div>
                             )}
@@ -1238,14 +1426,59 @@ export default function Accounting() {
                 );
               })}
 
-              {/* Cash Tracking */}
-              {(() => {
-                const owedEntries = cashLedger.filter(e => e.status === 'owed');
-                const collectedEntries = cashLedger.filter(e => e.status === 'collected');
-                const totalOwed = owedEntries.reduce((s, e) => s + e.amount, 0);
-                const totalCollected = collectedEntries.reduce((s, e) => s + e.amount, 0);
+              {/* Cash Tracking
+                  ------------------------------------------------------------------
+                  Three concepts, only two of which are period-scoped:
 
-                // Group owed by engineer
+                  - Cash Owed — all-time liability engineers hold on behalf of the
+                    business. Not period-scoped; always shows everything still
+                    'owed'. Period-scoping this would hide liabilities for old
+                    sessions that nobody has settled, which is the opposite of
+                    what a liability panel is for.
+
+                  - Collected / Deposited this period — period-scoped audit trail.
+                    "What cash moved through our books during this period?"
+
+                  - Still on Hand — cumulative, not period-scoped. Represents
+                    physical cash at the studio that has NOT yet hit the bank.
+                    This is a real-world balance; it doesn't reset with payroll
+                    periods. */}
+              {(() => {
+                const ps = payrollData.periodStart;
+                const pe = payrollData.periodEnd;
+                // Match the existing pattern in this file (line 1030 etc.) — the
+                // period bounds are 'YYYY-MM-DD' strings compared against
+                // ISO timestamps. This under-selects by a few hours on the
+                // exact end-of-period day but is consistent with every other
+                // period filter in this component. Fixing it is a separate task.
+                const inPeriodCreated = (iso: string | null | undefined) =>
+                  !!iso && iso >= ps && iso <= pe;
+                const inPeriodDeposited = (iso: string | null | undefined) =>
+                  !!iso && iso >= ps && iso <= pe;
+
+                const owedEntries = cashLedger.filter(e => e.status === 'owed');
+                // 'collected' now means "at the studio, not yet in the bank" —
+                // this is the true "on hand" liability we want admins to see.
+                const onHandEntries = cashLedger.filter(e => e.status === 'collected');
+                const depositedEntries = cashLedger.filter(e => e.status === 'deposited');
+
+                // Period-scoped views. "Collected this period" includes rows that
+                // later got deposited — the collection event still happened in
+                // the period. We key on created_at (when cash changed hands with
+                // the client) per the agreed-upon design choice.
+                const collectedThisPeriod = cashLedger.filter(
+                  e => (e.status === 'collected' || e.status === 'deposited') && inPeriodCreated(e.created_at)
+                );
+                const depositedThisPeriod = depositedEntries.filter(e =>
+                  inPeriodDeposited(e.deposited_at)
+                );
+
+                const totalOwed = owedEntries.reduce((s, e) => s + e.amount, 0);
+                const totalOnHand = onHandEntries.reduce((s, e) => s + e.amount, 0);
+                const totalCollectedPeriod = collectedThisPeriod.reduce((s, e) => s + e.amount, 0);
+                const totalDepositedPeriod = depositedThisPeriod.reduce((s, e) => s + e.amount, 0);
+
+                // Group owed by engineer (all-time — this is a liability panel)
                 const owedByEngineer: Record<string, { total: number; entries: typeof owedEntries }> = {};
                 owedEntries.forEach(e => {
                   const engName = normalizeName(e.engineer_name) || e.engineer_name;
@@ -1254,11 +1487,28 @@ export default function Accounting() {
                   owedByEngineer[engName].entries.push(e);
                 });
 
-                // Group collected by engineer
-                const collectedByEngineer: Record<string, number> = {};
-                collectedEntries.forEach(e => {
+                // Three separate per-engineer groupings for the three metrics we
+                // show. Keeping them separate (rather than one unified object)
+                // makes it obvious which number is period-scoped vs cumulative
+                // when reading the render code below.
+                const onHandByEngineer: Record<string, number> = {};
+                onHandEntries.forEach(e => {
                   const engName = normalizeName(e.engineer_name) || e.engineer_name;
-                  collectedByEngineer[engName] = (collectedByEngineer[engName] || 0) + e.amount;
+                  onHandByEngineer[engName] = (onHandByEngineer[engName] || 0) + e.amount;
+                });
+
+                const collectedThisPeriodByEngineer: Record<string, number> = {};
+                collectedThisPeriod.forEach(e => {
+                  const engName = normalizeName(e.engineer_name) || e.engineer_name;
+                  collectedThisPeriodByEngineer[engName] =
+                    (collectedThisPeriodByEngineer[engName] || 0) + e.amount;
+                });
+
+                const depositedThisPeriodByEngineer: Record<string, number> = {};
+                depositedThisPeriod.forEach(e => {
+                  const engName = normalizeName(e.engineer_name) || e.engineer_name;
+                  depositedThisPeriodByEngineer[engName] =
+                    (depositedThisPeriodByEngineer[engName] || 0) + e.amount;
                 });
 
                 return (
@@ -1308,30 +1558,127 @@ export default function Accounting() {
                       </div>
                     )}
 
-                    {/* Cash collected summary — always visible if any cash has been collected */}
-                    {totalCollected > 0 && (
-                      <div className="border-2 border-green-200 bg-green-50/30 p-4 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <h3 className="font-mono text-sm font-bold uppercase tracking-wider text-green-700">Cash Collected (On Hand)</h3>
-                          <span className="font-mono text-lg font-bold text-green-700">{formatCents(totalCollected)}</span>
-                        </div>
-                        <p className="font-mono text-xs text-black/60">Cash payments collected from engineers and turned in to the business.</p>
-                        <div className="space-y-1">
-                          {Object.entries(collectedByEngineer).sort((a, b) => b[1] - a[1]).map(([name, amount]) => (
-                            <div key={name} className="flex justify-between font-mono text-sm border-b border-green-100 py-1">
-                              <span className="text-black/70">{name}</span>
-                              <span className="font-bold text-green-700">{formatCents(amount)}</span>
-                            </div>
-                          ))}
-                        </div>
-                        {totalOwed > 0 && (
-                          <div className="flex justify-between font-mono text-xs pt-2 border-t border-green-200">
-                            <span className="text-black/60">Still outstanding from engineers</span>
-                            <span className="text-red-600 font-bold">{formatCents(totalOwed)}</span>
-                          </div>
-                        )}
+                    {/* Cash Flow — three-part split.
+                        Render unconditionally (even when all zeros) so admins
+                        can always find the "Record Bank Deposit" action; cash
+                        panels that vanish when empty are worse than empty panels. */}
+                    <div className="border-2 border-green-200 bg-green-50/30 p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-mono text-sm font-bold uppercase tracking-wider text-green-700">
+                          Cash Flow
+                        </h3>
+                        <span className="font-mono text-[10px] text-black/50 uppercase tracking-wider">
+                          {payrollData.periodLabel}
+                        </span>
                       </div>
-                    )}
+
+                      {/* Three headline metrics */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="border border-green-300 bg-white/60 p-3">
+                          <p className="font-mono text-[10px] uppercase tracking-wider text-black/50">
+                            Collected this period
+                          </p>
+                          <p className="font-mono text-xl font-bold text-green-700 mt-1">
+                            {formatCents(totalCollectedPeriod)}
+                          </p>
+                          <p className="font-mono text-[10px] text-black/40 mt-1">
+                            Cash earned from clients · {collectedThisPeriod.length} entries
+                          </p>
+                        </div>
+                        <div className="border border-blue-300 bg-white/60 p-3">
+                          <p className="font-mono text-[10px] uppercase tracking-wider text-black/50">
+                            Deposited this period
+                          </p>
+                          <p className="font-mono text-xl font-bold text-blue-700 mt-1">
+                            {formatCents(totalDepositedPeriod)}
+                          </p>
+                          <p className="font-mono text-[10px] text-black/40 mt-1">
+                            Taken to the bank · {depositedThisPeriod.length} entries
+                          </p>
+                        </div>
+                        <div className="border-2 border-amber-400 bg-amber-50 p-3">
+                          <p className="font-mono text-[10px] uppercase tracking-wider text-black/50">
+                            Still on hand (all time)
+                          </p>
+                          <p className="font-mono text-xl font-bold text-amber-700 mt-1">
+                            {formatCents(totalOnHand)}
+                          </p>
+                          <p className="font-mono text-[10px] text-black/40 mt-1">
+                            Collected but not yet deposited · {onHandEntries.length} entries
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Per-engineer breakdown table. Shows all three columns
+                          side-by-side so discrepancies are visible at a glance
+                          (e.g., someone with $500 on hand and $0 collected this
+                          period = old cash that needs depositing). */}
+                      {(() => {
+                        const allNames = new Set<string>([
+                          ...Object.keys(onHandByEngineer),
+                          ...Object.keys(collectedThisPeriodByEngineer),
+                          ...Object.keys(depositedThisPeriodByEngineer),
+                        ]);
+                        if (allNames.size === 0) return null;
+                        const rows = Array.from(allNames).sort((a, b) =>
+                          (onHandByEngineer[b] || 0) - (onHandByEngineer[a] || 0)
+                        );
+                        return (
+                          <div className="border border-green-200 bg-white/40">
+                            <div className="grid grid-cols-4 gap-2 px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-black/50 border-b border-green-200">
+                              <span>Engineer</span>
+                              <span className="text-right text-green-700">Collected (period)</span>
+                              <span className="text-right text-blue-700">Deposited (period)</span>
+                              <span className="text-right text-amber-700">On Hand</span>
+                            </div>
+                            {rows.map(name => (
+                              <div key={name} className="grid grid-cols-4 gap-2 px-3 py-1.5 font-mono text-xs border-b border-green-100 last:border-b-0">
+                                <span className="text-black/70">{name}</span>
+                                <span className="text-right text-green-700">
+                                  {formatCents(collectedThisPeriodByEngineer[name] || 0)}
+                                </span>
+                                <span className="text-right text-blue-700">
+                                  {formatCents(depositedThisPeriodByEngineer[name] || 0)}
+                                </span>
+                                <span className="text-right font-bold text-amber-700">
+                                  {formatCents(onHandByEngineer[name] || 0)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
+
+                      {/* Record Deposit action. Disabled when nothing is on
+                          hand — the server would reject the empty batch, but
+                          disabling here keeps the UI honest. */}
+                      <div className="flex items-center justify-between pt-2 border-t border-green-200">
+                        <p className="font-mono text-[11px] text-black/60">
+                          Ready to deposit cash at the bank?
+                        </p>
+                        <button
+                          type="button"
+                          disabled={totalOnHand === 0}
+                          onClick={() => {
+                            setDepositSelectedIds(new Set());
+                            setDepositReference('');
+                            setDepositNote('');
+                            setDepositError(null);
+                            setShowDepositModal(true);
+                          }}
+                          className="font-mono text-xs font-bold uppercase tracking-wider px-3 py-2 border-2 border-blue-600 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          Record Bank Deposit
+                        </button>
+                      </div>
+
+                      {totalOwed > 0 && (
+                        <div className="flex justify-between font-mono text-xs pt-2 border-t border-green-200">
+                          <span className="text-black/60">Still outstanding from engineers (all time)</span>
+                          <span className="text-red-600 font-bold">{formatCents(totalOwed)}</span>
+                        </div>
+                      )}
+                    </div>
                   </>
                 );
               })()}
@@ -1626,6 +1973,205 @@ export default function Accounting() {
           )}
         </>
       )}
+
+      {/* Record Bank Deposit modal.
+          Rendered at the top level so it overlays the whole page regardless
+          of which tab the admin is on. The modal lists every cash_ledger row
+          currently in status='collected' (cash at the studio that hasn't been
+          deposited yet). The admin checks the rows that match the physical
+          deposit slip and submits — one cash_events row is created and each
+          selected ledger row is flipped to status='deposited' in an atomic
+          batch on the server. */}
+      {showDepositModal && (() => {
+        const available = cashLedger
+          .filter(e => e.status === 'collected')
+          .sort((a, b) => (a.created_at > b.created_at ? -1 : 1));
+        const selectedTotal = available
+          .filter(e => depositSelectedIds.has(e.id))
+          .reduce((s, e) => s + e.amount, 0);
+        const allSelected = available.length > 0 && available.every(e => depositSelectedIds.has(e.id));
+
+        const toggle = (id: string) => {
+          setDepositSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+          });
+        };
+
+        const toggleAll = () => {
+          setDepositSelectedIds(prev => {
+            if (available.every(e => prev.has(e.id))) return new Set();
+            return new Set(available.map(e => e.id));
+          });
+        };
+
+        return (
+          <div
+            className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+            onClick={() => !depositSubmitting && setShowDepositModal(false)}
+          >
+            <div
+              className="bg-white border-2 border-black max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="border-b-2 border-black p-4 flex items-center justify-between">
+                <div>
+                  <h2 className="font-heading text-2xl">Record Bank Deposit</h2>
+                  <p className="font-mono text-xs text-black/60 mt-1">
+                    Select the cash entries included in this deposit. Only entries
+                    currently &quot;collected&quot; (not yet deposited) can be selected.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => !depositSubmitting && setShowDepositModal(false)}
+                  className="font-mono text-sm px-3 py-1 border border-black/20 hover:bg-black/5"
+                >
+                  Close
+                </button>
+              </div>
+
+              {/* Accounting-issue warning panel. Shown when the server rejected
+                  the submitted batch because one or more entries were not in
+                  the required 'collected' state. We show the issues verbatim
+                  so the admin can fix them before retrying. */}
+              {depositError && (
+                <div className="bg-red-50 border-b-2 border-red-400 p-4">
+                  <p className="font-mono text-sm font-bold text-red-700 uppercase tracking-wider">
+                    Accounting issues detected
+                  </p>
+                  <p className="font-mono text-xs text-red-800 mt-2">{depositError.warning}</p>
+                  <ul className="font-mono text-xs text-red-800 mt-2 space-y-1">
+                    {depositError.issues.map((issue, i) => (
+                      <li key={i} className="list-disc list-inside">
+                        <span className="text-black/50">{issue.entryId.slice(0, 8)}…</span>{' '}
+                        — {issue.reason}
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="font-mono text-[11px] text-red-700 mt-3">
+                    Resolve each issue (record collection, remove duplicate, or uncheck the entry)
+                    before retrying.
+                  </p>
+                </div>
+              )}
+
+              {/* Entry list */}
+              <div className="flex-1 overflow-y-auto">
+                {available.length === 0 ? (
+                  <p className="font-mono text-sm text-black/60 text-center py-12">
+                    No collected cash available to deposit.
+                  </p>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-12 gap-2 px-4 py-2 border-b border-black/10 font-mono text-[10px] uppercase tracking-wider text-black/50 sticky top-0 bg-white">
+                      <div className="col-span-1">
+                        <input
+                          type="checkbox"
+                          checked={allSelected}
+                          onChange={toggleAll}
+                          aria-label="Select all"
+                        />
+                      </div>
+                      <div className="col-span-2">Date</div>
+                      <div className="col-span-3">Engineer</div>
+                      <div className="col-span-4">Client / Note</div>
+                      <div className="col-span-2 text-right">Amount</div>
+                    </div>
+                    {available.map(e => {
+                      const checked = depositSelectedIds.has(e.id);
+                      return (
+                        <label
+                          key={e.id}
+                          className={`grid grid-cols-12 gap-2 px-4 py-2 border-b border-black/5 font-mono text-xs cursor-pointer hover:bg-black/[0.02] ${
+                            checked ? 'bg-blue-50' : ''
+                          }`}
+                        >
+                          <div className="col-span-1">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggle(e.id)}
+                            />
+                          </div>
+                          <div className="col-span-2 text-black/70">
+                            {new Date(e.created_at).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: '2-digit',
+                            })}
+                          </div>
+                          <div className="col-span-3">
+                            {normalizeName(e.engineer_name) || e.engineer_name}
+                          </div>
+                          <div className="col-span-4 text-black/60 truncate">
+                            {e.client_name || '—'}
+                            {e.note ? ` · ${e.note}` : ''}
+                          </div>
+                          <div className="col-span-2 text-right font-bold">
+                            {formatCents(e.amount)}
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </>
+                )}
+              </div>
+
+              {/* Reference + note + submit */}
+              <div className="border-t-2 border-black p-4 space-y-3 bg-black/[0.02]">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-black/60">
+                      Reference / Slip #
+                    </span>
+                    <input
+                      type="text"
+                      value={depositReference}
+                      onChange={e => setDepositReference(e.target.value)}
+                      placeholder="e.g. Slip 04-20 or check #"
+                      className="w-full border border-black/20 p-2 font-mono text-sm mt-1"
+                      disabled={depositSubmitting}
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-black/60">
+                      Note (optional)
+                    </span>
+                    <input
+                      type="text"
+                      value={depositNote}
+                      onChange={e => setDepositNote(e.target.value)}
+                      placeholder="Any extra context"
+                      className="w-full border border-black/20 p-2 font-mono text-sm mt-1"
+                      disabled={depositSubmitting}
+                    />
+                  </label>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-black/10">
+                  <div>
+                    <p className="font-mono text-[10px] uppercase tracking-wider text-black/50">
+                      Selected {depositSelectedIds.size} of {available.length}
+                    </p>
+                    <p className="font-mono text-xl font-bold">{formatCents(selectedTotal)}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={submitDeposit}
+                    disabled={depositSubmitting || depositSelectedIds.size === 0}
+                    className="font-mono text-sm font-bold uppercase tracking-wider px-4 py-2 border-2 border-blue-600 bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {depositSubmitting ? 'Recording…' : 'Record Deposit'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
