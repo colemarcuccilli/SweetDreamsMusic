@@ -1152,7 +1152,14 @@ export default function Accounting() {
                                 </button>
                               </div>
                             ) : (
-                              data.periodPending.count > 0 ? <span className="text-amber-700 text-xs">AWAITING</span> : 'PAID'
+                              // Balance is $0 → the person is caught up. We
+                              // never pre-pay, so scheduled-but-not-completed
+                              // sessions don't mean "we owe them." They mean
+                              // "future earnings." The Pending (period)
+                              // column already surfaces that — keeping this
+                              // column as a crisp PAID answer avoids the
+                              // misleading AWAITING state from before.
+                              <span className="text-green-600">PAID</span>
                             )}
                           </td>
                         </tr>
@@ -1206,14 +1213,19 @@ export default function Accounting() {
                     key={name}
                     id={`paystub-${slugifyName(name)}`}
                     title={`${name} — ${
+                      // Primary state: are they owed money right now?
+                      // Paid-in-full leads; scheduled work is informational,
+                      // not a payment-pending state (we never pre-pay).
                       data.balance > 0
                         ? `${formatCents(data.balance)} owed`
-                        : data.periodPending.count > 0 && data.periodTotal === 0
-                        ? `AWAITING · ${data.periodPending.count} session${data.periodPending.count !== 1 ? 's' : ''} scheduled`
                         : 'PAID IN FULL'
                     }${data.periodTotal > 0 ? ` · ${formatCents(data.periodTotal)} this period` : ''}${
-                      data.periodPending.count > 0 && data.periodTotal > 0
-                        ? ` · ${formatCents(data.periodPending.potentialPay)} pending`
+                      // Scheduled-but-not-completed shows as secondary
+                      // context in both "owed" and "paid" states. When the
+                      // session is marked completed it'll move into the
+                      // period total and (if unpaid) into the balance.
+                      data.periodPending.count > 0
+                        ? ` · ${formatCents(data.periodPending.potentialPay)} scheduled (${data.periodPending.count})`
                         : ''
                     }`}
                     expanded={expandedSection === `payroll-${name}`}
