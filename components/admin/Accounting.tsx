@@ -1428,21 +1428,32 @@ export default function Accounting() {
 
               {/* Cash Tracking
                   ------------------------------------------------------------------
-                  Three concepts, only two of which are period-scoped:
+                  Every number in this panel is scoped to the selected pay period.
+                  The ONLY exceptions are:
 
-                  - Cash Owed — all-time liability engineers hold on behalf of the
-                    business. Not period-scoped; always shows everything still
-                    'owed'. Period-scoping this would hide liabilities for old
-                    sessions that nobody has settled, which is the opposite of
-                    what a liability panel is for.
+                  - Cash Owed (red panel above) — a liability that doesn't reset
+                    with a period. If an engineer owes us from 3 months ago,
+                    we still need to see it regardless of the current period.
 
-                  - Collected / Deposited this period — period-scoped audit trail.
-                    "What cash moved through our books during this period?"
+                  - "All-time cash on hand" line in the footer — purely a
+                    reconciliation fact ("the safe should contain $X total"),
+                    shown in tiny text so it doesn't compete with the period
+                    view. This is what admins count against physical cash.
 
-                  - Still on Hand — cumulative, not period-scoped. Represents
-                    physical cash at the studio that has NOT yet hit the bank.
-                    This is a real-world balance; it doesn't reset with payroll
-                    periods. */}
+                  Period scoping rules:
+                  - Collected (period): row's created_at falls in period AND
+                    row is now collected-or-deposited (not 'owed'). This is
+                    "cash that entered our books during this period."
+                  - Deposited (period): row's deposited_at falls in period.
+                    "Cash that hit the bank during this period."
+                  - On Hand (period): row's created_at falls in period AND
+                    status is still 'collected'. "Cash from this period that
+                    hasn't been banked yet."
+
+                  If the period is Apr 16–30 and Zion's entry was Apr 10, he
+                  won't appear here at all — his cash belongs to the Apr 1–15
+                  period. That's the behavior the earlier "shows Zion in Apr
+                  16–30 even though he had no sessions" bug was about. */}
               {(() => {
                 const ps = payrollData.periodStart;
                 const pe = payrollData.periodEnd;
@@ -1451,32 +1462,43 @@ export default function Accounting() {
                 // ISO timestamps. This under-selects by a few hours on the
                 // exact end-of-period day but is consistent with every other
                 // period filter in this component. Fixing it is a separate task.
-                const inPeriodCreated = (iso: string | null | undefined) =>
-                  !!iso && iso >= ps && iso <= pe;
-                const inPeriodDeposited = (iso: string | null | undefined) =>
+                const inPeriod = (iso: string | null | undefined) =>
                   !!iso && iso >= ps && iso <= pe;
 
                 const owedEntries = cashLedger.filter(e => e.status === 'owed');
-                // 'collected' now means "at the studio, not yet in the bank" —
-                // this is the true "on hand" liability we want admins to see.
-                const onHandEntries = cashLedger.filter(e => e.status === 'collected');
-                const depositedEntries = cashLedger.filter(e => e.status === 'deposited');
 
-                // Period-scoped views. "Collected this period" includes rows that
-                // later got deposited — the collection event still happened in
-                // the period. We key on created_at (when cash changed hands with
-                // the client) per the agreed-upon design choice.
-                const collectedThisPeriod = cashLedger.filter(
-                  e => (e.status === 'collected' || e.status === 'deposited') && inPeriodCreated(e.created_at)
-                );
-                const depositedThisPeriod = depositedEntries.filter(e =>
-                  inPeriodDeposited(e.deposited_at)
-                );
-
+                // ── All-time views (used for owed panel + reconciliation footer)
+                const allCollectedOnHand = cashLedger.filter(e => e.status === 'collected');
                 const totalOwed = owedEntries.reduce((s, e) => s + e.amount, 0);
-                const totalOnHand = onHandEntries.reduce((s, e) => s + e.amount, 0);
+                const totalOnHandAllTime = allCollectedOnHand.reduce((s, e) => s + e.amount, 0);
+
+                // ── Period-scoped views — the three numbers in the cards
+                //
+                // Collected (period) — rows whose collection event happened in
+                // the period, regardless of current status. A row that was
+                // collected in-period and then deposited in-period counts
+                // here too.
+                const collectedThisPeriod = cashLedger.filter(
+                  e => (e.status === 'collected' || e.status === 'deposited') && inPeriod(e.created_at)
+                );
+                // Deposited (period) — rows whose deposit event happened in
+                // the period. Deposit date can be different from collection
+                // date; what matters here is when it hit the bank.
+                const depositedThisPeriod = cashLedger.filter(
+                  e => e.status === 'deposited' && inPeriod(e.deposited_at)
+                );
+                // On hand (period) — rows collected IN the period that are
+                // STILL on hand (status='collected', not yet deposited). This
+                // is the bucket the period-scoped per-engineer "On Hand"
+                // number now answers; it's what makes Zion's Apr 10 entry
+                // correctly disappear when the Apr 16–30 period is selected.
+                const onHandThisPeriod = cashLedger.filter(
+                  e => e.status === 'collected' && inPeriod(e.created_at)
+                );
+
                 const totalCollectedPeriod = collectedThisPeriod.reduce((s, e) => s + e.amount, 0);
                 const totalDepositedPeriod = depositedThisPeriod.reduce((s, e) => s + e.amount, 0);
+                const totalOnHandPeriod = onHandThisPeriod.reduce((s, e) => s + e.amount, 0);
 
                 // Group owed by engineer (all-time — this is a liability panel)
                 const owedByEngineer: Record<string, { total: number; entries: typeof owedEntries }> = {};
@@ -1487,14 +1509,15 @@ export default function Accounting() {
                   owedByEngineer[engName].entries.push(e);
                 });
 
-                // Three separate per-engineer groupings for the three metrics we
-                // show. Keeping them separate (rather than one unified object)
-                // makes it obvious which number is period-scoped vs cumulative
-                // when reading the render code below.
-                const onHandByEngineer: Record<string, number> = {};
-                onHandEntries.forEach(e => {
+                // Three separate per-engineer groupings for the three period-
+                // scoped metrics. Keeping them separate (rather than one
+                // unified object) makes it obvious which number answers which
+                // question when reading the render code below.
+                const onHandThisPeriodByEngineer: Record<string, number> = {};
+                onHandThisPeriod.forEach(e => {
                   const engName = normalizeName(e.engineer_name) || e.engineer_name;
-                  onHandByEngineer[engName] = (onHandByEngineer[engName] || 0) + e.amount;
+                  onHandThisPeriodByEngineer[engName] =
+                    (onHandThisPeriodByEngineer[engName] || 0) + e.amount;
                 });
 
                 const collectedThisPeriodByEngineer: Record<string, number> = {};
@@ -1572,11 +1595,15 @@ export default function Accounting() {
                         </span>
                       </div>
 
-                      {/* Three headline metrics */}
+                      {/* Three headline metrics — ALL period-scoped now.
+                          A stand-alone "all-time on hand" reconciliation line
+                          is shown in the footer below, not here, so the three
+                          cards answer one consistent question: "what's going
+                          on in this pay period?" */}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div className="border border-green-300 bg-white/60 p-3">
                           <p className="font-mono text-[10px] uppercase tracking-wider text-black/50">
-                            Collected this period
+                            Collected (period)
                           </p>
                           <p className="font-mono text-xl font-bold text-green-700 mt-1">
                             {formatCents(totalCollectedPeriod)}
@@ -1587,7 +1614,7 @@ export default function Accounting() {
                         </div>
                         <div className="border border-blue-300 bg-white/60 p-3">
                           <p className="font-mono text-[10px] uppercase tracking-wider text-black/50">
-                            Deposited this period
+                            Deposited (period)
                           </p>
                           <p className="font-mono text-xl font-bold text-blue-700 mt-1">
                             {formatCents(totalDepositedPeriod)}
@@ -1598,30 +1625,39 @@ export default function Accounting() {
                         </div>
                         <div className="border-2 border-amber-400 bg-amber-50 p-3">
                           <p className="font-mono text-[10px] uppercase tracking-wider text-black/50">
-                            Still on hand (all time)
+                            On Hand (period)
                           </p>
                           <p className="font-mono text-xl font-bold text-amber-700 mt-1">
-                            {formatCents(totalOnHand)}
+                            {formatCents(totalOnHandPeriod)}
                           </p>
                           <p className="font-mono text-[10px] text-black/40 mt-1">
-                            Collected but not yet deposited · {onHandEntries.length} entries
+                            From this period, not yet deposited · {onHandThisPeriod.length} entries
                           </p>
                         </div>
                       </div>
 
-                      {/* Per-engineer breakdown table. Shows all three columns
-                          side-by-side so discrepancies are visible at a glance
-                          (e.g., someone with $500 on hand and $0 collected this
-                          period = old cash that needs depositing). */}
+                      {/* Per-engineer breakdown table. ALL three columns are
+                          period-scoped — an engineer who had no cash event
+                          (collection OR deposit) within the selected period
+                          won't appear here at all. This is what fixes the
+                          "Zion shows cash in a period he didn't work" bug. */}
                       {(() => {
                         const allNames = new Set<string>([
-                          ...Object.keys(onHandByEngineer),
+                          ...Object.keys(onHandThisPeriodByEngineer),
                           ...Object.keys(collectedThisPeriodByEngineer),
                           ...Object.keys(depositedThisPeriodByEngineer),
                         ]);
-                        if (allNames.size === 0) return null;
+                        if (allNames.size === 0) {
+                          return (
+                            <div className="border border-green-200 bg-white/40 px-3 py-4 text-center">
+                              <p className="font-mono text-xs text-black/40">
+                                No cash activity in {payrollData.periodLabel}.
+                              </p>
+                            </div>
+                          );
+                        }
                         const rows = Array.from(allNames).sort((a, b) =>
-                          (onHandByEngineer[b] || 0) - (onHandByEngineer[a] || 0)
+                          (onHandThisPeriodByEngineer[b] || 0) - (onHandThisPeriodByEngineer[a] || 0)
                         );
                         return (
                           <div className="border border-green-200 bg-white/40">
@@ -1629,7 +1665,7 @@ export default function Accounting() {
                               <span>Engineer</span>
                               <span className="text-right text-green-700">Collected (period)</span>
                               <span className="text-right text-blue-700">Deposited (period)</span>
-                              <span className="text-right text-amber-700">On Hand</span>
+                              <span className="text-right text-amber-700">On Hand (period)</span>
                             </div>
                             {rows.map(name => (
                               <div key={name} className="grid grid-cols-4 gap-2 px-3 py-1.5 font-mono text-xs border-b border-green-100 last:border-b-0">
@@ -1641,7 +1677,7 @@ export default function Accounting() {
                                   {formatCents(depositedThisPeriodByEngineer[name] || 0)}
                                 </span>
                                 <span className="text-right font-bold text-amber-700">
-                                  {formatCents(onHandByEngineer[name] || 0)}
+                                  {formatCents(onHandThisPeriodByEngineer[name] || 0)}
                                 </span>
                               </div>
                             ))}
@@ -1649,16 +1685,19 @@ export default function Accounting() {
                         );
                       })()}
 
-                      {/* Record Deposit action. Disabled when nothing is on
-                          hand — the server would reject the empty batch, but
-                          disabling here keeps the UI honest. */}
+                      {/* Record Deposit action. Uses the ALL-TIME on-hand
+                          total for its gating — depositing is a physical
+                          action against the whole safe, not just what was
+                          collected this period. The modal itself shows every
+                          'collected' row with its period, so admins pick
+                          knowingly. */}
                       <div className="flex items-center justify-between pt-2 border-t border-green-200">
                         <p className="font-mono text-[11px] text-black/60">
                           Ready to deposit cash at the bank?
                         </p>
                         <button
                           type="button"
-                          disabled={totalOnHand === 0}
+                          disabled={totalOnHandAllTime === 0}
                           onClick={() => {
                             setDepositSelectedIds(new Set());
                             setDepositReference('');
@@ -1672,12 +1711,25 @@ export default function Accounting() {
                         </button>
                       </div>
 
-                      {totalOwed > 0 && (
-                        <div className="flex justify-between font-mono text-xs pt-2 border-t border-green-200">
-                          <span className="text-black/60">Still outstanding from engineers (all time)</span>
-                          <span className="text-red-600 font-bold">{formatCents(totalOwed)}</span>
+                      {/* Reconciliation footer — all-time facts.
+                          Everything above is period-scoped so the numbers
+                          stay consistent with the selected pay period. The
+                          facts here are what admins count against the
+                          physical safe + the bank, regardless of period. */}
+                      <div className="pt-2 border-t border-green-200 space-y-1">
+                        <div className="flex justify-between font-mono text-xs">
+                          <span className="text-black/60">All-time cash still on hand (across every period)</span>
+                          <span className="text-amber-700 font-bold">
+                            {formatCents(totalOnHandAllTime)} · {allCollectedOnHand.length} entries
+                          </span>
                         </div>
-                      )}
+                        {totalOwed > 0 && (
+                          <div className="flex justify-between font-mono text-xs">
+                            <span className="text-black/60">Still outstanding from engineers (all time)</span>
+                            <span className="text-red-600 font-bold">{formatCents(totalOwed)}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </>
                 );
