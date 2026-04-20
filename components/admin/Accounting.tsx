@@ -111,6 +111,16 @@ function normalizeName(raw: string | null): string | null {
   return NAME_MAP[trimmed.toLowerCase()] || trimmed;
 }
 
+// URL/DOM-id-safe slug for names. Only used for scroll anchors on paystub
+// cards — not shown to users, not stored in DB. Falls back to a generic
+// token if the input is empty so we never emit `id=""`.
+function slugifyName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '') || 'unknown';
+}
+
 export default function Accounting() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [beatPurchases, setBeatPurchases] = useState<BeatPurchase[]>([]);
@@ -141,6 +151,12 @@ export default function Accounting() {
   const [payoutAmount, setPayoutAmount] = useState('');
   const [payoutMethod, setPayoutMethod] = useState('cash');
   const [payoutNote, setPayoutNote] = useState('');
+  // The pay period this payout is being recorded *for*. Defaults to the
+  // currently-viewed pay period when the form opens, but the admin can
+  // override — e.g., paying someone in April for work done in March. We
+  // keep this separate from `payrollData.periodLabel` (the dropdown view)
+  // so changing the view doesn't silently re-label an in-progress payout.
+  const [payoutPeriodLabel, setPayoutPeriodLabel] = useState('');
   const [recordingPayout, setRecordingPayout] = useState(false);
 
   // Deposit modal state — admins use this to move cash from 'collected' to 'deposited'
@@ -216,7 +232,10 @@ export default function Accounting() {
         amount: parseFloat(payoutAmount),
         method: payoutMethod,
         note: payoutNote || null,
-        periodLabel: payrollData.periodLabel,
+        // Explicit period label chosen on the form; fall back to the
+        // currently-viewed period for safety if the form never set one
+        // (shouldn't happen via the real UI path, but defends the POST).
+        periodLabel: payoutPeriodLabel || payrollData.periodLabel,
         earnings: earningsData || null,
       }),
     });
@@ -227,6 +246,7 @@ export default function Accounting() {
       setPayoutAmount('');
       setPayoutNote('');
       setPayoutMethod('cash');
+      setPayoutPeriodLabel('');
     } else {
       alert(`Failed: ${data.error}`);
     }
@@ -1097,7 +1117,43 @@ export default function Accounting() {
                             {data.allTimePaid > 0 ? formatCents(data.allTimePaid) : <span className="text-black/30">—</span>}
                           </td>
                           <td className={`font-mono text-sm text-right font-bold border-l-2 border-black/10 ${data.balance > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                            {data.balance > 0 ? formatCents(data.balance) : (data.periodPending.count > 0 ? <span className="text-amber-700 text-xs">AWAITING</span> : 'PAID')}
+                            {data.balance > 0 ? (
+                              <div className="flex items-center justify-end gap-2">
+                                <span>{formatCents(data.balance)}</span>
+                                {/* Quick-pay shortcut. Opens the paystub card,
+                                    pre-fills the form with the balance +
+                                    currently-viewed period as the default,
+                                    and scrolls the card into view so the
+                                    admin doesn't have to hunt for it.
+                                    The period is a pre-fill, not a lock —
+                                    the form has a dropdown to change it. */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const key = `payroll-${name}`;
+                                    setExpandedSection(key);
+                                    setShowPayoutForm(name);
+                                    setPayoutAmount((data.balance / 100).toFixed(2));
+                                    setPayoutPeriodLabel(payrollData.periodLabel);
+                                    setPayoutMethod('cash');
+                                    setPayoutNote('');
+                                    // Defer scroll one frame so the card has
+                                    // a chance to render expanded before we
+                                    // try to anchor on it.
+                                    requestAnimationFrame(() => {
+                                      const el = document.getElementById(`paystub-${slugifyName(name)}`);
+                                      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                    });
+                                  }}
+                                  className="font-mono text-[10px] font-bold uppercase tracking-wider border border-green-600 text-green-700 px-2 py-0.5 hover:bg-green-50"
+                                  title={`Record payout for ${name}`}
+                                >
+                                  Pay
+                                </button>
+                              </div>
+                            ) : (
+                              data.periodPending.count > 0 ? <span className="text-amber-700 text-xs">AWAITING</span> : 'PAID'
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -1148,6 +1204,7 @@ export default function Accounting() {
                 return (
                   <BreakdownSection
                     key={name}
+                    id={`paystub-${slugifyName(name)}`}
                     title={`${name} — ${
                       data.balance > 0
                         ? `${formatCents(data.balance)} owed`
@@ -1393,6 +1450,30 @@ export default function Accounting() {
                                   </select>
                                 </div>
                               </div>
+                              {/* Pay-period selector.
+                                  Defaults to whatever period is currently in
+                                  the top dropdown, but the admin can
+                                  override — common cases:
+                                  - paying late (e.g., recording a March
+                                    payout while viewing April)
+                                  - paying forward (Friday payout for a
+                                    period that officially ends Sunday)
+                                  We reuse `payPeriods` so the option set
+                                  matches the top dropdown exactly. */}
+                              <div>
+                                <label className="font-mono text-[10px] text-black/60">Pay Period (what this payout is for)</label>
+                                <select
+                                  value={payoutPeriodLabel}
+                                  onChange={(e) => setPayoutPeriodLabel(e.target.value)}
+                                  className="w-full border border-black/20 px-2 py-1.5 font-mono text-xs bg-white"
+                                >
+                                  {payPeriods.map((p, i) => (
+                                    <option key={i} value={p.label}>
+                                      {p.label}{p.label === payrollData.periodLabel ? ' (current view)' : ''}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
                               <input type="text" value={payoutNote} onChange={(e) => setPayoutNote(e.target.value)}
                                 placeholder="Note (optional)" className="w-full border border-black/20 px-2 py-1.5 font-mono text-xs" />
                               <div className="flex gap-2">
@@ -1409,12 +1490,19 @@ export default function Accounting() {
                                   className="bg-green-600 text-white font-mono text-xs font-bold px-4 py-2 hover:bg-green-700 disabled:opacity-50">
                                   {recordingPayout ? 'Recording...' : 'Record Payout'}
                                 </button>
-                                <button onClick={() => setShowPayoutForm(null)}
+                                <button onClick={() => { setShowPayoutForm(null); setPayoutPeriodLabel(''); }}
                                   className="font-mono text-xs text-black/60 hover:text-black px-3 py-2">Cancel</button>
                               </div>
                             </div>
                           ) : (
-                            <button onClick={() => { setShowPayoutForm(name); setPayoutAmount((data.balance / 100).toFixed(2)); }}
+                            <button onClick={() => {
+                                setShowPayoutForm(name);
+                                setPayoutAmount((data.balance / 100).toFixed(2));
+                                // Initialize the period picker so the first
+                                // thing the admin sees is "the period you're
+                                // currently viewing" — overridable.
+                                setPayoutPeriodLabel(payrollData.periodLabel);
+                              }}
                               className="w-full border-2 border-green-600 text-green-700 font-mono text-xs font-bold uppercase py-2 hover:bg-green-50">
                               Record Payout — {formatCents(data.balance)} owed
                             </button>
@@ -2249,9 +2337,12 @@ function MiniStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function BreakdownSection({ title, expanded, onToggle, children }: { title: string; expanded: boolean; onToggle: () => void; children: React.ReactNode }) {
+function BreakdownSection({ id, title, expanded, onToggle, children }: { id?: string; title: string; expanded: boolean; onToggle: () => void; children: React.ReactNode }) {
+  // The optional `id` lets callers scroll to the section (e.g., clicking a
+  // "Pay" button in an overview table that needs to expand + focus this
+  // specific paystub card).
   return (
-    <div className="border border-black/10">
+    <div id={id} className="border border-black/10 scroll-mt-4">
       <button onClick={onToggle} className="w-full flex items-center justify-between p-4 hover:bg-black/[0.02] transition-colors">
         <h3 className="font-mono text-sm font-bold uppercase tracking-wider">{title}</h3>
         <ChevronDown className={`w-4 h-4 text-black/30 transition-transform ${expanded ? 'rotate-180' : ''}`} />
