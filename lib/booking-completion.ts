@@ -16,6 +16,50 @@ type SupabaseClient = any;
 export const COMPLETION_GRACE_MINUTES = 30;
 export const FW_TZ = 'America/Indiana/Indianapolis';
 
+/**
+ * App timezone convention — read before touching any date math here.
+ *
+ * Bookings store `start_time` / `end_time` as `timestamptz` values whose
+ * clock digits represent Fort Wayne WALL-CLOCK time, tagged with a `+00`
+ * UTC suffix even though the digits are not real UTC. Every display call
+ * in the codebase uses `toLocale*('en-US', { timeZone: 'UTC' })` to
+ * unpack the digits back out as-is (74+ call sites). See
+ * components/engineer/EngineerSessions.tsx:340 for an example.
+ *
+ * Consequence: any comparison of stored timestamps to `Date.now()` (which
+ * is real UTC) will be off by the Fort Wayne→UTC offset (−4h EDT, −5h EST).
+ *
+ * `fortWayneWallClockMsNow()` returns the current Fort Wayne wall time
+ * as an epoch ms treating those wall-clock digits as if they were UTC —
+ * which is the same space the stored timestamps live in. Compare against
+ * `new Date(storedIso).getTime()` freely; both are wall-clock-as-ms.
+ */
+function fortWayneWallClockMsNow(): number {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: FW_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(now);
+  const get = (type: string) => Number(parts.find(p => p.type === type)?.value ?? '0');
+  // Intl sometimes renders midnight as "24" in en-US hour12:false output.
+  const hourRaw = get('hour');
+  const hour = hourRaw === 24 ? 0 : hourRaw;
+  return Date.UTC(
+    get('year'),
+    get('month') - 1,
+    get('day'),
+    hour,
+    get('minute'),
+    get('second')
+  );
+}
+
 export type CompletionReason =
   | 'already_completed'
   | 'cancelled'
@@ -63,9 +107,13 @@ function reasonToMessage(r: CompletionReason, d: CompletionDetails): string {
       const m = d.minutesUntilAllowed;
       if (m < 0) return 'No scheduled end time — cannot determine completion window.';
       if (m === 0) return 'Too early — wait until 30 minutes before the session ends.';
+      // Stored end_time's digits are Fort Wayne wall clock (per the
+      // app's `+00`-means-local convention), so we unpack them with
+      // timeZone: 'UTC' to avoid a double-conversion that would offset
+      // the displayed time by −4h / −5h.
       const endLocal = d.scheduledEnd
         ? new Date(d.scheduledEnd).toLocaleString('en-US', {
-            timeZone: FW_TZ,
+            timeZone: 'UTC',
             hour: 'numeric',
             minute: '2-digit',
             hour12: true,
@@ -139,7 +187,10 @@ export async function checkCanComplete(
   }
 
   // --- Time gate ---
-  const nowMs = Date.now();
+  // Compare Fort Wayne wall-clock-now against the stored UTC-digit end,
+  // both expressed in the same wall-clock-as-ms space. See the
+  // `fortWayneWallClockMsNow` doc comment above for why this is needed.
+  const nowMs = fortWayneWallClockMsNow();
   const endMs = scheduledEndIso ? new Date(scheduledEndIso).getTime() : null;
   const allowedAtMs = endMs !== null ? endMs - COMPLETION_GRACE_MINUTES * 60_000 : null;
 
@@ -191,7 +242,11 @@ export async function checkCanComplete(
   const details: CompletionDetails = {
     status: booking.status ?? null,
     scheduledEnd: scheduledEndIso,
-    nowIso: new Date(nowMs).toISOString(),
+    // nowIso is a real-UTC timestamp for debug/logging only; nowMs above
+    // is in Fort Wayne wall-clock-as-ms space (used for comparison) and
+    // must not be round-tripped through Date → ISO, or consumers would
+    // read a misleading clock.
+    nowIso: new Date().toISOString(),
     minutesUntilAllowed,
     filesCount,
     timeGatePassed,

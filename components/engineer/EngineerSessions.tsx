@@ -901,8 +901,14 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
                 </p>
                 {completionCheck?.details.scheduledEnd && (
                   <p className="font-mono text-[10px] text-black/50">
+                    {/* Stored timestamps in this app are Fort Wayne wall
+                        clock tagged with +00 — to avoid a double timezone
+                        conversion that was showing end 4h too early (e.g.
+                        a 6:30 PM session reading as "Ends 2:30 PM"), we
+                        unpack with timeZone: 'UTC' like the rest of the
+                        app does. See lib/booking-completion.ts header. */}
                     Ends {new Date(completionCheck.details.scheduledEnd).toLocaleString('en-US', {
-                      timeZone: 'America/Indiana/Indianapolis',
+                      timeZone: 'UTC',
                       weekday: 'short', month: 'short', day: 'numeric',
                       hour: 'numeric', minute: '2-digit', hour12: true,
                     })}
