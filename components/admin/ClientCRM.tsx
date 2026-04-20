@@ -613,13 +613,17 @@ function BalanceEditor({
 }) {
   // Ceiling matches the server-side validation in /api/admin/bookings/adjust-balance
   const depositPaid = booking.actual_deposit_paid ?? booking.deposit_amount ?? 0;
+  const currentRemainder = booking.remainder_amount || 0;
   const maxCents = Math.max(0, (booking.total_amount || 0) - depositPaid);
   const [dollarsInput, setDollarsInput] = useState(((booking.remainder_amount || 0) / 100).toFixed(2));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const parsed = Number(dollarsInput);
+  const newCents = Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) : currentRemainder;
+  const delta = newCents - currentRemainder;
+
   async function save() {
-    const parsed = Number(dollarsInput);
     if (!Number.isFinite(parsed) || parsed < 0) {
       setError('Must be a non-negative number');
       return;
@@ -628,6 +632,15 @@ function BalanceEditor({
     if (cents > maxCents) {
       setError(`Max $${(maxCents / 100).toFixed(2)}`);
       return;
+    }
+    // Explicit confirmation if changing by more than $1 — guards against the "typed 10 expecting +$10" bug
+    if (Math.abs(delta) >= 100) {
+      const msg = `REPLACE remainder with $${(cents / 100).toFixed(2)}?\n\n` +
+                  `Current remainder: $${(currentRemainder / 100).toFixed(2)}\n` +
+                  `New remainder:     $${(cents / 100).toFixed(2)}\n` +
+                  `Change:            ${delta >= 0 ? '+' : ''}$${(delta / 100).toFixed(2)}\n\n` +
+                  `Note: this SETS the remainder to the exact dollar amount you entered — it does NOT add to it.`;
+      if (!confirm(msg)) { return; }
     }
     setSaving(true);
     setError(null);
@@ -644,50 +657,61 @@ function BalanceEditor({
         return;
       }
       onSaved(cents);
-    } catch (e) {
+    } catch {
       setError('Network error');
       setSaving(false);
     }
   }
 
   return (
-    <div className="inline-flex items-center gap-1 justify-end">
-      <span className="text-black/40">$</span>
-      <input
-        type="number"
-        step="0.01"
-        min="0"
-        max={(maxCents / 100).toString()}
-        value={dollarsInput}
-        onChange={(e) => setDollarsInput(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') save();
-          if (e.key === 'Escape') onCancel();
-        }}
-        autoFocus
-        className="w-16 px-1 py-0.5 border border-black/30 font-mono text-[11px] text-right outline-none focus:border-black"
-        disabled={saving}
-      />
-      <button
-        type="button"
-        onClick={save}
-        disabled={saving}
-        className="p-0.5 text-green-600 hover:bg-green-100 disabled:opacity-50"
-        title="Save"
-      >
-        <Check className="w-3 h-3" />
-      </button>
-      <button
-        type="button"
-        onClick={onCancel}
-        disabled={saving}
-        className="p-0.5 text-black/50 hover:bg-black/5 disabled:opacity-50"
-        title="Cancel"
-      >
-        <XIcon className="w-3 h-3" />
-      </button>
-      {error && (
-        <span className="text-red-600 text-[10px] ml-1" title={error}>!</span>
+    <div className="inline-flex flex-col gap-1 justify-end items-end">
+      <div className="inline-flex items-center gap-1">
+        <span className="text-[9px] font-bold uppercase text-black/50 mr-1" title="Type the dollar amount you want the remainder to be. This SETS the remainder, it does NOT add to it.">Set to:</span>
+        <span className="text-black/40">$</span>
+        <input
+          type="number"
+          step="0.01"
+          min="0"
+          max={(maxCents / 100).toString()}
+          value={dollarsInput}
+          onChange={(e) => setDollarsInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') save();
+            if (e.key === 'Escape') onCancel();
+          }}
+          autoFocus
+          className="w-16 px-1 py-0.5 border border-black/30 font-mono text-[11px] text-right outline-none focus:border-black"
+          disabled={saving}
+        />
+        <button
+          type="button"
+          onClick={save}
+          disabled={saving}
+          className="p-0.5 text-green-600 hover:bg-green-100 disabled:opacity-50"
+          title="Save"
+        >
+          <Check className="w-3 h-3" />
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          className="p-0.5 text-black/50 hover:bg-black/5 disabled:opacity-50"
+          title="Cancel"
+        >
+          <XIcon className="w-3 h-3" />
+        </button>
+        {error && (
+          <span className="text-red-600 text-[10px] ml-1" title={error}>!</span>
+        )}
+      </div>
+      {Number.isFinite(parsed) && parsed >= 0 && delta !== 0 && (
+        <span className="text-[9px] font-mono text-black/60 italic">
+          {currentRemainder > 0 ? `$${(currentRemainder / 100).toFixed(2)}` : '$0.00'} → ${(newCents / 100).toFixed(2)}
+          <span className={delta > 0 ? 'text-orange-600 ml-1' : 'text-green-600 ml-1'}>
+            ({delta >= 0 ? '+' : ''}${(delta / 100).toFixed(2)})
+          </span>
+        </span>
       )}
     </div>
   );

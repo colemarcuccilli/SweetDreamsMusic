@@ -409,6 +409,30 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
   const [notifying, setNotifying] = useState(false);
   const [showChangeEngineer, setShowChangeEngineer] = useState(false);
   const [selectedEngineer, setSelectedEngineer] = useState(booking.engineer_name || '');
+
+  // --- Completion gate (time + files) ---
+  // See lib/booking-completion.ts for the rules. The UI state here only
+  // drives the checklist panel; the server enforces the gate on write.
+  const [completionCheck, setCompletionCheck] = useState<{
+    canComplete: boolean;
+    reasons: string[];
+    reasonMessages: string[];
+    details: {
+      status: string | null;
+      scheduledEnd: string | null;
+      nowIso: string;
+      minutesUntilAllowed: number;
+      filesCount: number;
+      timeGatePassed: boolean;
+      filesGatePassed: boolean;
+    };
+  } | null>(null);
+  const [completionLoading, setCompletionLoading] = useState(false);
+
+  // --- Remainder editor (engineer can fix their own session math) ---
+  const [showRemainderEdit, setShowRemainderEdit] = useState(false);
+  const [remainderEditInput, setRemainderEditInput] = useState('');
+  const [remainderEditSaving, setRemainderEditSaving] = useState(false);
   const [showPrep, setShowPrep] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [prepData, setPrepData] = useState<any>(null);
@@ -482,8 +506,111 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
     updateBooking({ status: 'cancelled' }, 'cancel');
   }
 
-  function handleComplete() {
-    updateBooking({ status: 'completed' }, 'complete');
+  // Replaces the old direct-set of status='completed'. Now goes through
+  // /api/booking/complete which enforces the time + files gates server-side.
+  // Engineers (non-admin) can't force — only super-admins can bypass via
+  // `force: true`. If an engineer tries, the server returns 403.
+  async function handleComplete() {
+    setActionLoading('complete');
+    try {
+      const res = await fetch('/api/booking/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId: booking.id, force: false }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        onUpdate?.();
+      } else if (res.status === 400 && data.canCompleteCheck) {
+        const msgs: string[] = data.canCompleteCheck.reasonMessages || [];
+        alert(
+          `Cannot complete this session yet:\n\n` +
+          (msgs.length ? msgs.map((m: string) => `• ${m}`).join('\n') : 'Unknown reason') +
+          `\n\nAn admin can force-complete if needed.`
+        );
+        // Refresh the checklist so the UI reflects the latest state.
+        await refreshCompletionCheck();
+      } else {
+        alert(data.error || 'Failed to complete session');
+      }
+    } catch {
+      alert('Network error');
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  // Fetch the completion check. Used on mount (for confirmed bookings) and
+  // after actions that would change its outcome (file uploads, etc.).
+  const refreshCompletionCheck = useCallback(async () => {
+    if (!booking.id || completed) return;
+    if (!['confirmed', 'pending', 'approved'].includes(booking.status)) return;
+    setCompletionLoading(true);
+    try {
+      const res = await fetch(`/api/booking/can-complete?bookingId=${booking.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setCompletionCheck(data);
+      }
+    } catch {
+      // transient — silent on the UI, a retry will happen on the next action
+    } finally {
+      setCompletionLoading(false);
+    }
+  }, [booking.id, booking.status, completed]);
+
+  useEffect(() => {
+    refreshCompletionCheck();
+    // Re-check every 60s so the "time to go" countdown advances automatically
+    // without a full page refresh.
+    if (!['confirmed', 'pending', 'approved'].includes(booking.status)) return;
+    const t = setInterval(refreshCompletionCheck, 60_000);
+    return () => clearInterval(t);
+  }, [refreshCompletionCheck, booking.status]);
+
+  // Save a new remainder via the engineer-or-admin adjust-balance endpoint.
+  // Matches the admin-side BalanceEditor semantics: this SETS the remainder
+  // (it does not add to it) and confirms large changes.
+  async function saveRemainderEdit() {
+    const amount = parseFloat(remainderEditInput);
+    if (Number.isNaN(amount) || amount < 0) {
+      alert('Enter a valid non-negative dollar amount.');
+      return;
+    }
+    const cents = Math.round(amount * 100);
+    const currentRemainder = booking.remainder_amount ?? 0;
+    const delta = cents - currentRemainder;
+    if (Math.abs(delta) >= 100) {
+      const ok = confirm(
+        `REPLACE remainder with $${(cents / 100).toFixed(2)}?\n\n` +
+        `Current remainder: $${(currentRemainder / 100).toFixed(2)}\n` +
+        `New remainder:     $${(cents / 100).toFixed(2)}\n` +
+        `Change:            ${delta >= 0 ? '+' : ''}$${(delta / 100).toFixed(2)}\n\n` +
+        `Note: this SETS the remainder to the exact dollar amount you entered — it does NOT add to it.`
+      );
+      if (!ok) return;
+    }
+
+    setRemainderEditSaving(true);
+    try {
+      const res = await fetch('/api/booking/adjust-balance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId: booking.id, newRemainderCents: cents }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Failed to update balance');
+        return;
+      }
+      setShowRemainderEdit(false);
+      setRemainderEditInput('');
+      onUpdate?.();
+    } catch {
+      alert('Network error');
+    } finally {
+      setRemainderEditSaving(false);
+    }
   }
 
   function handleReschedule() {
@@ -545,6 +672,10 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
       setUploadSuccess(true);
       setUploadFiles([]);
       setUploadProgress('');
+      // File upload just changed the files-gate outcome — re-check so the
+      // checklist + Mark Complete button update without waiting for the
+      // 60-second poll.
+      refreshCompletionCheck();
     } catch (err) {
       console.error('Upload error:', err);
       alert('Network error — please try again');
@@ -747,6 +878,61 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
         </div>
       )}
 
+      {/* Completion checklist — visible on active (non-completed) sessions so
+          the engineer knows exactly what blocks completion. Hidden when the
+          card is unclaimed (they can't complete something they don't own). */}
+      {!completed && !unclaimed && canComplete && (
+        <div className="mt-3 pt-3 border-t border-black/10">
+          <p className="font-mono text-[10px] uppercase tracking-wider text-black/60 mb-1.5">
+            Completion Checklist
+          </p>
+          <div className="space-y-1">
+            {/* Time gate */}
+            <div className="flex items-start gap-2">
+              <span className={`font-mono text-xs ${completionCheck?.details.timeGatePassed ? 'text-green-600' : 'text-black/40'}`}>
+                {completionCheck?.details.timeGatePassed ? '✓' : '○'}
+              </span>
+              <div className="flex-1">
+                <p className="font-mono text-xs">
+                  Within 30 min of scheduled end
+                </p>
+                {completionCheck?.details.scheduledEnd && (
+                  <p className="font-mono text-[10px] text-black/50">
+                    Ends {new Date(completionCheck.details.scheduledEnd).toLocaleString('en-US', {
+                      timeZone: 'America/Indiana/Indianapolis',
+                      weekday: 'short', month: 'short', day: 'numeric',
+                      hour: 'numeric', minute: '2-digit', hour12: true,
+                    })}
+                    {!completionCheck.details.timeGatePassed && completionCheck.details.minutesUntilAllowed > 0 && (
+                      <> — about {completionCheck.details.minutesUntilAllowed} min to go</>
+                    )}
+                  </p>
+                )}
+              </div>
+            </div>
+            {/* Files gate */}
+            <div className="flex items-start gap-2">
+              <span className={`font-mono text-xs ${completionCheck?.details.filesGatePassed ? 'text-green-600' : 'text-black/40'}`}>
+                {completionCheck?.details.filesGatePassed ? '✓' : '○'}
+              </span>
+              <div className="flex-1">
+                <p className="font-mono text-xs">
+                  At least one session file uploaded
+                </p>
+                <p className="font-mono text-[10px] text-black/50">
+                  {completionCheck?.details.filesCount === 0
+                    ? 'Upload a file for the client before completing.'
+                    : `${completionCheck?.details.filesCount ?? 0} file(s) uploaded for this client since session start.`}
+                </p>
+              </div>
+            </div>
+            {completionLoading && (
+              <p className="font-mono text-[10px] text-black/40 italic">Checking…</p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Action buttons */}
       {!completed && (
         <div className="mt-3 pt-3 border-t border-black/10 flex flex-wrap gap-2">
@@ -826,6 +1012,7 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
           {remainder > 0 && (
             <button
               onClick={() => { setShowCashPayment(!showCashPayment); setCashAmount((remainder / 100).toFixed(2)); setCashNote(''); }}
+              title="Record cash paid toward the existing remainder"
               className="font-mono text-xs font-bold uppercase tracking-wider border-2 border-black/20 text-black/60 px-4 py-2 hover:bg-black/5 transition-colors"
             >
               Record Cash
@@ -834,15 +1021,50 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
           {remainder === 0 && booking.status !== 'cancelled' && (
             <span className="font-mono text-xs text-green-600 font-bold uppercase px-3 py-2">Paid in Full</span>
           )}
+          {/* Engineer (or admin) can set the remainder directly — matches what
+              admins do with the BalanceEditor in ClientCRM. Server enforces
+              ownership + the `remainder <= total - deposit_paid` invariant. */}
           {canComplete && (
             <button
-              onClick={handleComplete}
-              disabled={actionLoading === 'complete'}
-              className="font-mono text-xs font-bold uppercase tracking-wider border-2 border-green-600 text-green-700 px-4 py-2 hover:bg-green-50 disabled:opacity-50 transition-colors"
+              onClick={() => {
+                setShowRemainderEdit(v => !v);
+                setRemainderEditInput(((booking.remainder_amount ?? 0) / 100).toFixed(2));
+              }}
+              title="Set the remaining balance to a specific dollar amount (does NOT add)"
+              className="font-mono text-xs font-bold uppercase tracking-wider border-2 border-black/10 text-black/60 px-3 py-2 hover:bg-black/5 transition-colors"
             >
-              {actionLoading === 'complete' ? 'Updating...' : 'Mark Complete'}
+              Edit Balance
             </button>
           )}
+          {canComplete && (() => {
+            const gatesReady = completionCheck?.canComplete === true;
+            const reasons = completionCheck?.reasonMessages ?? [];
+            const disabled = actionLoading === 'complete' || !gatesReady;
+            const tooltip = gatesReady
+              ? 'All completion requirements met.'
+              : reasons.length
+                ? `Blocked:\n${reasons.map(r => `• ${r}`).join('\n')}`
+                : 'Checking completion requirements…';
+            return (
+              <button
+                onClick={handleComplete}
+                disabled={disabled}
+                title={tooltip}
+                className={
+                  `font-mono text-xs font-bold uppercase tracking-wider border-2 px-4 py-2 disabled:opacity-50 transition-colors ` +
+                  (gatesReady
+                    ? 'border-green-600 text-green-700 hover:bg-green-50'
+                    : 'border-black/20 text-black/40 cursor-not-allowed')
+                }
+              >
+                {actionLoading === 'complete'
+                  ? 'Updating...'
+                  : gatesReady
+                    ? 'Mark Complete'
+                    : 'Mark Complete (locked)'}
+              </button>
+            );
+          })()}
           {canCancel && (
             <button
               onClick={handleCancel}
@@ -909,6 +1131,63 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
               className="font-mono text-xs font-bold uppercase tracking-wider bg-black text-white px-4 py-2 hover:bg-black/80 disabled:opacity-50 transition-colors"
             >
               {charging ? 'Charging...' : `Charge $${chargeAmountInput || '0.00'}`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Remainder-edit form — mirrors the admin BalanceEditor. Shows a
+          before → after preview and requires confirmation on large swings. */}
+      {showRemainderEdit && (
+        <div className="mt-3 p-3 bg-orange-50 border-2 border-orange-200 space-y-2">
+          <p className="font-mono text-xs font-semibold uppercase tracking-wider text-orange-800">
+            Edit Remaining Balance
+          </p>
+          <p className="font-mono text-[11px] text-orange-900/80">
+            This <span className="font-bold">SETS</span> the remainder to this dollar amount. It does <span className="font-bold">NOT</span> add to it. Use <span className="font-bold">Record Cash</span> if you&apos;re collecting a payment — that&apos;s what adjusts the remainder automatically.
+          </p>
+          <div className="flex flex-wrap gap-2 items-end">
+            <div>
+              <label className="font-mono text-[10px] text-black/60 block">Set to ($)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={remainderEditInput}
+                onChange={(e) => setRemainderEditInput(e.target.value)}
+                className="font-mono text-sm border border-black/20 px-3 py-1.5 w-28"
+              />
+            </div>
+            {(() => {
+              const currentCents = booking.remainder_amount ?? 0;
+              const newCents = Math.round((parseFloat(remainderEditInput) || 0) * 100);
+              const delta = newCents - currentCents;
+              return (
+                <div className="font-mono text-[11px] text-black/70">
+                  <div>Current: <span className="font-semibold">${(currentCents / 100).toFixed(2)}</span></div>
+                  <div>
+                    After: <span className="font-semibold">${(newCents / 100).toFixed(2)}</span>
+                    {delta !== 0 && (
+                      <span className={delta > 0 ? 'text-orange-700 ml-1' : 'text-green-700 ml-1'}>
+                        ({delta > 0 ? '+' : ''}${(delta / 100).toFixed(2)})
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+            <button
+              onClick={saveRemainderEdit}
+              disabled={remainderEditSaving}
+              className="font-mono text-xs font-bold uppercase tracking-wider bg-black text-white px-4 py-2 hover:bg-black/80 disabled:opacity-50 transition-colors"
+            >
+              {remainderEditSaving ? 'Saving...' : 'Save Balance'}
+            </button>
+            <button
+              onClick={() => { setShowRemainderEdit(false); setRemainderEditInput(''); }}
+              className="font-mono text-[10px] text-black/60 underline"
+            >
+              Cancel
             </button>
           </div>
         </div>

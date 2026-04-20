@@ -127,6 +127,17 @@ export default function BookingManager() {
   useEffect(() => { fetchBookings(); }, [fetchBookings]);
 
   async function updateStatus(bookingId: string, status: string) {
+    // Completion goes through the dedicated /api/booking/complete route so
+    // the time + files gates are enforced server-side. See:
+    //   app/api/booking/complete/route.ts  (the gate)
+    //   lib/booking-completion.ts          (the rules)
+    // Bypassing this path (e.g. by hand-crafting a request to the generic
+    // /api/admin/bookings/update with updates.status = 'completed') will
+    // succeed but is discouraged. If you ever need to, log a ticket first.
+    if (status === 'completed') {
+      await markComplete(bookingId, false);
+      return;
+    }
     setUpdatingId(bookingId);
     await fetch('/api/admin/bookings/update', {
       method: 'POST',
@@ -135,13 +146,46 @@ export default function BookingManager() {
         bookingId,
         updates: {
           status,
-          ...(status === 'completed' ? { approved_at: new Date().toISOString() } : {}),
           ...(status === 'cancelled' ? { deleted_at: new Date().toISOString() } : {}),
         },
       }),
     });
     setUpdatingId(null);
     fetchBookings();
+  }
+
+  async function markComplete(bookingId: string, force: boolean) {
+    setUpdatingId(bookingId);
+    try {
+      const res = await fetch('/api/booking/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId, force }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        if (data.forced) {
+          alert('Session marked completed (force override logged).');
+        }
+        fetchBookings();
+      } else if (res.status === 400 && data.canCompleteCheck) {
+        const msgs: string[] = data.canCompleteCheck.reasonMessages || [];
+        const body = msgs.length ? msgs.map((m: string) => `• ${m}`).join('\n') : 'Unknown reason';
+        const wantsForce = confirm(
+          `Cannot complete session yet:\n\n${body}\n\n` +
+          `Force-complete anyway? This is logged as a super-admin override.`
+        );
+        if (wantsForce) {
+          await markComplete(bookingId, true);
+          return;
+        }
+      } else {
+        alert(data.error || 'Failed to complete session');
+      }
+    } catch {
+      alert('Error completing session');
+    }
+    setUpdatingId(null);
   }
 
   async function updateBooking(bookingId: string, updates: Record<string, unknown>) {
@@ -810,8 +854,9 @@ export default function BookingManager() {
                         <button
                           onClick={() => { setShowCashPayment(showCashPayment === b.id ? null : b.id); setShowPaymentLink(null); setCashAmount((b.remainder_amount / 100).toFixed(2)); setCashNote(''); }}
                           disabled={updatingId === b.id}
+                          title="Records cash received toward the outstanding balance. Does NOT change the session total."
                           className="border border-black/30 text-black/70 font-mono text-xs font-bold uppercase px-3 py-2 hover:bg-black/5 disabled:opacity-50 inline-flex items-center gap-1">
-                          <Banknote className="w-3 h-3" /> Record Cash
+                          <Banknote className="w-3 h-3" /> Record Cash <span className="text-[9px] text-black/50 normal-case font-normal">(pays remainder)</span>
                         </button>
                       )}
                       {b.remainder_amount > 0 && (
@@ -851,55 +896,84 @@ export default function BookingManager() {
                           <Check className="w-3 h-3" /> Paid in Full
                         </span>
                       )}
-                      {/* Add Time — always available for extending sessions */}
+                      {/* Extend Session — RAISES total_amount. Visually distinct (orange) to prevent confusion with "Record Cash" which only pays down remainder. */}
                       <button
                         onClick={() => { setShowCashPayment(showCashPayment === `add-${b.id}` ? null : `add-${b.id}`); setShowPaymentLink(null); setCashAmount(''); setCashNote(''); }}
-                        className="border border-accent text-accent font-mono text-xs font-bold uppercase px-3 py-2 hover:bg-accent/10 inline-flex items-center gap-1">
-                        <Plus className="w-3 h-3" /> Add Time / Record Cash
+                        title="Use when client added time/services DURING the session. Increases the session total AND records the cash received for that extra time."
+                        className="border-2 border-orange-500 text-orange-700 bg-orange-50 font-mono text-xs font-bold uppercase px-3 py-2 hover:bg-orange-100 inline-flex items-center gap-1">
+                        <Plus className="w-3 h-3" /> Extend Session +$ <span className="text-[9px] text-orange-600/80 normal-case font-normal">(raises total)</span>
                       </button>
                     </div>
 
-                    {/* Add Time / Additional Cash Form */}
-                    {showCashPayment === `add-${b.id}` && (
-                      <div className="border border-accent/30 bg-accent/5 p-3 space-y-2">
-                        <p className="font-mono text-[10px] text-accent uppercase tracking-wider font-bold">Record Additional Payment</p>
-                        <p className="font-mono text-[10px] text-black/60">Client added time or services during the session. Enter the amount collected.</p>
-                        <div className="flex gap-2">
+                    {/* Extend Session Form — increases total_amount by the entered amount AND records cash received.
+                         Visually distinct from "Record Cash" to prevent the duplicate-cash bug (Bloodika 2026-04-20). */}
+                    {showCashPayment === `add-${b.id}` && (() => {
+                      const amt = parseFloat(cashAmount) || 0;
+                      const amtCents = Math.round(amt * 100);
+                      const newTotal = (b.total_amount || 0) + amtCents;
+                      return (
+                      <div className="border-2 border-orange-500 bg-orange-50 p-3 space-y-2">
+                        <p className="font-mono text-[10px] text-orange-700 uppercase tracking-wider font-bold">⚠ Extend Session — raises the charged total</p>
+                        <p className="font-mono text-[11px] text-orange-900 leading-snug">
+                          Use this ONLY if the client added time or services <em>during</em> the session.
+                          This will <b>increase the session total by $X</b> AND record $X cash received.
+                          If you&apos;re just recording cash toward the existing balance, use <b>Record Cash</b> instead.
+                        </p>
+                        <div className="flex gap-2 items-end">
                           <div className="relative flex-1">
-                            <span className="absolute left-2 top-1/2 -translate-y-1/2 font-mono text-sm text-black/60">$</span>
-                            <input type="text" inputMode="decimal" value={cashAmount} onChange={e => setCashAmount(e.target.value)}
-                              className="w-full border border-black/20 pl-6 pr-3 py-1.5 font-mono text-sm focus:border-accent focus:outline-none"
-                              placeholder="Amount collected" />
+                            <label className="font-mono text-[9px] text-orange-700 uppercase tracking-wider">Amount client paid for the extension</label>
+                            <div className="relative">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 font-mono text-sm text-black/60">$</span>
+                              <input type="text" inputMode="decimal" value={cashAmount} onChange={e => setCashAmount(e.target.value)}
+                                className="w-full border border-orange-400 pl-6 pr-3 py-1.5 font-mono text-sm focus:border-orange-600 focus:outline-none"
+                                placeholder="0.00" />
+                            </div>
                           </div>
                         </div>
+                        {amt > 0 && (
+                          <div className="border border-orange-300 bg-white p-2 font-mono text-[11px] space-y-0.5">
+                            <div className="flex justify-between"><span className="text-black/60">Session total before:</span><span>{formatCents(b.total_amount)}</span></div>
+                            <div className="flex justify-between text-orange-700"><span>+ Extension:</span><span>+${amt.toFixed(2)}</span></div>
+                            <div className="flex justify-between font-bold border-t border-orange-200 pt-0.5"><span>Session total after:</span><span>{formatCents(newTotal)}</span></div>
+                            <div className="flex justify-between text-green-700 pt-1"><span>Cash received (added to ledger):</span><span>${amt.toFixed(2)}</span></div>
+                          </div>
+                        )}
                         <input type="text" value={cashNote}
                           onChange={e => setCashNote(e.target.value)}
-                          className="w-full border border-black/20 px-3 py-1.5 font-mono text-xs focus:border-accent focus:outline-none"
-                          placeholder="Note (e.g., Added 1 hour in session)" />
-                        <button
-                          onClick={async () => {
-                            const amt = parseFloat(cashAmount);
-                            if (!amt || amt <= 0) { alert('Enter a valid amount'); return; }
-                            setUpdatingId(b.id);
-                            const note = cashNote || 'Additional cash payment recorded in session';
-                            // Single API call: increases total AND records cash in one atomic operation
-                            await fetch('/api/booking/record-payment', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ bookingId: b.id, amount: amt, method: 'cash', note, addToTotal: true }),
-                            });
-                            setShowCashPayment(null);
-                            setCashAmount('');
-                            setCashNote('');
-                            setUpdatingId(null);
-                            fetchBookings();
-                          }}
-                          disabled={updatingId === b.id}
-                          className="bg-accent text-black font-mono text-xs font-bold uppercase px-4 py-2 hover:bg-accent/90 disabled:opacity-50">
-                          {updatingId === b.id ? 'Recording...' : 'Record Payment'}
-                        </button>
+                          className="w-full border border-orange-300 px-3 py-1.5 font-mono text-xs focus:border-orange-600 focus:outline-none"
+                          placeholder="Note (e.g., 'Added 1 hour at $50')" />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={async () => {
+                              if (!amt || amt <= 0) { alert('Enter a valid amount'); return; }
+                              if (!confirm(`Extend this session?\n\nSession total: ${formatCents(b.total_amount)} → ${formatCents(newTotal)}\nCash received: $${amt.toFixed(2)}\n\nProceed?`)) return;
+                              setUpdatingId(b.id);
+                              const note = cashNote || `Extended session by $${amt.toFixed(2)}`;
+                              // Single API call: increases total AND records cash in one atomic operation
+                              await fetch('/api/booking/record-payment', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ bookingId: b.id, amount: amt, method: 'cash', note, addToTotal: true }),
+                              });
+                              setShowCashPayment(null);
+                              setCashAmount('');
+                              setCashNote('');
+                              setUpdatingId(null);
+                              fetchBookings();
+                            }}
+                            disabled={updatingId === b.id || !amt}
+                            className="bg-orange-600 text-white font-mono text-xs font-bold uppercase px-4 py-2 hover:bg-orange-700 disabled:opacity-50">
+                            {updatingId === b.id ? 'Extending...' : 'Extend Session'}
+                          </button>
+                          <button
+                            onClick={() => { setShowCashPayment(null); setCashAmount(''); setCashNote(''); }}
+                            className="font-mono text-xs text-black/60 hover:text-black px-3 py-2">
+                            Cancel
+                          </button>
+                        </div>
                       </div>
-                    )}
+                      );
+                    })()}
 
                     {/* Cancelled — Record Kept Deposit */}
                     {b.status === 'cancelled' && (
