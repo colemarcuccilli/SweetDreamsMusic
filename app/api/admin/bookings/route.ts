@@ -12,9 +12,12 @@ export async function GET(request: NextRequest) {
   const engineer = searchParams.get('engineer');
   const limit = parseInt(searchParams.get('limit') || '50');
 
+  // Embed the band's display_name via the band_id FK. Keyed as `band` so the
+  // admin UI can render `booking.band?.display_name` without an extra round-trip.
+  // `band_id` is the only FK between bookings → bands, so Supabase auto-resolves.
   let query = supabase
     .from('bookings')
-    .select('*')
+    .select('*, band:bands(display_name)')
     .order('start_time', { ascending: false })
     .limit(limit);
 

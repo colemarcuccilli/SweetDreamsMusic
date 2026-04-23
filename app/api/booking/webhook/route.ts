@@ -30,8 +30,13 @@ export async function POST(request: NextRequest) {
       const session = event.data.object as Stripe.Checkout.Session;
       const meta = session.metadata || {};
 
-      if (meta.type === 'booking_deposit') {
-        // Session booking deposit paid
+      if (meta.type === 'booking_deposit' || meta.type === 'band_booking_deposit') {
+        // Session booking deposit paid. Two flavors share this branch:
+        //   - 'booking_deposit'       → solo session
+        //   - 'band_booking_deposit'  → band session (has meta.band_id)
+        // The only row-level difference is `band_id`; everything else
+        // (emails, engineer notifications, XP) flows the same way because
+        // the paying customer is still the booker, not the band.
         const startDateTime = `${meta.session_date}T${meta.start_time}:00`;
         const endDateTime = `${meta.session_date}T${meta.end_time}:00`;
 
@@ -65,6 +70,7 @@ export async function POST(request: NextRequest) {
           priority_expires_at: priorityExpiry,
           reschedule_deadline: rescheduleDeadline,
           admin_notes: meta.notes || null,
+          band_id: meta.band_id || null,
         }).select().single();
 
         // Send emails — use Fort Wayne timezone since Vercel runs UTC
@@ -649,8 +655,10 @@ export async function POST(request: NextRequest) {
       const asyncSession = event.data.object as Stripe.Checkout.Session;
       const asyncMeta = asyncSession.metadata || {};
 
-      // Only process if we haven't already (check if booking exists)
-      if (asyncMeta.type === 'booking_deposit') {
+      // Only process if we haven't already (check if booking exists).
+      // Accepts both 'booking_deposit' (solo) and 'band_booking_deposit'
+      // because Cash App / async payments use the same metadata shape.
+      if (asyncMeta.type === 'booking_deposit' || asyncMeta.type === 'band_booking_deposit') {
         const { data: existing } = await supabase
           .from('bookings')
           .select('id')
@@ -688,6 +696,7 @@ export async function POST(request: NextRequest) {
             priority_expires_at: priorityExpiry,
             reschedule_deadline: rescheduleDeadline,
             admin_notes: asyncMeta.notes || null,
+            band_id: asyncMeta.band_id || null,
           }).select().single();
 
           // Send all emails

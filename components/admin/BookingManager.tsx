@@ -40,6 +40,10 @@ interface Booking {
   reschedule_reason: string | null;
   reschedule_requested_at: string | null;
   media_addons: Array<{ type: string; description: string; amount: number; sold_by?: string; filmed_by?: string; edited_by?: string }> | null;
+  // Band attribution — null for solo sessions, populated for band bookings.
+  // `band_id` comes from the bookings row; `band` is the embedded FK lookup.
+  band_id: string | null;
+  band: { display_name: string } | null;
 }
 
 type StatusFilter = 'all' | 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'rejected';
@@ -517,6 +521,15 @@ export default function BookingManager() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-sm font-bold">{b.customer_name}</span>
+                      {b.band && (
+                        // Accent chip — band bookings are flat-rate Studio A sessions,
+                        // worth flagging prominently so engineers scanning the list
+                        // immediately know this is a band session (different workflow,
+                        // different room dynamics) vs. a solo artist.
+                        <span className="font-mono text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 bg-accent text-black">
+                          Band · {b.band.display_name}
+                        </span>
+                      )}
                       <span className={`font-mono text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 ${STATUS_COLORS[b.status] || 'bg-black/5 text-black/70'}`}>
                         {b.status}
                       </span>

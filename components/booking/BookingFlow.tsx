@@ -1,9 +1,15 @@
 'use client';
 
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { Calendar, Clock, Home, User, Users, ChevronLeft, ChevronRight, AlertTriangle, Star, Video } from 'lucide-react';
-import { PRICING, ROOMS, ROOM_LABELS, ROOM_RATES, ROOM_RATES_SINGLE, SWEET_4, ENGINEERS, STUDIO_A_WEEKDAY_START, GUEST_FEE_PER_HOUR, FREE_GUESTS, MAX_GUESTS, type Room } from '@/lib/constants';
-import { formatCents, cn, isSameDay, calculateSessionTotal, formatTime, getHourSurcharge, parseTimeSlot, decimalToTimeStr } from '@/lib/utils';
+import { Calendar, Clock, Home, User, Users, ChevronLeft, ChevronRight, AlertTriangle, Star, Video, Music2 } from 'lucide-react';
+import { PRICING, ROOMS, ROOM_LABELS, ROOM_RATES, ROOM_RATES_SINGLE, SWEET_4, ENGINEERS, STUDIO_A_WEEKDAY_START, GUEST_FEE_PER_HOUR, FREE_GUESTS, MAX_GUESTS, BAND_PRICING, type Room } from '@/lib/constants';
+import { formatCents, cn, isSameDay, calculateSessionTotal, calculateBandSessionTotal, formatTime, getHourSurcharge, parseTimeSlot, decimalToTimeStr } from '@/lib/utils';
+
+// Self-serve band tiers. The 24h ("3 Days") tier is in BAND_PRICING but is
+// multi-day — it gets a contact CTA instead of a bookable button. Keeping
+// the allowed list derived from BAND_PRICING ensures pricing stays in sync
+// if we ever add a new self-serve tier.
+const BAND_DURATIONS: ReadonlyArray<4 | 8> = [4, 8] as const;
 
 function getDaysInMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate();
@@ -42,10 +48,35 @@ function tierColor(tier: 'regular' | 'lateNight' | 'deepNight'): string {
   return 'text-black/60';
 }
 
-export default function BookingFlow({ userName, userEmail }: { userName: string; userEmail: string }) {
+export default function BookingFlow({
+  userName,
+  userEmail,
+  band = null,
+}: {
+  userName: string;
+  userEmail: string;
+  /**
+   * When provided, the flow runs in "band mode":
+   *   - room is locked to Studio A
+   *   - duration is restricted to 4h or 8h
+   *   - guest count is hidden (band members aren't guests)
+   *   - pricing is a flat-rate package (no night / same-day stacking)
+   *   - submit includes bandId so the server can attribute the booking
+   *
+   * Server re-verifies permission on submit — this prop alone doesn't
+   * grant anything; it just shapes the UI.
+   */
+  band?: { id: string; display_name: string } | null;
+}) {
+  const isBandMode = !!band;
+
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
-  const [duration, setDuration] = useState(2);
+  // Default duration depends on mode: solo defaults to 2h (classic);
+  // band defaults to the smallest self-serve tier (4h).
+  const [duration, setDuration] = useState<number>(isBandMode ? 4 : 2);
+  // Band sessions are Studio A only — the state is locked below, but we
+  // still initialize to studio_a to keep the initial pricing calc correct.
   const [room, setRoom] = useState<Room>('studio_a');
   const [engineer, setEngineer] = useState<string>('any');
   const [customerName, setCustomerName] = useState(userName);
@@ -69,9 +100,28 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
   const startHour = selectedTime ? parseTimeSlot(selectedTime) : 0;
   const isSameDayBooking = selectedDate ? isSameDay(selectedDate) : false;
 
+  // Pricing branches on mode. Band sessions use flat-rate packages, so we
+  // adapt the BandSessionPricing shape into SessionPricing (same fields,
+  // zeros for the "no surcharge" entries, empty hourBreakdown so the
+  // per-hour preview UI just collapses). This keeps the downstream JSX
+  // from needing to know which mode it's in — it just reads pricing.*.
   const pricing = useMemo(() => {
+    if (isBandMode && (duration === 4 || duration === 8)) {
+      const bp = calculateBandSessionTotal(duration);
+      return {
+        subtotal: bp.subtotal,
+        hourBreakdown: [] as ReturnType<typeof calculateSessionTotal>['hourBreakdown'],
+        nightFees: 0,
+        sameDayFee: 0,
+        guestFee: 0,
+        guestCount: 1,
+        sweetSpot: false,
+        total: bp.total,
+        deposit: bp.deposit,
+      };
+    }
     return calculateSessionTotal(room, duration, startHour, isSameDayBooking, guestCount);
-  }, [room, duration, startHour, isSameDayBooking, guestCount]);
+  }, [isBandMode, room, duration, startHour, isSameDayBooking, guestCount]);
 
   // Fetch month-level availability for heat map coloring
   useEffect(() => {
@@ -201,13 +251,20 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
           date: selectedDate.toISOString().split('T')[0],
           startTime: selectedTime,
           duration,
-          room,
+          // Band mode forces Studio A regardless of the room state —
+          // belt-and-suspenders since the state is locked anyway.
+          room: isBandMode ? 'studio_a' : room,
           engineer: engineer === 'any' ? null : engineer,
           customerName,
           customerEmail,
           customerPhone,
+          // Server ignores guestCount for band bookings (no surcharge), but
+          // we still send it so the solo path validation stays unchanged.
           guestCount,
           notes,
+          // bandId is the only signal that this is a band booking. The
+          // server re-verifies permission before trusting it.
+          bandId: band?.id,
         }),
       });
 
@@ -242,6 +299,24 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
 
   return (
     <div className="space-y-16">
+      {/* Band-mode context banner — makes it obvious the user is in a
+          different flow than usual, and lets them bail to solo if they
+          clicked the wrong link. */}
+      {isBandMode && band && (
+        <div className="border-2 border-black bg-yellow-300 p-4 sm:p-5 flex items-start gap-3">
+          <Music2 className="w-5 h-5 text-black flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-mono text-sm font-bold uppercase tracking-wider">
+              Booking for {band.display_name}
+            </p>
+            <p className="font-mono text-xs text-black/70 mt-1">
+              Band sessions run in Studio A at a flat rate. You&apos;re the paying customer on file —
+              invoices and confirmations come to your email.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* ============ SECTION 1: DATE ============ */}
       <section>
         <div className="flex items-center gap-3 mb-6">
@@ -357,38 +432,58 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
         </div>
 
         <div className="mb-8">
-          <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">Select Studio</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {ROOMS.map((r) => (
-              <button
-                key={r}
-                onClick={() => {
-                  setRoom(r);
-                  setEngineer('any');
-                  // Clear time if switching to Studio A and current time is restricted
-                  if (r === 'studio_a' && isWeekday && selectedTime) {
-                    if (parseTimeSlot(selectedTime) < STUDIO_A_WEEKDAY_START) setSelectedTime(null);
-                  }
-                }}
-                className={cn(
-                  'p-6 border-2 font-mono text-left transition-colors',
-                  room === r ? 'border-black bg-black text-white' : 'border-black/20 hover:border-black'
-                )}
-              >
-                <Home className={cn('w-6 h-6 mb-3', room === r ? 'text-accent' : 'text-black/40')} />
-                <p className="font-bold text-sm uppercase tracking-wider">{ROOM_LABELS[r]}</p>
-                <p className={cn('text-xs mt-1', room === r ? 'text-white/80' : 'text-black/60')}>
-                  {formatCents(ROOM_RATES[r])}/hour
-                  <span className="block text-[10px] mt-0.5">1hr: {formatCents(ROOM_RATES_SINGLE[r])}</span>
-                  {r === 'studio_a' && (
-                    <span className={cn('block text-[10px] mt-1', room === r ? 'text-amber-300' : 'text-amber-600')}>
-                      Weekdays 6:30 PM+ only
-                    </span>
+          <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">
+            {isBandMode ? 'Studio (Locked)' : 'Select Studio'}
+          </h3>
+          {isBandMode ? (
+            // Band sessions are Studio A only — show a single locked card
+            // so the user knows the choice is deliberate, not absent.
+            <div className="p-6 border-2 border-black bg-black text-white font-mono max-w-sm">
+              <Home className="w-6 h-6 mb-3 text-accent" />
+              <p className="font-bold text-sm uppercase tracking-wider flex items-center gap-2">
+                {ROOM_LABELS.studio_a}
+                <span className="text-[10px] bg-accent/20 text-accent px-2 py-0.5 rounded">BAND</span>
+              </p>
+              <p className="text-xs mt-1 text-white/80">
+                Flat-rate package — all-in pricing, no surcharges
+              </p>
+              <p className="text-[10px] mt-2 text-amber-300">
+                Weekdays 6:30 PM+ only
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {ROOMS.map((r) => (
+                <button
+                  key={r}
+                  onClick={() => {
+                    setRoom(r);
+                    setEngineer('any');
+                    // Clear time if switching to Studio A and current time is restricted
+                    if (r === 'studio_a' && isWeekday && selectedTime) {
+                      if (parseTimeSlot(selectedTime) < STUDIO_A_WEEKDAY_START) setSelectedTime(null);
+                    }
+                  }}
+                  className={cn(
+                    'p-6 border-2 font-mono text-left transition-colors',
+                    room === r ? 'border-black bg-black text-white' : 'border-black/20 hover:border-black'
                   )}
-                </p>
-              </button>
-            ))}
-          </div>
+                >
+                  <Home className={cn('w-6 h-6 mb-3', room === r ? 'text-accent' : 'text-black/40')} />
+                  <p className="font-bold text-sm uppercase tracking-wider">{ROOM_LABELS[r]}</p>
+                  <p className={cn('text-xs mt-1', room === r ? 'text-white/80' : 'text-black/60')}>
+                    {formatCents(ROOM_RATES[r])}/hour
+                    <span className="block text-[10px] mt-0.5">1hr: {formatCents(ROOM_RATES_SINGLE[r])}</span>
+                    {r === 'studio_a' && (
+                      <span className={cn('block text-[10px] mt-1', room === r ? 'text-amber-300' : 'text-amber-600')}>
+                        Weekdays 6:30 PM+ only
+                      </span>
+                    )}
+                  </p>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="mb-4">
@@ -497,33 +592,63 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
         <div className="mb-4">
           <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">
             Duration: {duration} hour{duration > 1 ? 's' : ''}
-            {duration === SWEET_4[room].hours && (
-              <span className="text-accent ml-2 inline-flex items-center gap-1"><Star className="w-3 h-3" /> The Sweet 4!</span>
-            )}
-            {duration === 3 && (
-              <span className="text-accent ml-2 inline-flex items-center gap-1"><Video className="w-3 h-3" /> Free short-form video included</span>
+            {isBandMode ? (
+              <span className="text-accent ml-2 inline-flex items-center gap-1">
+                <Music2 className="w-3 h-3" /> Band Tier ({formatCents(BAND_PRICING.find((t) => t.hours === duration)?.price || 0)})
+              </span>
+            ) : (
+              <>
+                {duration === SWEET_4[room].hours && (
+                  <span className="text-accent ml-2 inline-flex items-center gap-1"><Star className="w-3 h-3" /> The Sweet 4!</span>
+                )}
+                {duration === 3 && (
+                  <span className="text-accent ml-2 inline-flex items-center gap-1"><Video className="w-3 h-3" /> Free short-form video included</span>
+                )}
+              </>
             )}
           </h3>
           <div className="flex flex-wrap gap-2">
-            {Array.from({ length: PRICING.maxHours }, (_, i) => i + 1).map((h) => (
-              <button
-                key={h}
-                onClick={() => setDuration(h)}
-                className={cn(
-                  'w-14 h-14 font-mono text-lg font-bold border transition-colors relative',
-                  duration === h ? 'bg-black text-white border-black' : 'border-black/20 hover:border-black'
-                )}
-              >
-                {h}
-                {h === SWEET_4[room].hours && duration !== h && (
-                  <span className="absolute -top-1 -right-1 w-2 h-2 bg-accent rounded-full" />
-                )}
-              </button>
-            ))}
+            {/* Band mode: only 4h / 8h tiers. Solo: 1-maxHours. */}
+            {isBandMode
+              ? BAND_DURATIONS.map((h) => {
+                  const tier = BAND_PRICING.find((t) => t.hours === h);
+                  return (
+                    <button
+                      key={h}
+                      onClick={() => setDuration(h)}
+                      className={cn(
+                        'px-5 py-4 font-mono text-left border-2 transition-colors',
+                        duration === h ? 'bg-black text-white border-black' : 'border-black/20 hover:border-black'
+                      )}
+                    >
+                      <p className="text-lg font-bold">{h} hours</p>
+                      <p className={cn('text-xs mt-0.5', duration === h ? 'text-white/80' : 'text-black/60')}>
+                        {formatCents(tier?.price || 0)} · {tier?.note}
+                      </p>
+                    </button>
+                  );
+                })
+              : Array.from({ length: PRICING.maxHours }, (_, i) => i + 1).map((h) => (
+                  <button
+                    key={h}
+                    onClick={() => setDuration(h)}
+                    className={cn(
+                      'w-14 h-14 font-mono text-lg font-bold border transition-colors relative',
+                      duration === h ? 'bg-black text-white border-black' : 'border-black/20 hover:border-black'
+                    )}
+                  >
+                    {h}
+                    {h === SWEET_4[room].hours && duration !== h && (
+                      <span className="absolute -top-1 -right-1 w-2 h-2 bg-accent rounded-full" />
+                    )}
+                  </button>
+                ))}
           </div>
 
-          {/* 2-hour → 3-hour upsell nudge: adding one hour unlocks a free short-form video */}
-          {duration === 2 && (
+          {/* 2-hour → 3-hour upsell nudge: adding one hour unlocks a free
+              short-form video. Solo only — band packages already include
+              everything, and 24h bookings go through contact, not upsell. */}
+          {!isBandMode && duration === 2 && (
             <div className="mt-4 bg-yellow-300 border-2 border-black p-4 flex items-start gap-3">
               <Video className="w-5 h-5 text-black flex-shrink-0 mt-0.5" />
               <div className="flex-1">
@@ -543,10 +668,36 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
               </div>
             </div>
           )}
+
+          {/* Band-mode only: surface the 24h ("3 Days") tier via contact CTA.
+              Multi-day scheduling needs admin coordination, so we don't try
+              to fake it as a single 24h block in the self-serve flow. */}
+          {isBandMode && (
+            <div className="mt-4 border-2 border-black/20 p-4 flex items-start gap-3">
+              <Calendar className="w-5 h-5 text-black/60 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-mono text-sm font-bold uppercase tracking-wider mb-1">
+                  Need more time? Ask about 3 Days (24h)
+                </p>
+                <p className="font-mono text-xs text-black/60 mb-3">
+                  Our 3-day package ($1,800) runs across multiple sessions —
+                  we coordinate scheduling directly so you get the same engineer each day.
+                </p>
+                <a
+                  href="mailto:hello@sweetdreamsmusic.com?subject=Band%203-Day%20Booking%20Inquiry"
+                  className="inline-block border-2 border-black font-mono text-xs font-bold uppercase tracking-wider px-4 py-2 hover:bg-black hover:text-white transition-colors"
+                >
+                  Contact to book 3 days
+                </a>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Live hour-by-hour preview when time is selected */}
-        {selectedTime && (
+        {/* Live hour-by-hour preview when time is selected. Hidden in
+            band mode — flat-rate packages have no per-hour surcharges to
+            preview, so the whole widget is noise. */}
+        {selectedTime && !isBandMode && (
           <div className="mt-6 border border-black/10 p-4">
             <h4 className="font-mono text-xs font-semibold uppercase tracking-wider text-black/70 mb-3">Hour-by-Hour Preview</h4>
             <div className="space-y-1">
@@ -627,17 +778,21 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
           {/* Detailed price breakdown */}
           <h4 className="font-mono text-xs font-semibold uppercase tracking-wider text-black/70 mb-3">Price Breakdown</h4>
           <div className="space-y-2 font-mono text-sm">
-            {/* Base rate */}
+            {/* Base rate — different copy per mode. Band shows the tier
+                label from BAND_PRICING ("8 Hours · $85/hour") because
+                that's what the customer was quoted on /pricing. */}
             <div className="flex justify-between">
               <span className="text-black/60">
-                {pricing.sweetSpot
-                  ? `${ROOM_LABELS[room]} The Sweet 4 (${duration}hr flat rate)`
-                  : `${ROOM_LABELS[room]} (${duration}hr × ${formatCents(duration === 1 ? ROOM_RATES_SINGLE[room] : ROOM_RATES[room])})`
+                {isBandMode
+                  ? `Band Session — ${BAND_PRICING.find((t) => t.hours === duration)?.label} (${BAND_PRICING.find((t) => t.hours === duration)?.note})`
+                  : pricing.sweetSpot
+                    ? `${ROOM_LABELS[room]} The Sweet 4 (${duration}hr flat rate)`
+                    : `${ROOM_LABELS[room]} (${duration}hr × ${formatCents(duration === 1 ? ROOM_RATES_SINGLE[room] : ROOM_RATES[room])})`
                 }
               </span>
               <span>{formatCents(pricing.subtotal)}</span>
             </div>
-            {pricing.sweetSpot && (
+            {pricing.sweetSpot && !isBandMode && (
               <div className="flex justify-between text-green-700">
                 <span className="flex items-center gap-1"><Star className="w-3 h-3" /> The Sweet 4 savings</span>
                 <span>-{formatCents(ROOM_RATES[room] * duration - pricing.subtotal)}</span>
@@ -722,33 +877,38 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
             <input type="tel" id="customerPhone" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)}
               className="w-full border-2 border-black px-4 py-3 font-mono text-sm bg-transparent focus:border-accent focus:outline-none" placeholder="(555) 123-4567" />
           </div>
-          <div>
-            <label htmlFor="guestCount" className="block font-mono text-xs text-black/60 uppercase tracking-wider mb-1">
-              How many guests are you bringing? *
-            </label>
-            <select id="guestCount" value={guestCount} onChange={(e) => setGuestCount(Number(e.target.value))}
-              className="w-full border-2 border-black px-4 py-3 font-mono text-sm bg-transparent focus:border-accent focus:outline-none">
-              {Array.from({ length: MAX_GUESTS }, (_, i) => i).map((guests) => {
-                const totalPeople = guests + 1; // artist + guests
-                const extraPeople = Math.max(0, totalPeople - FREE_GUESTS);
-                return (
-                  <option key={guests} value={totalPeople}>
-                    {guests === 0
-                      ? 'No guests — just me'
-                      : guests <= 2
-                        ? `${guests} guest${guests > 1 ? 's' : ''} (free)`
-                        : `${guests} guests (+${formatCents(GUEST_FEE_PER_HOUR * extraPeople)}/hr for ${extraPeople} extra)`
-                    }
-                  </option>
-                );
-              })}
-            </select>
-            {guestCount > FREE_GUESTS && (
-              <p className="font-mono text-xs text-amber-700 mt-1">
-                {guestCount - FREE_GUESTS} extra guest{guestCount - FREE_GUESTS > 1 ? 's' : ''} beyond the included 2 — {formatCents(GUEST_FEE_PER_HOUR)}/hr each = {formatCents(pricing.guestFee)} added to your session
-              </p>
-            )}
-          </div>
+          {/* Guest count is solo-only. The band IS the guest list — the
+              package is all-in, and adding a "how many band members?"
+              field here would just invite confusion. */}
+          {!isBandMode && (
+            <div>
+              <label htmlFor="guestCount" className="block font-mono text-xs text-black/60 uppercase tracking-wider mb-1">
+                How many guests are you bringing? *
+              </label>
+              <select id="guestCount" value={guestCount} onChange={(e) => setGuestCount(Number(e.target.value))}
+                className="w-full border-2 border-black px-4 py-3 font-mono text-sm bg-transparent focus:border-accent focus:outline-none">
+                {Array.from({ length: MAX_GUESTS }, (_, i) => i).map((guests) => {
+                  const totalPeople = guests + 1; // artist + guests
+                  const extraPeople = Math.max(0, totalPeople - FREE_GUESTS);
+                  return (
+                    <option key={guests} value={totalPeople}>
+                      {guests === 0
+                        ? 'No guests — just me'
+                        : guests <= 2
+                          ? `${guests} guest${guests > 1 ? 's' : ''} (free)`
+                          : `${guests} guests (+${formatCents(GUEST_FEE_PER_HOUR * extraPeople)}/hr for ${extraPeople} extra)`
+                      }
+                    </option>
+                  );
+                })}
+              </select>
+              {guestCount > FREE_GUESTS && (
+                <p className="font-mono text-xs text-amber-700 mt-1">
+                  {guestCount - FREE_GUESTS} extra guest{guestCount - FREE_GUESTS > 1 ? 's' : ''} beyond the included 2 — {formatCents(GUEST_FEE_PER_HOUR)}/hr each = {formatCents(pricing.guestFee)} added to your session
+                </p>
+              )}
+            </div>
+          )}
           <div>
             <label htmlFor="notes" className="block font-mono text-xs text-black/60 uppercase tracking-wider mb-1">Notes</label>
             <textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
@@ -770,13 +930,17 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
           </div>
         )}
 
-        {/* Pay button */}
+        {/* Pay button — label shifts to call out the band-session framing. */}
         <button
           onClick={handleCheckout}
           disabled={!selectedDate || !selectedTime || !customerName.trim() || isSubmitting || (selectedTime ? wouldOverlap(startHour, duration) : false)}
           className="w-full bg-accent text-black font-mono text-lg font-bold uppercase tracking-wider px-8 py-5 hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isSubmitting ? 'PROCESSING...' : `PAY DEPOSIT — ${formatCents(pricing.deposit)}`}
+          {isSubmitting
+            ? 'PROCESSING...'
+            : isBandMode
+              ? `PAY BAND DEPOSIT — ${formatCents(pricing.deposit)}`
+              : `PAY DEPOSIT — ${formatCents(pricing.deposit)}`}
         </button>
       </section>
     </div>

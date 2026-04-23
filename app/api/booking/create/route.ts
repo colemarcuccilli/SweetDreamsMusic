@@ -1,21 +1,61 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
+import { getSessionUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { PRICING, SITE_URL, ROOM_LABELS, STUDIO_A_WEEKDAY_START, MAX_GUESTS, type Room } from '@/lib/constants';
-import { calculateSessionTotal, parseTimeSlot } from '@/lib/utils';
+import { calculateSessionTotal, calculateBandSessionTotal, isSelfServeBandHours, parseTimeSlot } from '@/lib/utils';
+import { getMembership, memberHasFlag } from '@/lib/bands';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { date, startTime, duration, room, engineer, customerName, customerEmail, customerPhone, guestCount: rawGuestCount, notes } = body;
+    const { date, startTime, duration, room, engineer, customerName, customerEmail, customerPhone, guestCount: rawGuestCount, notes, bandId } = body;
     const guestCount = Math.min(Math.max(1, Number(rawGuestCount) || 1), MAX_GUESTS);
+    const isBandBooking = typeof bandId === 'string' && bandId.length > 0;
 
     if (!date || !startTime || !duration || !room || !customerName || !customerEmail) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    if (duration < PRICING.minHours || duration > PRICING.maxHours) {
-      return NextResponse.json({ error: 'Invalid duration' }, { status: 400 });
+    // Band bookings: require authentication, membership, and can_book_band_sessions.
+    // We verify via the session cookie — NOT by trusting anything in the body.
+    // The permission check is what gives band_id any meaning; everything else
+    // trusts the body (customer email, name, phone) because it's a solo-style
+    // self-attestation by the booker.
+    let band: { id: string; display_name: string } | null = null;
+    if (isBandBooking) {
+      const user = await getSessionUser();
+      if (!user) {
+        return NextResponse.json({ error: 'Sign in required to book a band session' }, { status: 401 });
+      }
+      const membership = await getMembership(bandId, user.id);
+      if (!membership || !memberHasFlag(membership, 'can_book_band_sessions')) {
+        return NextResponse.json({ error: 'You don\'t have permission to book sessions for this band' }, { status: 403 });
+      }
+      const supabase = createServiceClient();
+      const { data: bandRow } = await supabase
+        .from('bands')
+        .select('id, display_name')
+        .eq('id', bandId)
+        .maybeSingle();
+      if (!bandRow) {
+        return NextResponse.json({ error: 'Band not found' }, { status: 404 });
+      }
+      band = bandRow as { id: string; display_name: string };
+
+      // Band sessions are Studio A only (BAND_PRICING is Studio A).
+      if (room !== 'studio_a') {
+        return NextResponse.json({ error: 'Band sessions are Studio A only' }, { status: 400 });
+      }
+      // Self-serve band tiers: 4h or 8h. 24h ("3 Days") is handled via contact, not this endpoint.
+      if (!isSelfServeBandHours(Number(duration))) {
+        return NextResponse.json({ error: 'Band sessions must be 4 or 8 hours. Contact us for multi-day bookings.' }, { status: 400 });
+      }
+    } else {
+      // Solo flow — unchanged bounds.
+      if (duration < PRICING.minHours || duration > PRICING.maxHours) {
+        return NextResponse.json({ error: 'Invalid duration' }, { status: 400 });
+      }
     }
 
     const startHour = parseTimeSlot(startTime);
@@ -82,7 +122,12 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const pricing = calculateSessionTotal(room as Room, duration, startHour, sameDayBooking, guestCount);
+    // Branch pricing on booking type. Band bookings are flat-rate packages
+    // (no night / same-day / guest surcharges stack); solo sessions keep the
+    // full per-hour surcharge matrix.
+    const pricing = isBandBooking
+      ? calculateBandSessionTotal(Number(duration) as 4 | 8)
+      : calculateSessionTotal(room as Room, duration, startHour, sameDayBooking, guestCount);
 
     const endDec = (startHour + duration) % 24;
     const endTime = `${Math.floor(endDec)}:${endDec % 1 >= 0.5 ? '30' : '00'}`;
@@ -108,6 +153,16 @@ export async function POST(request: NextRequest) {
     // Cash App Pay, Venmo, etc. do NOT support saving for future off-session charges.
     // Previously this was set at the payment_intent_data level which caused Cash App Pay
     // payments to silently fail (checkout never completed, webhook never fired).
+    // Stripe Checkout line item — copy distinguishes band vs solo so the
+    // customer's receipt and Stripe dashboard read naturally. The webhook
+    // doesn't read `product_data.name`; it's pure UX.
+    const lineItemName = isBandBooking && band
+      ? `Band Session Deposit — ${band.display_name}`
+      : `Recording Session Deposit — ${roomLabel}`;
+    const lineItemDescription = isBandBooking
+      ? `${duration}hr band session on ${date} at ${startTime} (50% deposit)`
+      : `${duration}hr session on ${date} at ${startTime} (50% deposit)`;
+
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       mode: 'payment',
@@ -116,8 +171,8 @@ export async function POST(request: NextRequest) {
           price_data: {
             currency: PRICING.currency,
             product_data: {
-              name: `Recording Session Deposit — ${roomLabel}`,
-              description: `${duration}hr session on ${date} at ${startTime} (50% deposit)`,
+              name: lineItemName,
+              description: lineItemDescription,
             },
             unit_amount: pricing.deposit,
           },
@@ -132,7 +187,12 @@ export async function POST(request: NextRequest) {
       success_url: `${SITE_URL}/book/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${SITE_URL}/book`,
       metadata: {
-        type: 'booking_deposit',
+        // `type` is the discriminator the webhook branches on. Keeping the
+        // original `booking_deposit` value for solo sessions means zero
+        // change to existing webhook logic; band bookings get their own
+        // tag so the webhook can persist `band_id` + skip solo-only fields.
+        type: isBandBooking ? 'band_booking_deposit' : 'booking_deposit',
+        band_id: isBandBooking && band ? band.id : '',
         customer_name: customerName,
         customer_email: customerEmail,
         customer_phone: customerPhone || '',

@@ -4,6 +4,39 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { getMembership, memberHasFlag } from '@/lib/bands';
 
 /**
+ * GET /api/bands/[id] — fetch a band with the caller's membership.
+ *
+ * Scoped to members only (404 if not a member, so non-members can't probe
+ * for band existence). Used by the booking flow to look up band identity
+ * and verify booking permission before entering band mode, but also
+ * suitable as a generic "hydrate a band" endpoint for any client that
+ * needs band + membership together.
+ */
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id: bandId } = await params;
+
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+
+  const supabase = createServiceClient();
+  const { data: band } = await supabase
+    .from('bands')
+    .select('*')
+    .eq('id', bandId)
+    .maybeSingle();
+  if (!band) return NextResponse.json({ error: 'Band not found' }, { status: 404 });
+
+  const membership = await getMembership(bandId, user.id);
+  // Collapse "not a member" into 404 so non-members can't enumerate bands.
+  if (!membership) return NextResponse.json({ error: 'Band not found' }, { status: 404 });
+
+  return NextResponse.json({ band, membership });
+}
+
+/**
  * PATCH /api/bands/[id] — update a band's editable fields.
  *
  * Gate: caller must have `can_edit_public_page` (or be owner). The allowed

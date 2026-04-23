@@ -234,21 +234,23 @@ export default async function BandHubPage({ params }: { params: Promise<{ id: st
               </Link>
             )}
 
-            {/* Book a band session (Phase 3 — link exists but to-be-built) */}
+            {/* Book a band session — routes to the unified booking flow in
+                band mode. The page re-verifies canBook server-side; this is
+                just the entry point. */}
             {canBook && (
-              <div className="border-2 border-black/10 p-6 bg-black/5 relative">
-                <Calendar className="w-8 h-8 text-black/30 mb-4" strokeWidth={1.5} />
+              <Link
+                href={`/book?bandId=${band.id}`}
+                className="border-2 border-black/10 hover:border-accent transition-colors p-6 no-underline group"
+              >
+                <Calendar className="w-8 h-8 text-accent mb-4" strokeWidth={1.5} />
                 <p className="font-mono text-xs text-black/60 mb-1">BOOKINGS</p>
-                <p className="font-mono text-body-md font-bold text-black/50">
-                  Band sessions
+                <p className="font-mono text-body-md font-bold group-hover:text-accent transition-colors">
+                  Book a band session
                 </p>
                 <p className="font-mono text-xs text-black/60 mt-2">
-                  Split-pay band bookings — coming soon.
+                  Studio A, flat-rate 4h or 8h tiers — 50% deposit.
                 </p>
-                <span className="absolute top-3 right-3 font-mono text-[10px] font-bold uppercase tracking-wider bg-yellow-300 text-black px-2 py-1">
-                  Soon
-                </span>
-              </div>
+              </Link>
             )}
 
             {/* Owner-only: settings */}

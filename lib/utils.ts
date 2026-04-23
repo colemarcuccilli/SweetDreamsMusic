@@ -1,4 +1,4 @@
-import { PRICING, ROOM_RATES, ROOM_RATES_SINGLE, SWEET_4, SUPER_ADMINS, GUEST_FEE_PER_HOUR, FREE_GUESTS, type Room, type UserRole } from './constants';
+import { PRICING, ROOM_RATES, ROOM_RATES_SINGLE, SWEET_4, BAND_PRICING, SUPER_ADMINS, GUEST_FEE_PER_HOUR, FREE_GUESTS, type Room, type UserRole } from './constants';
 
 export function formatCents(cents: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -106,6 +106,59 @@ export function calculateSessionTotal(
   // NOTE: `sweetSpot` field kept as-is for backward compat with callers
   // that read the boolean flag. The user-facing product is now "The Sweet 4".
   return { subtotal, hourBreakdown, nightFees, sameDayFee, guestFee, guestCount, sweetSpot: isSweet4, total, deposit };
+}
+
+// ============================================================
+// Band session pricing (Phase 3)
+// ============================================================
+// Band sessions use flat-rate packages from BAND_PRICING (Studio A only).
+// Unlike solo sessions, band bookings do NOT stack night / same-day / guest
+// surcharges — the package price is all-in, because the band IS the guest
+// list and the package framing exists precisely to be predictable.
+//
+// Self-serve flow supports 4h and 8h only. The 24h ("3 Days") tier is a
+// multi-session bundle that requires admin coordination — the UI routes it
+// to a contact CTA rather than trying to fake a 24-hour single booking.
+
+export type BandSessionPricing = {
+  hours: 4 | 8;
+  tier: (typeof BAND_PRICING)[number];
+  subtotal: number;
+  nightFees: number;   // always 0 — flat-rate package
+  sameDayFee: number;  // always 0
+  guestFee: number;    // always 0 — band members aren't guests
+  total: number;
+  deposit: number;
+};
+
+/**
+ * Validates an arbitrary number is a supported self-serve band tier.
+ * 24h tier exists in BAND_PRICING for display on the pricing page, but
+ * isn't self-serve bookable — it requires multi-day coordination.
+ */
+export function isSelfServeBandHours(h: unknown): h is 4 | 8 {
+  return h === 4 || h === 8;
+}
+
+export function calculateBandSessionTotal(hours: 4 | 8): BandSessionPricing {
+  const tier = BAND_PRICING.find((t) => t.hours === hours);
+  if (!tier) {
+    // Should never hit this if callers type-gate via isSelfServeBandHours,
+    // but belt-and-suspenders for JS callers.
+    throw new Error(`Invalid band tier: ${hours}h. Supported: 4, 8.`);
+  }
+  const total = tier.price;
+  const deposit = Math.round(total * (PRICING.depositPercent / 100));
+  return {
+    hours,
+    tier,
+    subtotal: total,
+    nightFees: 0,
+    sameDayFee: 0,
+    guestFee: 0,
+    total,
+    deposit,
+  };
 }
 
 export function getUserRole(email: string | undefined, profileRole?: string): UserRole {
