@@ -4,12 +4,12 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { getSessionUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/server';
+import { memberHasFlag } from '@/lib/bands';
 import {
   getBandWithMembers,
   getMembership,
   getPendingInvitesForBand,
-  memberHasFlag,
-} from '@/lib/bands';
+} from '@/lib/bands-server';
 import DashboardNav from '@/components/layout/DashboardNav';
 import MemberManagement from '@/components/bands/MemberManagement';
 

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/server';
-import { getMembership, memberHasFlag, generateInviteToken } from '@/lib/bands';
+import { memberHasFlag, generateInviteToken } from '@/lib/bands';
+import { getMembership } from '@/lib/bands-server';
 import { sendBandInviteEmail } from '@/lib/email';
 
 /**

@@ -15,13 +15,12 @@ import {
   Calendar,
 } from 'lucide-react';
 import { getSessionUser } from '@/lib/auth';
+import { memberHasFlag, isOwnerOrAdmin } from '@/lib/bands';
 import {
   getBandWithMembers,
   getMembership,
   getPendingInvitesForBand,
-  memberHasFlag,
-  isOwnerOrAdmin,
-} from '@/lib/bands';
+} from '@/lib/bands-server';
 import DashboardNav from '@/components/layout/DashboardNav';
 
 export const metadata: Metadata = { title: 'Band Hub' };

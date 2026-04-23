@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Users, Plus, Mail, AlertCircle, ArrowRight } from 'lucide-react';
 import { getSessionUser } from '@/lib/auth';
-import { getUserBands, getPendingInvitesForEmail } from '@/lib/bands';
+import { getUserBands, getPendingInvitesForEmail } from '@/lib/bands-server';
 import DashboardNav from '@/components/layout/DashboardNav';
 
 export const metadata: Metadata = { title: 'Bands' };

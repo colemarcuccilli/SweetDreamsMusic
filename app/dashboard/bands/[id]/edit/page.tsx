@@ -3,7 +3,8 @@ import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { getSessionUser } from '@/lib/auth';
-import { getBandWithMembers, getMembership, memberHasFlag } from '@/lib/bands';
+import { memberHasFlag } from '@/lib/bands';
+import { getBandWithMembers, getMembership } from '@/lib/bands-server';
 import DashboardNav from '@/components/layout/DashboardNav';
 import EditBandForm from '@/components/bands/EditBandForm';
 

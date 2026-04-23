@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/server';
-import { getMembership, memberHasFlag } from '@/lib/bands';
+import { memberHasFlag } from '@/lib/bands';
+import { getMembership } from '@/lib/bands-server';
 
 /**
  * GET /api/bands/[id] — fetch a band with the caller's membership.

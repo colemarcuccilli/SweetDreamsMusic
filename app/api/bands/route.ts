@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/server';
-import { bandSlugFromName, uniqueBandSlug } from '@/lib/bands';
+import { bandSlugFromName } from '@/lib/bands';
+import { uniqueBandSlug } from '@/lib/bands-server';
 
 /**
  * POST /api/bands — create a new band with the current user as owner.

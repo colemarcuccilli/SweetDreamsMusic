@@ -4,7 +4,8 @@ import { getSessionUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { PRICING, SITE_URL, ROOM_LABELS, STUDIO_A_WEEKDAY_START, MAX_GUESTS, type Room } from '@/lib/constants';
 import { calculateSessionTotal, calculateBandSessionTotal, isSelfServeBandHours, parseTimeSlot } from '@/lib/utils';
-import { getMembership, memberHasFlag } from '@/lib/bands';
+import { memberHasFlag } from '@/lib/bands';
+import { getMembership } from '@/lib/bands-server';
 
 export async function POST(request: NextRequest) {
   try {

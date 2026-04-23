@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/server';
-import { getMembership, memberHasFlag } from '@/lib/bands';
+import { memberHasFlag } from '@/lib/bands';
+import { getMembership } from '@/lib/bands-server';
 
 /**
  * DELETE /api/bands/[id]/invites/[inviteId] — cancel a pending invite.

@@ -5,7 +5,8 @@ import { SITE_URL } from '@/lib/constants';
 import { STUDIO_IMAGES } from '@/lib/images';
 import { getSessionUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/server';
-import { getMembership, memberHasFlag } from '@/lib/bands';
+import { memberHasFlag } from '@/lib/bands';
+import { getMembership } from '@/lib/bands-server';
 import BookingFlow from '@/components/booking/BookingFlow';
 
 export const metadata: Metadata = {
