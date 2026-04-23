@@ -993,3 +993,37 @@ export async function sendLeaseExpiredNotice(to: string, details: {
     });
   } catch (e) { console.error('Email error (lease expired):', e); }
 }
+
+/**
+ * Band invite email — sent when a band owner/admin invites a new member via email.
+ * The acceptance link lands them at /bands/accept/[token] where they can review
+ * the invite and either accept (creating or joining their account) or reject.
+ */
+export async function sendBandInviteEmail(details: {
+  toEmail: string;
+  bandName: string;
+  inviterName: string;
+  role: 'admin' | 'member';
+  token: string;
+}) {
+  try {
+    const acceptUrl = `${SITE_URL}/bands/accept/${details.token}`;
+    await resend.emails.send({
+      from: FROM,
+      to: details.toEmail,
+      subject: `You're invited to join ${details.bandName} on Sweet Dreams Music`,
+      html: wrap(`
+        ${h1('Band Invite')}
+        ${p(`<strong style="color:#fff">${details.inviterName}</strong> invited you to join <strong style="color:#F4C430">${details.bandName}</strong> as ${details.role === 'admin' ? 'an admin' : 'a member'}.`)}
+        ${p('Sweet Dreams Music is a full-service studio in Fort Wayne, IN. The band hub lets you collaborate on bookings, releases, and live showcases with your bandmates.')}
+        ${detailTable(`
+          ${detail('Band', details.bandName)}
+          ${detail('Role', details.role.charAt(0).toUpperCase() + details.role.slice(1))}
+          ${detail('Invited by', details.inviterName)}
+        `)}
+        ${btn('Review & Accept Invite', acceptUrl)}
+        ${p('<span style="color:#888;font-size:12px">This invite expires in 14 days. If you don\'t have a Sweet Dreams account yet, you\'ll be prompted to create one.</span>')}
+      `),
+    });
+  } catch (e) { console.error('Email error (band invite):', e); }
+}
