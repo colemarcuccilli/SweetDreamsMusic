@@ -1,18 +1,18 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Clock, AlertCircle, Check, Star, Users, Moon } from 'lucide-react';
-import { SITE_URL, PRICING, ROOM_RATES, SWEET_SPOTS, BAND_PRICING } from '@/lib/constants';
+import { Clock, AlertCircle, Check, Star, Users, Moon, Video } from 'lucide-react';
+import { SITE_URL, PRICING, ROOM_RATES, SWEET_4, BAND_PRICING } from '@/lib/constants';
 import { formatCents, calculateSessionTotal } from '@/lib/utils';
 import { STUDIO_IMAGES } from '@/lib/images';
 
 export const metadata: Metadata = {
   title: 'Studio Pricing — Recording Rates & Packages',
-  description: 'Sweet Dreams Music recording studio pricing in Fort Wayne, IN. Studio A from $70/hr, Studio B from $50/hr. 4-hour Sweet Spot deals, band recording packages, and 24-hour availability. 50% deposit booking.',
+  description: 'Sweet Dreams Music recording studio pricing in Fort Wayne, IN. Studio A from $70/hr, Studio B from $50/hr. The Sweet 4 — 4-hour flat-rate discount, band recording packages, free short-form video on 3+ hour sessions, and 24-hour availability. 50% deposit booking.',
   alternates: { canonical: `${SITE_URL}/pricing` },
   openGraph: {
     title: 'Studio Pricing — Recording Rates & Packages | Sweet Dreams Music',
-    description: 'Recording studio rates starting at $50/hr. Studio A and Studio B pricing, Sweet Spot deals, band recording packages. Open 24/7 in Fort Wayne, Indiana.',
+    description: 'Recording studio rates starting at $50/hr. Studio A and Studio B pricing, The Sweet 4 discount, band recording packages, free short-form video on 3+ hour bookings. Open 24/7 in Fort Wayne, Indiana.',
     url: `${SITE_URL}/pricing`,
     type: 'website',
   },
@@ -98,21 +98,32 @@ export default function PricingPage() {
             </div>
           </div>
 
-          {/* Sweet Spots + Surcharges */}
+          {/* 3-Hour Free Video Callout — yellow banner above the add-ons grid */}
+          <div className="bg-yellow-300 border-4 border-black p-6 sm:p-8 mb-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
+            <Video className="w-10 h-10 text-black flex-shrink-0" />
+            <div className="flex-1">
+              <h3 className="text-heading-sm mb-1">BOOK 3 HOURS — GET A FREE SHORT-FORM VIDEO</h3>
+              <p className="font-mono text-sm text-black/80">
+                Every session 3 hours or longer includes a free short-form video deliverable — content for your reels, shorts, or feed, shot while you record.
+              </p>
+            </div>
+          </div>
+
+          {/* The Sweet 4 + Surcharges */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="border-2 border-accent p-6 sm:p-8">
               <div className="flex items-center gap-3 mb-4">
                 <Star className="w-6 h-6 text-accent" />
-                <h3 className="text-heading-sm">SWEET SPOT</h3>
+                <h3 className="text-heading-sm">THE SWEET 4</h3>
               </div>
               <div className="space-y-3 mb-3">
                 <div>
-                  <p className="font-heading text-display-sm text-accent">{formatCents(SWEET_SPOTS.studio_a.price)}</p>
-                  <p className="font-mono text-xs text-black/50">Studio A — 4 hours ({formatCents(SWEET_SPOTS.studio_a.perHour)}/hr)</p>
+                  <p className="font-heading text-display-sm text-accent">{formatCents(SWEET_4.studio_a.price)}</p>
+                  <p className="font-mono text-xs text-black/50">Studio A — 4 hours ({formatCents(SWEET_4.studio_a.perHour)}/hr)</p>
                 </div>
                 <div>
-                  <p className="font-heading text-display-sm text-accent">{formatCents(SWEET_SPOTS.studio_b.price)}</p>
-                  <p className="font-mono text-xs text-black/50">Studio B — 4 hours ({formatCents(SWEET_SPOTS.studio_b.perHour)}/hr)</p>
+                  <p className="font-heading text-display-sm text-accent">{formatCents(SWEET_4.studio_b.price)}</p>
+                  <p className="font-mono text-xs text-black/50">Studio B — 4 hours ({formatCents(SWEET_4.studio_b.perHour)}/hr)</p>
                 </div>
               </div>
               <p className="font-mono text-sm text-black/60">Best value. Book 4 hours at a discounted flat rate.</p>
@@ -207,7 +218,7 @@ export default function PricingPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {[
               { title: '2 HOURS — STUDIO B (DAYTIME)', room: 'studio_b' as const, hours: 2, startHour: 14, sameDay: false },
-              { title: 'SWEET SPOT — STUDIO A', room: 'studio_a' as const, hours: 4, startHour: 12, sameDay: false },
+              { title: 'THE SWEET 4 — STUDIO A', room: 'studio_a' as const, hours: 4, startHour: 12, sameDay: false },
               { title: '3 HOURS — STUDIO A (11 PM START)', room: 'studio_a' as const, hours: 3, startHour: 23, sameDay: false },
             ].map((ex) => {
               const p = calculateSessionTotal(ex.room, ex.hours, ex.startHour, ex.sameDay);
@@ -216,7 +227,7 @@ export default function PricingPage() {
                   <h3 className="text-heading-sm mb-4">{ex.title}</h3>
                   <div className="font-mono text-sm text-black/50 space-y-1 mb-6">
                     <p>Base: {formatCents(p.subtotal)}</p>
-                    {p.sweetSpot && <p className="text-accent">Sweet Spot rate applied</p>}
+                    {p.sweetSpot && <p className="text-accent">The Sweet 4 rate applied</p>}
                     {p.nightFees > 0 && <p className="text-amber-600">Night surcharges: +{formatCents(p.nightFees)}</p>}
                     {p.sameDayFee > 0 && <p>Same-day: +{formatCents(p.sameDayFee)}</p>}
                   </div>

@@ -153,7 +153,7 @@ function FAQSchema() {
   const faqs = [
     {
       question: 'How much does a recording session cost at Sweet Dreams Music?',
-      answer: `Studio A starts at $${(PRICING.studioA / 100)} per hour and Studio B starts at $${(PRICING.studioB / 100)} per hour (2+ hour sessions). Single hour sessions are $${(PRICING.studioASingleHour / 100)} for Studio A and $${(PRICING.studioBSingleHour / 100)} for Studio B. We also offer 4-hour Sweet Spot deals and band recording packages.`,
+      answer: `Studio A starts at $${(PRICING.studioA / 100)} per hour and Studio B starts at $${(PRICING.studioB / 100)} per hour (2+ hour sessions). Single hour sessions are $${(PRICING.studioASingleHour / 100)} for Studio A and $${(PRICING.studioBSingleHour / 100)} for Studio B. We also offer "The Sweet 4" 4-hour flat-rate deals and band recording packages.`,
     },
     {
       question: 'What are your studio hours?',

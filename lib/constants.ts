@@ -72,10 +72,12 @@ export const PRICING = {
   currency: 'usd' as const,
 };
 
-// Sweet Spot deals — flat rate for 4 hours
-export const SWEET_SPOTS = {
-  studio_a: { hours: 4, price: 26000, label: 'Studio A Sweet Spot', perHour: 6500 }, // $260
-  studio_b: { hours: 4, price: 18000, label: 'Studio B Sweet Spot', perHour: 4500 }, // $180
+// The Sweet 4 — flat-rate 4-hour discount package
+// (The brand "Sweet Spot" now refers to our band showcase program at /bands.
+//  The old Sweet Spot discount rate was renamed The Sweet 4 on 2026-04-22.)
+export const SWEET_4 = {
+  studio_a: { hours: 4, price: 26000, label: 'The Sweet 4 — Studio A', perHour: 6500 }, // $260
+  studio_b: { hours: 4, price: 18000, label: 'The Sweet 4 — Studio B', perHour: 4500 }, // $180
 } as const;
 
 // Band Recording — Studio A only
@@ -197,16 +199,26 @@ export const BEAT_GENRES: { value: string; label: string; bg: string; text: stri
   { value: 'Boom Bap', label: 'Boom Bap', bg: '#212121', text: '#bdbdbd' },
 ];
 
+// Primary navigation — rendered in the Header on every page.
+// The logo links to '/' so Home is not repeated here.
+// Blog was moved to the footer; see FOOTER_EXTRA_LINKS below.
 export const NAV_LINKS = [
-  { href: '/', label: 'Home' },
   { href: '/book', label: 'Book' },
   { href: '/beats', label: 'Beats' },
   { href: '/pricing', label: 'Pricing' },
   { href: '/engineers', label: 'Engineers' },
   { href: '/media', label: 'Media' },
-  { href: '/blog', label: 'Blog' },
+  { href: '/bands', label: 'Bands' },
+  { href: '/events', label: 'Events' },
   { href: '/about', label: 'About' },
   { href: '/contact', label: 'Contact' },
+] as const;
+
+// Links that show in the footer only (never in the Header).
+// Useful for secondary destinations we want crawlable and reachable
+// without cluttering the primary nav.
+export const FOOTER_EXTRA_LINKS = [
+  { href: '/blog', label: 'Blog' },
 ] as const;
 
 export type UserRole = 'user' | 'engineer' | 'admin';

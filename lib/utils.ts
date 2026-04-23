@@ -1,4 +1,4 @@
-import { PRICING, ROOM_RATES, ROOM_RATES_SINGLE, SWEET_SPOTS, SUPER_ADMINS, GUEST_FEE_PER_HOUR, FREE_GUESTS, type Room, type UserRole } from './constants';
+import { PRICING, ROOM_RATES, ROOM_RATES_SINGLE, SWEET_4, SUPER_ADMINS, GUEST_FEE_PER_HOUR, FREE_GUESTS, type Room, type UserRole } from './constants';
 
 export function formatCents(cents: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -59,14 +59,14 @@ export function calculateSessionTotal(
   isSameDayBooking: boolean,
   guestCount: number = 1
 ): SessionPricing {
-  // Check for Sweet Spot deal (4 hours flat rate)
-  const spot = SWEET_SPOTS[room];
-  const isSweetSpot = hours === spot.hours;
+  // Check for The Sweet 4 deal (4 hours flat rate)
+  const sweet4 = SWEET_4[room];
+  const isSweet4 = hours === sweet4.hours;
 
   // Calculate base rate per hour
   let basePerHour: number;
-  if (isSweetSpot) {
-    basePerHour = spot.perHour;
+  if (isSweet4) {
+    basePerHour = sweet4.perHour;
   } else if (hours === 1) {
     basePerHour = ROOM_RATES_SINGLE[room];
   } else {
@@ -97,13 +97,15 @@ export function calculateSessionTotal(
     sameDayFee += sdFee;
   }
 
-  const subtotal = isSweetSpot ? spot.price : basePerHour * hours;
+  const subtotal = isSweet4 ? sweet4.price : basePerHour * hours;
   const extraGuests = Math.max(0, guestCount - FREE_GUESTS);
   const guestFee = extraGuests * GUEST_FEE_PER_HOUR * hours;
   const total = subtotal + nightFees + sameDayFee + guestFee;
   const deposit = Math.round(total * (PRICING.depositPercent / 100));
 
-  return { subtotal, hourBreakdown, nightFees, sameDayFee, guestFee, guestCount, sweetSpot: isSweetSpot, total, deposit };
+  // NOTE: `sweetSpot` field kept as-is for backward compat with callers
+  // that read the boolean flag. The user-facing product is now "The Sweet 4".
+  return { subtotal, hourBreakdown, nightFees, sameDayFee, guestFee, guestCount, sweetSpot: isSweet4, total, deposit };
 }
 
 export function getUserRole(email: string | undefined, profileRole?: string): UserRole {

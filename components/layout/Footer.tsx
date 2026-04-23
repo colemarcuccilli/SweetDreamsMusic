@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { NAV_LINKS, BRAND } from '@/lib/constants';
+import { NAV_LINKS, FOOTER_EXTRA_LINKS, BRAND } from '@/lib/constants';
 
 export default function Footer() {
   return (
@@ -15,11 +15,20 @@ export default function Footer() {
             </p>
           </div>
 
-          {/* Navigation */}
+          {/* Navigation — Header nav + footer-only extras (Blog) */}
           <div>
             <h4 className="text-lg mb-4">NAVIGATE</h4>
             <nav className="flex flex-col gap-2">
               {NAV_LINKS.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  className="font-mono text-sm text-white/60 hover:text-accent transition-colors no-underline"
+                >
+                  {link.label}
+                </Link>
+              ))}
+              {FOOTER_EXTRA_LINKS.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}

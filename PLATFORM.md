@@ -17,7 +17,7 @@ Sweet Dreams Music is a full-service recording studio platform in Fort Wayne, In
 | Page | URL | Purpose |
 |------|-----|---------|
 | Home | `/` | Studio showcase, services overview, pricing preview, team highlight |
-| Pricing | `/pricing` | Detailed hourly rates, Sweet Spot deals, surcharges, band recording |
+| Pricing | `/pricing` | Detailed hourly rates, The Sweet 4 (4hr flat-rate), surcharges, band recording |
 | Book a Session | `/book` | Interactive booking flow with availability calendar, time selection, Stripe checkout |
 | Engineers | `/engineers` | Engineer profiles with specialties, studio assignments, and booking links |
 | Beat Store | `/beats` | Browse, search, and filter beats by genre, BPM, producer. Audio previews |
@@ -206,7 +206,7 @@ Sweet Dreams Music is a full-service recording studio platform in Fort Wayne, In
 ## Pricing Structure
 
 ### Studio Rates
-| Room | Single Hour | 2+ Hours | Sweet Spot (4hr) |
+| Room | Single Hour | 2+ Hours | The Sweet 4 (4hr flat) |
 |------|------------|----------|------------------|
 | Studio A | $70/hr | $60/hr | $260 flat |
 | Studio B | $50/hr | $50/hr | $180 flat |

@@ -150,11 +150,11 @@ export default function PricingCalculator() {
             </div>
           </div>
 
-          {/* Sweet Spot badge */}
+          {/* The Sweet 4 badge (internal flag is still `sweetSpot` for backward compat) */}
           {pricing.sweetSpot && (
             <div className="bg-accent/10 border-2 border-accent px-4 py-3">
               <p className="font-mono text-xs font-bold text-accent uppercase tracking-wider">
-                Sweet Spot Deal Applied — 4 hours at a discounted rate!
+                The Sweet 4 Applied — 4 hours at a discounted flat rate!
               </p>
             </div>
           )}

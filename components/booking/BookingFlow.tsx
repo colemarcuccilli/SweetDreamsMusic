@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { Calendar, Clock, Home, User, Users, ChevronLeft, ChevronRight, AlertTriangle, Star } from 'lucide-react';
-import { PRICING, ROOMS, ROOM_LABELS, ROOM_RATES, ROOM_RATES_SINGLE, SWEET_SPOTS, ENGINEERS, STUDIO_A_WEEKDAY_START, GUEST_FEE_PER_HOUR, FREE_GUESTS, MAX_GUESTS, type Room } from '@/lib/constants';
+import { Calendar, Clock, Home, User, Users, ChevronLeft, ChevronRight, AlertTriangle, Star, Video } from 'lucide-react';
+import { PRICING, ROOMS, ROOM_LABELS, ROOM_RATES, ROOM_RATES_SINGLE, SWEET_4, ENGINEERS, STUDIO_A_WEEKDAY_START, GUEST_FEE_PER_HOUR, FREE_GUESTS, MAX_GUESTS, type Room } from '@/lib/constants';
 import { formatCents, cn, isSameDay, calculateSessionTotal, formatTime, getHourSurcharge, parseTimeSlot, decimalToTimeStr } from '@/lib/utils';
 
 function getDaysInMonth(year: number, month: number) {
@@ -497,8 +497,11 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
         <div className="mb-4">
           <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">
             Duration: {duration} hour{duration > 1 ? 's' : ''}
-            {duration === SWEET_SPOTS[room].hours && (
-              <span className="text-accent ml-2 inline-flex items-center gap-1"><Star className="w-3 h-3" /> Sweet Spot!</span>
+            {duration === SWEET_4[room].hours && (
+              <span className="text-accent ml-2 inline-flex items-center gap-1"><Star className="w-3 h-3" /> The Sweet 4!</span>
+            )}
+            {duration === 3 && (
+              <span className="text-accent ml-2 inline-flex items-center gap-1"><Video className="w-3 h-3" /> Free short-form video included</span>
             )}
           </h3>
           <div className="flex flex-wrap gap-2">
@@ -512,12 +515,34 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
                 )}
               >
                 {h}
-                {h === SWEET_SPOTS[room].hours && duration !== h && (
+                {h === SWEET_4[room].hours && duration !== h && (
                   <span className="absolute -top-1 -right-1 w-2 h-2 bg-accent rounded-full" />
                 )}
               </button>
             ))}
           </div>
+
+          {/* 2-hour → 3-hour upsell nudge: adding one hour unlocks a free short-form video */}
+          {duration === 2 && (
+            <div className="mt-4 bg-yellow-300 border-2 border-black p-4 flex items-start gap-3">
+              <Video className="w-5 h-5 text-black flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-mono text-sm font-bold uppercase tracking-wider mb-1">
+                  Add 1 hour — get a free short-form video
+                </p>
+                <p className="font-mono text-xs text-black/80 mb-3">
+                  Every 3-hour session includes a free short-form video deliverable for reels, shorts, or feed — shot while you record.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setDuration(3)}
+                  className="bg-black text-yellow-300 font-mono text-xs font-bold uppercase tracking-wider px-4 py-2 hover:bg-black/80 transition-colors"
+                >
+                  Bump to 3 hours
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Live hour-by-hour preview when time is selected */}
@@ -606,7 +631,7 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
             <div className="flex justify-between">
               <span className="text-black/60">
                 {pricing.sweetSpot
-                  ? `${ROOM_LABELS[room]} Sweet Spot (${duration}hr flat rate)`
+                  ? `${ROOM_LABELS[room]} The Sweet 4 (${duration}hr flat rate)`
                   : `${ROOM_LABELS[room]} (${duration}hr × ${formatCents(duration === 1 ? ROOM_RATES_SINGLE[room] : ROOM_RATES[room])})`
                 }
               </span>
@@ -614,7 +639,7 @@ export default function BookingFlow({ userName, userEmail }: { userName: string;
             </div>
             {pricing.sweetSpot && (
               <div className="flex justify-between text-green-700">
-                <span className="flex items-center gap-1"><Star className="w-3 h-3" /> Sweet Spot savings</span>
+                <span className="flex items-center gap-1"><Star className="w-3 h-3" /> The Sweet 4 savings</span>
                 <span>-{formatCents(ROOM_RATES[room] * duration - pricing.subtotal)}</span>
               </div>
             )}

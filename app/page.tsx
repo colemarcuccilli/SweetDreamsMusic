@@ -6,6 +6,7 @@ import { ROOM_RATES, ENGINEERS, SITE_URL } from '@/lib/constants';
 import { formatCents } from '@/lib/utils';
 import { STUDIO_IMAGES } from '@/lib/images';
 import HeroTitle from '@/components/home/HeroTitle';
+import BuiltForBands from '@/components/marketing/BuiltForBands';
 
 export const metadata: Metadata = {
   title: 'Sweet Dreams Music — Fort Wayne Recording Studio & Beat Store | Book Sessions Online',
@@ -118,6 +119,9 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* Built For Bands — yellow break between Services and equipment showcase */}
+      <BuiltForBands />
+
       {/* Equipment Showcase - White */}
       <section className="bg-white text-black py-20 sm:py-28">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -178,7 +182,7 @@ export default function HomePage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-4 font-mono text-sm text-white/80 mb-8">
-            <span className="text-accent font-semibold">4hr Sweet Spots available</span>
+            <span className="text-accent font-semibold">The Sweet 4 (4hr flat rate) available</span>
             <span className="text-white/20">|</span>
             <span>Open 24 hours</span>
             <span className="text-white/20">|</span>
