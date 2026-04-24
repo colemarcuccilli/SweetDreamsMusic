@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/server';
+import { sendBandMemberJoinedNotification } from '@/lib/email';
 
 /**
  * POST /api/bands/invites/[token] — accept or reject a pending invite.
@@ -113,5 +114,105 @@ export async function POST(
     console.error('[bands:invite:accept] invite update failed (non-fatal):', updateErr);
   }
 
+  // Notify the band's owner and anyone with can_manage_members that a new
+  // member just joined. We exclude the joiner themselves (they know) and
+  // dedupe by email in case someone appears twice. Fire-and-forget — email
+  // delivery failing should never block the accept response.
+  if (!existingMember) {
+    notifyManagersOfJoin(supabase, invite.band_id, user.id).catch((err) => {
+      console.error('[bands:invite:accept] manager notify failed (non-fatal):', err);
+    });
+  }
+
   return NextResponse.json({ ok: true, bandId: invite.band_id });
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Helper: fetch recipients (owner + can_manage_members) and send the
+// "new member joined" email. Isolated so the main handler stays readable.
+// ────────────────────────────────────────────────────────────────────
+
+async function notifyManagersOfJoin(
+  supabase: ReturnType<typeof createServiceClient>,
+  bandId: string,
+  joinerUserId: string,
+) {
+  // We don't use PostgREST's implicit joins here — `band_members.user_id`
+  // references `auth.users(id)`, not `profiles.user_id`, so the default FK
+  // discovery can't resolve the relationship. Instead we follow the pattern
+  // already established in app/dashboard/bands/[id]/members/page.tsx: fetch
+  // band_members rows, then batch-fetch profiles by user_id.
+  const [bandRes, joinerMemberRes, managerRowsRes] = await Promise.all([
+    supabase.from('bands').select('id, display_name').eq('id', bandId).maybeSingle(),
+    supabase
+      .from('band_members')
+      .select('role, stage_name')
+      .eq('band_id', bandId)
+      .eq('user_id', joinerUserId)
+      .maybeSingle(),
+    // Owner OR anyone with can_manage_members flag. `.or()` uses the PostgREST
+    // OR syntax: "filter1,filter2" means "filter1 OR filter2".
+    supabase
+      .from('band_members')
+      .select('user_id, role, can_manage_members')
+      .eq('band_id', bandId)
+      .or('role.eq.owner,can_manage_members.eq.true'),
+  ]);
+
+  const band = bandRes.data as { id: string; display_name: string } | null;
+  if (!band) return;
+
+  const joinerMember = joinerMemberRes.data as
+    | { role: 'admin' | 'member'; stage_name: string | null }
+    | null;
+  const joinerRole = joinerMember?.role === 'admin' ? 'admin' : 'member';
+
+  // Collect recipient user_ids (everyone except the joiner themselves).
+  const managerRows = (managerRowsRes.data || []) as Array<{
+    user_id: string;
+    role: string;
+    can_manage_members: boolean;
+  }>;
+  const recipientUserIds = managerRows
+    .filter((r) => r.user_id !== joinerUserId)
+    .map((r) => r.user_id);
+
+  // Also grab the joiner's profile in the same batch to get their display_name.
+  const lookupIds = Array.from(new Set([...recipientUserIds, joinerUserId]));
+  if (lookupIds.length === 0) return;
+
+  const { data: profileRows } = await supabase
+    .from('profiles')
+    .select('user_id, display_name, email')
+    .in('user_id', lookupIds);
+
+  const profileByUserId = new Map<string, { display_name: string | null; email: string | null }>();
+  for (const row of (profileRows || []) as Array<{
+    user_id: string;
+    display_name: string | null;
+    email: string | null;
+  }>) {
+    profileByUserId.set(row.user_id, { display_name: row.display_name, email: row.email });
+  }
+
+  // Prefer stage_name (band-specific identity), then profile display_name.
+  // We skip falling back to the joiner's email because leaking PII into every
+  // band manager's inbox isn't the kind of notification we want.
+  const joinerProfile = profileByUserId.get(joinerUserId);
+  const joinerName = joinerMember?.stage_name || joinerProfile?.display_name || 'A new member';
+
+  // Dedupe recipient emails (case-insensitive) and drop any blanks.
+  const recipients = new Set<string>();
+  for (const userId of recipientUserIds) {
+    const email = profileByUserId.get(userId)?.email?.trim().toLowerCase();
+    if (email) recipients.add(email);
+  }
+  if (recipients.size === 0) return;
+
+  await sendBandMemberJoinedNotification(Array.from(recipients), {
+    bandName: band.display_name,
+    bandId: band.id,
+    joinerName,
+    joinerRole,
+  });
 }

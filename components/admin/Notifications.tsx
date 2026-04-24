@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Send, Clock, Search, X, ChevronDown, Mail, Users, Mic, Music, CheckCircle } from 'lucide-react';
+import { Send, Clock, Search, X, ChevronDown, Mail, Users, Mic, Music, CheckCircle, PartyPopper } from 'lucide-react';
+import { isEventListed, type SweetEvent } from '@/lib/events';
 
 // ── Email Templates ──────────────────────────────────────────────────
 interface EmailTemplate {
@@ -11,6 +12,60 @@ interface EmailTemplate {
   body: string;
   icon: string;
   color: string;
+}
+
+// Escape a string for safe embedding inside HTML. Admin-entered event
+// titles and descriptions get interpolated into the email body; a stray
+// `<` would otherwise break the markup.
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Compose subject + HTML body for an event announcement email.
+ * Styled to match the existing templates (dark bg, accent gold headline).
+ */
+function buildEventAnnouncement(event: SweetEvent): { subject: string; body: string } {
+  const startsAt = new Date(event.starts_at);
+  const dateStr = startsAt.toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+  });
+  const timeStr = startsAt.toLocaleTimeString('en-US', {
+    hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+  });
+
+  const title = escapeHtml(event.title);
+  const tagline = event.tagline ? escapeHtml(event.tagline) : '';
+  const location = event.location ? escapeHtml(event.location) : '';
+  const description = event.description ? escapeHtml(event.description) : '';
+
+  const subject = `New Event — ${event.title}`;
+  const body = [
+    '<h1 style="font-size:24px;font-weight:700;color:#F4C430;text-transform:uppercase;margin:0 0 16px">NEW EVENT</h1>',
+    `<h2 style="font-size:20px;font-weight:700;color:#fff;margin:0 0 8px">${title}</h2>`,
+    tagline
+      ? `<p style="font-size:14px;line-height:1.6;color:#ccc;margin:0 0 16px;font-style:italic">${tagline}</p>`
+      : '',
+    '<table style="margin:20px 0;border-collapse:collapse">',
+    `<tr><td style="padding:6px 16px 6px 0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:0.05em">WHEN</td><td style="padding:6px 0;color:#fff;font-size:14px;font-weight:600">${dateStr} at ${timeStr}</td></tr>`,
+    location
+      ? `<tr><td style="padding:6px 16px 6px 0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:0.05em">WHERE</td><td style="padding:6px 0;color:#fff;font-size:14px;font-weight:600">${location}</td></tr>`
+      : '',
+    '</table>',
+    description
+      ? `<p style="font-size:14px;line-height:1.6;color:#ccc;margin:0 0 16px;white-space:pre-wrap">${description}</p>`
+      : '',
+    `<a href="https://sweetdreamsmusic.com/events/${encodeURIComponent(event.slug)}" style="display:inline-block;background:#F4C430;color:#000;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;font-size:13px;padding:14px 28px;text-decoration:none;margin-top:16px">VIEW EVENT &amp; RSVP</a>`,
+    '<br/><br/>',
+    '<p style="font-size:14px;line-height:1.6;color:#ccc;margin:0 0 12px">— Sweet Dreams Music</p>',
+  ].join('\n');
+
+  return { subject, body };
 }
 
 const TEMPLATES: EmailTemplate[] = [
@@ -37,6 +92,16 @@ const TEMPLATES: EmailTemplate[] = [
     body: '<h1 style="font-size:24px;font-weight:700;color:#F4C430;text-transform:uppercase;margin:0 0 16px">NOW AVAILABLE</h1>\n<p style="font-size:14px;line-height:1.6;color:#ccc;margin:0 0 12px">We\'re excited to announce a new service at Sweet Dreams Music!</p>\n<p style="font-size:14px;line-height:1.6;color:#ccc;margin:0 0 12px">[Describe the new service]</p>\n<a href="https://sweetdreamsmusic.com" style="display:inline-block;background:#F4C430;color:#000;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;font-size:13px;padding:14px 28px;text-decoration:none;margin-top:16px">CHECK IT OUT</a>\n<br/><br/>\n<p style="font-size:14px;line-height:1.6;color:#ccc;margin:0 0 12px">— Sweet Dreams Music</p>',
     icon: 'New',
     color: 'bg-green-50 border-green-200 text-green-700',
+  },
+  {
+    key: 'event_announcement',
+    name: 'Announce Event',
+    // Subject + body get replaced entirely when an event is picked via
+    // buildEventAnnouncement() below. These are the pre-selection placeholders.
+    subject: 'New Event — ',
+    body: '<p style="font-size:14px;line-height:1.6;color:#ccc;margin:0 0 12px">Pick an event below to auto-fill the subject and body with its details.</p>',
+    icon: 'Event',
+    color: 'bg-indigo-50 border-indigo-200 text-indigo-700',
   },
   {
     key: 'holiday_hours',
@@ -123,6 +188,14 @@ export default function Notifications() {
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [expandedBroadcast, setExpandedBroadcast] = useState<string | null>(null);
 
+  // Event-announcement picker state — only used when the `event_announcement`
+  // template is selected. Loaded lazily on first use so non-announcement
+  // admins don't pay the API cost.
+  const [upcomingEvents, setUpcomingEvents] = useState<SweetEvent[]>([]);
+  const [loadingEvents, setLoadingEvents] = useState(false);
+  const [eventsLoaded, setEventsLoaded] = useState(false);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+
   // Load recipients + history on mount
   useEffect(() => {
     loadRecipients();
@@ -152,6 +225,33 @@ export default function Notifications() {
     } catch { /* */ }
   }
 
+  async function loadUpcomingEvents() {
+    setLoadingEvents(true);
+    try {
+      const res = await fetch('/api/admin/events');
+      const data = await res.json();
+      const now = Date.now();
+      // Only upcoming, non-cancelled, listed events are eligible.
+      // private_hidden events are intentionally excluded — the whole point
+      // of that visibility is "don't leak this exists", so surfacing it in
+      // a broadcast picker would defeat the purpose. For hidden events the
+      // admin should use the per-event invites flow (which targets only
+      // specific emails), not the general announcement system.
+      const upcoming = (data.events || []).filter((e: SweetEvent) =>
+        !e.is_cancelled
+        && new Date(e.starts_at).getTime() > now
+        && isEventListed(e),
+      );
+      // Sort soonest first.
+      upcoming.sort((a: SweetEvent, b: SweetEvent) =>
+        new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime(),
+      );
+      setUpcomingEvents(upcoming);
+      setEventsLoaded(true);
+    } catch { /* */ }
+    setLoadingEvents(false);
+  }
+
   // Filtered recipients for search
   const filteredRecipients = useMemo(() => {
     if (!searchQuery) return allRecipients;
@@ -170,6 +270,20 @@ export default function Notifications() {
     setSubject(template.subject);
     setBodyHtml(template.body);
     setSendResult(null);
+    // Switching templates clears any previously-chosen event so the picker
+    // resets to its "nothing selected" state.
+    setSelectedEventId(null);
+    // Lazy-load the events list the first time the announce template is picked.
+    if (template.key === 'event_announcement' && !eventsLoaded) {
+      loadUpcomingEvents();
+    }
+  }
+
+  function selectEventForAnnouncement(event: SweetEvent) {
+    setSelectedEventId(event.id);
+    const { subject: s, body: b } = buildEventAnnouncement(event);
+    setSubject(s);
+    setBodyHtml(b);
   }
 
   function selectGroup(emails: string[]) {
@@ -230,7 +344,14 @@ export default function Notifications() {
     setSelectedEmails(new Set());
     setManualEmails('');
     setSendResult(null);
+    setSelectedEventId(null);
   }
+
+  // For event_announcement we additionally require an event to be picked
+  // before revealing Step 2 (body editor), Step 3 (recipients), Step 4 (send);
+  // otherwise the admin could send the placeholder "Pick an event below" body.
+  const isTemplateReady = !!selectedTemplate &&
+    (selectedTemplate.key !== 'event_announcement' || !!selectedEventId);
 
   // ── Render ─────────────────────────────────────────────────────────
   return (
@@ -293,8 +414,67 @@ export default function Notifications() {
             </div>
           </div>
 
+          {/* Step 1.5: Pick an event (event-announcement template only) */}
+          {selectedTemplate?.key === 'event_announcement' && (
+            <div>
+              <h3 className="font-mono text-xs font-bold uppercase tracking-wider text-black/60 mb-3">
+                Pick an Event
+              </h3>
+              {loadingEvents ? (
+                <p className="font-mono text-xs text-black/60">Loading upcoming events…</p>
+              ) : upcomingEvents.length === 0 ? (
+                <div className="border-2 border-dashed border-black/15 p-6 text-center">
+                  <PartyPopper className="w-6 h-6 text-black/30 mx-auto mb-2" />
+                  <p className="font-mono text-xs text-black/60">
+                    No upcoming events. Create one in the Events tab first.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid gap-2">
+                  {upcomingEvents.map((ev) => {
+                    const when = new Date(ev.starts_at);
+                    const isSelected = selectedEventId === ev.id;
+                    return (
+                      <button
+                        key={ev.id}
+                        onClick={() => selectEventForAnnouncement(ev)}
+                        className={`border-2 p-3 text-left transition-all flex items-start gap-3 ${
+                          isSelected
+                            ? 'border-accent bg-accent/10'
+                            : 'border-black/10 hover:border-black/30'
+                        }`}
+                      >
+                        <PartyPopper className={`w-4 h-4 shrink-0 mt-0.5 ${isSelected ? 'text-accent' : 'text-black/40'}`} />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-mono text-sm font-bold truncate">{ev.title}</p>
+                          <p className="font-mono text-[10px] text-black/60 mt-0.5">
+                            {when.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                            {' · '}{when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                            {ev.location && ` · ${ev.location}`}
+                          </p>
+                        </div>
+                        <span className={`font-mono text-[9px] font-bold uppercase px-1.5 py-0.5 ${
+                          ev.visibility === 'public' ? 'bg-green-100 text-green-700' :
+                          ev.visibility === 'private_listed' ? 'bg-amber-100 text-amber-700' :
+                          'bg-black/10 text-black/60'
+                        }`}>
+                          {ev.visibility.replace('_', ' ')}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {selectedEventId && (
+                <p className="font-mono text-[10px] text-accent font-bold mt-2">
+                  ✓ Subject and body filled from event details — edit below if needed.
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Step 2: Subject + Body */}
-          {selectedTemplate && (
+          {isTemplateReady && (
             <div className="space-y-3">
               <h3 className="font-mono text-xs font-bold uppercase tracking-wider text-black/60">2. Customize Email</h3>
               <div>
@@ -329,7 +509,7 @@ export default function Notifications() {
           )}
 
           {/* Step 3: Recipients */}
-          {selectedTemplate && subject && (
+          {isTemplateReady && subject && (
             <div className="space-y-3">
               <h3 className="font-mono text-xs font-bold uppercase tracking-wider text-black/60">3. Select Recipients</h3>
 
@@ -453,7 +633,7 @@ export default function Notifications() {
           )}
 
           {/* Step 4: Send */}
-          {selectedTemplate && subject && getFinalRecipients().length > 0 && !sendResult && (
+          {isTemplateReady && subject && getFinalRecipients().length > 0 && !sendResult && (
             <button
               onClick={handleSend}
               disabled={sending}

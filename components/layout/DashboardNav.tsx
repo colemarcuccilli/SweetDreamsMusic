@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Shield, Wrench, User, Music, Rocket, Bell, Users } from 'lucide-react';
+import { LayoutDashboard, Shield, Wrench, User, Music, Rocket, Bell, Users, PartyPopper } from 'lucide-react';
 import type { UserRole } from '@/lib/constants';
 import SignOutButton from '@/components/auth/SignOutButton';
 
@@ -21,6 +21,7 @@ export default function DashboardNav({ role, isProducer, displayName, email, pro
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
     { href: '/dashboard/hub', label: 'Artist Hub', icon: Rocket, show: true },
     { href: '/dashboard/bands', label: 'Bands', icon: Users, show: true },
+    { href: '/dashboard/events', label: 'Events', icon: PartyPopper, show: true },
     { href: '/engineer', label: 'Engineer', icon: Wrench, show: role === 'engineer' || role === 'admin' },
     { href: '/producer', label: 'Producer', icon: Music, show: isProducer === true },
     { href: '/admin', label: 'Admin', icon: Shield, show: role === 'admin' },

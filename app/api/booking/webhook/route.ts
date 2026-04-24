@@ -25,6 +25,30 @@ export async function POST(request: NextRequest) {
 
   const supabase = createServiceClient();
 
+  // ── Idempotency claim ────────────────────────────────────────────────
+  // Stripe retries webhooks on 5xx or network timeout. Without dedup, retries
+  // can double-insert bookings / beat purchases, double-award XP, etc.
+  // Claim the event.id via a unique-constraint INSERT. If it succeeds, we
+  // own this delivery. If it fails with 23505 (unique_violation), another
+  // handler has already processed (or is processing) this event — ACK and
+  // skip. See migration 035 for design rationale.
+  {
+    const { error: claimErr } = await supabase
+      .from('stripe_webhook_events')
+      .insert({ event_id: event.id, event_type: event.type });
+
+    if (claimErr) {
+      if (claimErr.code === '23505') {
+        console.log(`[webhook] duplicate delivery for event ${event.id} (${event.type}) — deduped`);
+        return NextResponse.json({ received: true, deduped: true });
+      }
+      // Any other DB error means we can't guarantee dedup — return 5xx so
+      // Stripe retries, but don't process (risk of double-side-effects).
+      console.error('[webhook] claim insert failed:', claimErr);
+      return NextResponse.json({ error: 'Dedup claim failed' }, { status: 500 });
+    }
+  }
+
   switch (event.type) {
     case 'checkout.session.completed': {
       const session = event.data.object as Stripe.Checkout.Session;

@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Calendar, ArrowRight } from 'lucide-react';
+import { Calendar, ArrowRight, MapPin, Clock, Lock } from 'lucide-react';
 import { SITE_URL } from '@/lib/constants';
 import { STUDIO_IMAGES } from '@/lib/images';
+import { getUpcomingListedEvents } from '@/lib/events-server';
+import { allowsDirectRsvp } from '@/lib/events';
 
 export const metadata: Metadata = {
   title: 'Events — Sweet Dreams Music',
@@ -18,12 +20,23 @@ export const metadata: Metadata = {
   },
 };
 
+// Render fresh every hit — events are low-volume and timeliness matters.
+// If traffic ever warrants it, flip to `revalidate = 60` for ISR.
+export const dynamic = 'force-dynamic';
+
 /**
- * Events page — currently a placeholder until the events system is wired
- * to the database. Phase 5 will replace this with a query-driven listing
- * respecting the visibility enum (public / private_listed / private_hidden).
+ * Events page — listed events (public + private_listed) ordered by start time.
+ *
+ * `private_hidden` events are excluded at the query layer; they're reachable
+ * only via their direct invitation-link tokens or the admin UI. The CTA on
+ * each card changes based on visibility:
+ *
+ *   public         → "RSVP"
+ *   private_listed → "Request to attend"
  */
-export default function EventsPage() {
+export default async function EventsPage() {
+  const events = await getUpcomingListedEvents();
+
   return (
     <>
       {/* Hero */}
@@ -48,32 +61,122 @@ export default function EventsPage() {
         </div>
       </section>
 
-      {/* Empty state */}
-      <section className="bg-white text-black py-20 sm:py-28">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <Calendar className="w-16 h-16 text-accent mx-auto mb-8" strokeWidth={1.5} />
-          <h2 className="text-heading-lg mb-6">NO EVENTS LISTED RIGHT NOW</h2>
-          <p className="font-mono text-black/70 text-body-md max-w-2xl mx-auto mb-10">
-            We&apos;re booking our first round of <strong className="text-black">The Sweet Spot</strong> band
-            showcases — live-tracked performances from the Sweet Dreams Music floor. First dates post soon.
-          </p>
+      {/* Events list or empty state */}
+      {events.length === 0 ? (
+        <section className="bg-white text-black py-20 sm:py-28">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <Calendar className="w-16 h-16 text-accent mx-auto mb-8" strokeWidth={1.5} />
+            <h2 className="text-heading-lg mb-6">NO EVENTS LISTED RIGHT NOW</h2>
+            <p className="font-mono text-black/70 text-body-md max-w-2xl mx-auto mb-10">
+              We&apos;re booking our first round of <strong className="text-black">The Sweet Spot</strong> band
+              showcases — live-tracked performances from the Sweet Dreams Music floor. First dates post soon.
+            </p>
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              href="/bands"
-              className="bg-accent text-black font-mono text-base font-bold tracking-wider uppercase px-8 py-4 hover:bg-accent/90 transition-colors no-underline inline-flex items-center justify-center gap-2"
-            >
-              The Sweet Spot <ArrowRight className="w-4 h-4" />
-            </Link>
-            <Link
-              href="/contact"
-              className="border-2 border-black text-black font-mono text-base font-bold tracking-wider uppercase px-8 py-4 hover:bg-black hover:text-white transition-colors no-underline inline-flex items-center justify-center"
-            >
-              Get notified
-            </Link>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Link
+                href="/bands"
+                className="bg-accent text-black font-mono text-base font-bold tracking-wider uppercase px-8 py-4 hover:bg-accent/90 transition-colors no-underline inline-flex items-center justify-center gap-2"
+              >
+                The Sweet Spot <ArrowRight className="w-4 h-4" />
+              </Link>
+              <Link
+                href="/contact"
+                className="border-2 border-black text-black font-mono text-base font-bold tracking-wider uppercase px-8 py-4 hover:bg-black hover:text-white transition-colors no-underline inline-flex items-center justify-center"
+              >
+                Get notified
+              </Link>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
+      ) : (
+        <section className="bg-white text-black py-20 sm:py-28">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
+              {events.map((event) => {
+                const startsAt = new Date(event.starts_at);
+                const dateStr = startsAt.toLocaleDateString('en-US', {
+                  weekday: 'short',
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                });
+                const timeStr = startsAt.toLocaleTimeString('en-US', {
+                  hour: 'numeric',
+                  minute: '2-digit',
+                });
+                const isPublic = allowsDirectRsvp(event);
+
+                return (
+                  <Link
+                    key={event.id}
+                    href={`/events/${event.slug}`}
+                    className="group no-underline text-black border-2 border-black/10 hover:border-black transition-colors flex flex-col"
+                  >
+                    {/* Cover image or fallback */}
+                    <div className="relative aspect-[16/10] bg-black/5 overflow-hidden">
+                      {event.cover_image_url ? (
+                        // Using a plain <img> because cover URLs may be from
+                        // Supabase Storage or external sources we haven't
+                        // whitelisted in next.config.js' remotePatterns.
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={event.cover_image_url}
+                          alt={event.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-accent/20 to-black/20">
+                          <Calendar className="w-16 h-16 text-black/30" strokeWidth={1.25} />
+                        </div>
+                      )}
+                      {!isPublic && (
+                        <span className="absolute top-3 right-3 bg-black text-white font-mono text-[10px] font-bold uppercase tracking-wider px-2 py-1 inline-flex items-center gap-1">
+                          <Lock className="w-3 h-3" />
+                          Request to Attend
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Body */}
+                    <div className="p-5 flex-1 flex flex-col">
+                      <h2 className="text-heading-sm mb-2 group-hover:text-accent transition-colors">
+                        {event.title}
+                      </h2>
+                      {event.tagline && (
+                        <p className="font-mono text-sm text-black/60 mb-4 line-clamp-2">
+                          {event.tagline}
+                        </p>
+                      )}
+
+                      <div className="space-y-1.5 mt-auto pt-4 border-t border-black/5">
+                        <div className="flex items-center gap-2 font-mono text-xs text-black/70">
+                          <Calendar className="w-3.5 h-3.5 text-accent shrink-0" />
+                          <span>{dateStr}</span>
+                        </div>
+                        <div className="flex items-center gap-2 font-mono text-xs text-black/70">
+                          <Clock className="w-3.5 h-3.5 text-accent shrink-0" />
+                          <span>{timeStr}</span>
+                        </div>
+                        {event.location && (
+                          <div className="flex items-center gap-2 font-mono text-xs text-black/70">
+                            <MapPin className="w-3.5 h-3.5 text-accent shrink-0" />
+                            <span className="truncate">{event.location}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="mt-5 inline-flex items-center gap-1.5 font-mono text-xs font-bold uppercase tracking-wider text-accent group-hover:gap-2 transition-all">
+                        {isPublic ? 'RSVP' : 'View & Request'}
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
     </>
   );
 }

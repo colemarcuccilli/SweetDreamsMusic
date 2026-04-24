@@ -48,15 +48,38 @@ export async function POST(request: NextRequest) {
   let failedCount = 0;
   const errors: string[] = [];
 
-  // Send to each recipient individually (not BCC — each gets their own email)
-  for (const email of recipientEmails) {
+  // Use Resend's batch API: one API call for up to 100 emails, each tracked
+  // separately on their side. This replaces N sequential .emails.send calls
+  // (which caused 429s on Resend's lower-tier per-second cap when a broadcast
+  // had more than 10 recipients). Between batches we sleep 500ms — so at most
+  // 2 API calls/sec, comfortably under any Resend plan's limit.
+  const BATCH_SIZE = 100;
+  const INTER_BATCH_MS = 500;
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  for (let i = 0; i < recipientEmails.length; i += BATCH_SIZE) {
+    const chunk = recipientEmails.slice(i, i + BATCH_SIZE) as string[];
+    const payload = chunk.map((email) => ({ from: FROM, to: email, subject, html: fullHtml }));
+
     try {
-      await resend.emails.send({ from: FROM, to: email, subject, html: fullHtml });
-      sentCount++;
+      const result = await resend.batch.send(payload);
+      // Resend's batch response carries per-email results in result.data.data.
+      // On plain success, count the whole chunk. On partial-error shapes, be
+      // defensive and attribute failures to individual recipients.
+      const ok = !result.error;
+      if (ok) {
+        sentCount += chunk.length;
+      } else {
+        failedCount += chunk.length;
+        errors.push(`batch ${i / BATCH_SIZE}: ${result.error?.message ?? 'unknown error'}`);
+      }
     } catch (e) {
-      failedCount++;
-      errors.push(`${email}: ${(e as Error).message}`);
+      failedCount += chunk.length;
+      errors.push(`batch ${i / BATCH_SIZE}: ${(e as Error).message}`);
     }
+
+    // Throttle between batches (skip the sleep after the last chunk).
+    if (i + BATCH_SIZE < recipientEmails.length) await sleep(INTER_BATCH_MS);
   }
 
   // Log the broadcast

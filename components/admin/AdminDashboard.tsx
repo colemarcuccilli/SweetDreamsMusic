@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Calendar, Music, Users, DollarSign, Clock, Video, Mic, FileText, LayoutDashboard, BarChart3, Bell } from 'lucide-react';
+import { Calendar, Music, Users, DollarSign, Clock, Video, Mic, FileText, LayoutDashboard, BarChart3, Bell, PartyPopper } from 'lucide-react';
 import type { SessionUser } from '@/lib/auth';
 import AdminOverview from './AdminOverview';
 import BookingManager from './BookingManager';
@@ -15,8 +15,9 @@ import ContractsViewer from './ContractsViewer';
 import ClientCRM from './ClientCRM';
 import PlatformAnalytics from './PlatformAnalytics';
 import Notifications from './Notifications';
+import AdminEvents from './AdminEvents';
 
-type Tab = 'overview' | 'clients' | 'accounting' | 'bookings' | 'media' | 'blocks' | 'beats' | 'producers' | 'contracts' | 'users' | 'analytics' | 'notifications';
+type Tab = 'overview' | 'clients' | 'accounting' | 'bookings' | 'events' | 'media' | 'blocks' | 'beats' | 'producers' | 'contracts' | 'users' | 'analytics' | 'notifications';
 
 export default function AdminDashboard({ user }: { user: SessionUser }) {
   const [tab, setTab] = useState<Tab>('overview');
@@ -26,6 +27,7 @@ export default function AdminDashboard({ user }: { user: SessionUser }) {
     { key: 'clients', label: 'Clients', icon: Users },
     { key: 'accounting', label: 'Accounting', icon: DollarSign },
     { key: 'bookings', label: 'Bookings', icon: Calendar },
+    { key: 'events', label: 'Events', icon: PartyPopper },
     { key: 'media', label: 'Media Sales', icon: Video },
     { key: 'blocks', label: 'Block Off', icon: Clock },
     { key: 'beats', label: 'Beat Store', icon: Music },
@@ -87,6 +89,7 @@ export default function AdminDashboard({ user }: { user: SessionUser }) {
           {tab === 'clients' && <ClientCRM />}
           {tab === 'accounting' && <Accounting />}
           {tab === 'bookings' && <BookingManager />}
+          {tab === 'events' && <AdminEvents />}
           {tab === 'media' && <MediaSales />}
           {tab === 'blocks' && <StudioBlocks />}
           {tab === 'beats' && <BeatManager />}

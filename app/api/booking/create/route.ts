@@ -10,13 +10,33 @@ import { getMembership } from '@/lib/bands-server';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { date, startTime, duration, room, engineer, customerName, customerEmail, customerPhone, guestCount: rawGuestCount, notes, bandId } = body;
+    const { date, startTime, duration, room, engineer, customerName, customerEmail: bodyCustomerEmail, customerPhone, guestCount: rawGuestCount, notes, bandId } = body;
     const guestCount = Math.min(Math.max(1, Number(rawGuestCount) || 1), MAX_GUESTS);
     const isBandBooking = typeof bandId === 'string' && bandId.length > 0;
 
-    if (!date || !startTime || !duration || !room || !customerName || !customerEmail) {
+    if (!date || !startTime || !duration || !room || !customerName || !bodyCustomerEmail) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
+
+    // Strict email format check — prevents garbage strings from becoming
+    // Stripe customer records and downstream receipt emails.
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (typeof bodyCustomerEmail !== 'string' || !EMAIL_RE.test(bodyCustomerEmail.trim())) {
+      return NextResponse.json({ error: 'Please enter a valid email address' }, { status: 400 });
+    }
+
+    // IDENTITY POLICY:
+    //   - Solo bookings are OPEN (first-time customers don't have accounts yet).
+    //   - If the booker IS signed in, we prefer their verified session email
+    //     over whatever is in the body. This closes a hole where a signed-in
+    //     user with an unpaid balance could type a different email to bypass
+    //     the unpaid-balance check below.
+    //   - Band bookings always require auth (handled in the `isBandBooking`
+    //     block below).
+    const sessionUser = await getSessionUser();
+    const customerEmail = sessionUser?.email
+      ? sessionUser.email
+      : bodyCustomerEmail.trim().toLowerCase();
 
     // Band bookings: require authentication, membership, and can_book_band_sessions.
     // We verify via the session cookie — NOT by trusting anything in the body.
@@ -25,11 +45,11 @@ export async function POST(request: NextRequest) {
     // self-attestation by the booker.
     let band: { id: string; display_name: string } | null = null;
     if (isBandBooking) {
-      const user = await getSessionUser();
-      if (!user) {
+      // Band bookings still require auth — reuse sessionUser loaded above.
+      if (!sessionUser) {
         return NextResponse.json({ error: 'Sign in required to book a band session' }, { status: 401 });
       }
-      const membership = await getMembership(bandId, user.id);
+      const membership = await getMembership(bandId, sessionUser.id);
       if (!membership || !memberHasFlag(membership, 'can_book_band_sessions')) {
         return NextResponse.json({ error: 'You don\'t have permission to book sessions for this band' }, { status: 403 });
       }

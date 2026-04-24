@@ -1027,3 +1027,295 @@ export async function sendBandInviteEmail(details: {
     });
   } catch (e) { console.error('Email error (band invite):', e); }
 }
+
+/**
+ * Band member joined notification.
+ *
+ * Fired after a band invite is accepted — sent to the band owner and every
+ * existing member who has `can_manage_members = true`. The new joiner is NOT
+ * notified (they obviously know they just joined).
+ *
+ * Recipients are passed in as a deduped list from the accept-invite handler;
+ * this function just composes and sends. We swallow errors in a try/catch so
+ * the API response isn't blocked on email delivery.
+ */
+export async function sendBandMemberJoinedNotification(
+  recipientEmails: string[],
+  details: {
+    bandName: string;
+    bandId: string;
+    joinerName: string;
+    joinerRole: 'admin' | 'member';
+  },
+) {
+  if (recipientEmails.length === 0) return;
+  try {
+    const bandUrl = `${SITE_URL}/dashboard/bands/${details.bandId}`;
+    await resend.emails.send({
+      from: FROM,
+      to: recipientEmails,
+      subject: `${details.joinerName} joined ${details.bandName}`,
+      html: wrap(`
+        ${h1('New Band Member')}
+        ${p(`<strong style="color:#F4C430">${details.joinerName}</strong> just accepted their invite and joined <strong style="color:#fff">${details.bandName}</strong>.`)}
+        ${detailTable(`
+          ${detail('Band', details.bandName)}
+          ${detail('New member', details.joinerName)}
+          ${detail('Role', details.joinerRole === 'admin' ? 'Admin' : 'Member')}
+        `)}
+        ${btn('Open band hub', bandUrl)}
+        ${p('<span style="color:#888;font-size:12px">You\'re receiving this because you manage members for this band. Head to the band hub to update their permissions or stage name.</span>')}
+      `),
+    });
+  } catch (e) { console.error('Email error (band member joined):', e); }
+}
+
+/**
+ * Event invitation email.
+ *
+ * Sent when an admin invites someone (by email) to an event. The accept URL
+ * uses a token that lets the recipient confirm going / maybe / not_going
+ * without needing to be logged in — they click through to /events/rsvp/[token]
+ * which handles the response.
+ *
+ * We don't mention the event visibility to the invitee (no "this is private")
+ * — they can infer it from the fact they got a personal invite, and exposing
+ * the flag in the email body is unnecessary signal.
+ */
+export async function sendEventInvitation(details: {
+  toEmail: string;
+  eventTitle: string;
+  eventSlug: string;
+  eventStartsAt: string;  // ISO — we format for display
+  eventLocation: string | null;
+  inviterName: string;
+  token: string;
+  customNote?: string;    // optional personal note from the admin
+}) {
+  try {
+    const acceptUrl = `${SITE_URL}/events/rsvp/${details.token}`;
+    const whenFormatted = new Date(details.eventStartsAt).toLocaleString('en-US', {
+      weekday: 'short', month: 'long', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+    });
+    await resend.emails.send({
+      from: FROM,
+      to: details.toEmail,
+      subject: `You're invited: ${details.eventTitle}`,
+      html: wrap(`
+        ${h1("You're Invited")}
+        ${p(`<strong style="color:#fff">${details.inviterName}</strong> invited you to <strong style="color:#F4C430">${details.eventTitle}</strong>.`)}
+        ${detailTable(`
+          ${detail('Event', details.eventTitle)}
+          ${detail('When', whenFormatted)}
+          ${details.eventLocation ? detail('Where', details.eventLocation) : ''}
+          ${detail('Invited by', details.inviterName)}
+        `)}
+        ${details.customNote ? `
+          <p style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:0.05em;margin:20px 0 8px">A note from ${details.inviterName}</p>
+          <div style="background:#111;padding:16px;margin:0 0 16px;border-left:3px solid #F4C430">
+            <p style="font-size:14px;color:#ccc;margin:0;white-space:pre-wrap">${details.customNote}</p>
+          </div>
+        ` : ''}
+        ${btn('RSVP', acceptUrl)}
+        ${p('<span style="color:#888;font-size:12px">Click RSVP to confirm. You can say yes, maybe, or no — no account needed.</span>')}
+      `),
+    });
+  } catch (e) { console.error('Email error (event invitation):', e); }
+}
+
+/**
+ * Request-to-attend alert for admins.
+ *
+ * Sent when a visitor requests to attend a `private_listed` event. Goes to
+ * every SUPER_ADMIN so the first one to open it can approve/deny. Reply-to
+ * is the requester's email, so hitting Reply in Gmail goes to them directly.
+ */
+export async function sendEventRsvpRequestAlert(details: {
+  eventTitle: string;
+  eventId: string;
+  requesterName: string;
+  requesterEmail: string;
+  message: string;
+  guestCount: number;
+}) {
+  try {
+    const adminUrl = `${SITE_URL}/admin#events`;
+    await resend.emails.send({
+      from: FROM,
+      to: [...SUPER_ADMINS],
+      replyTo: details.requesterEmail,
+      subject: `Request to attend: ${details.eventTitle}`,
+      html: wrap(`
+        ${h1('New Attendance Request')}
+        ${p(`<strong style="color:#F4C430">${details.requesterName}</strong> wants to attend <strong style="color:#fff">${details.eventTitle}</strong>.`)}
+        ${detailTable(`
+          ${detail('Event', details.eventTitle)}
+          ${detail('Requester', details.requesterName)}
+          ${detail('Email', details.requesterEmail)}
+          ${detail('Bringing', details.guestCount === 0 ? 'Just themselves' : `${details.guestCount} additional guest${details.guestCount > 1 ? 's' : ''}`)}
+        `)}
+        ${details.message ? `
+          <p style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:0.05em;margin:20px 0 8px">Their message</p>
+          <div style="background:#111;padding:16px;margin:0 0 16px;border-left:3px solid #F4C430">
+            <p style="font-size:14px;color:#ccc;margin:0;white-space:pre-wrap">${details.message}</p>
+          </div>
+        ` : ''}
+        ${btn('Open event admin', adminUrl)}
+        ${p('<span style="color:#888;font-size:12px">Reply to this email to talk to the requester directly — replies go to their address.</span>')}
+      `),
+    });
+  } catch (e) { console.error('Email error (event request alert):', e); }
+}
+
+/**
+ * Request-to-attend decision email.
+ *
+ * Sent to the requester when an admin approves or denies their request to
+ * attend a private_listed event. When approved, their RSVP row was updated
+ * to status='going' — we tell them they're in.
+ */
+export async function sendEventRsvpDecision(details: {
+  toEmail: string;
+  eventTitle: string;
+  eventSlug: string;
+  eventStartsAt: string;
+  eventLocation: string | null;
+  approved: boolean;
+  declineReason?: string;
+}) {
+  try {
+    const eventUrl = `${SITE_URL}/events/${details.eventSlug}`;
+    const whenFormatted = new Date(details.eventStartsAt).toLocaleString('en-US', {
+      weekday: 'short', month: 'long', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+    });
+    await resend.emails.send({
+      from: FROM,
+      to: details.toEmail,
+      subject: details.approved
+        ? `You're in: ${details.eventTitle}`
+        : `About your request: ${details.eventTitle}`,
+      html: wrap(details.approved
+        ? `
+          ${h1("You're in")}
+          ${p(`Your request to attend <strong style="color:#F4C430">${details.eventTitle}</strong> was approved. See you there.`)}
+          ${detailTable(`
+            ${detail('Event', details.eventTitle)}
+            ${detail('When', whenFormatted)}
+            ${details.eventLocation ? detail('Where', details.eventLocation) : ''}
+          `)}
+          ${btn('View event details', eventUrl)}
+          ${p('<span style="color:#888;font-size:12px">Save the date — we look forward to seeing you.</span>')}
+        `
+        : `
+          ${h1('About your request')}
+          ${p(`We couldn't fit you in for <strong style="color:#fff">${details.eventTitle}</strong> this time.`)}
+          ${details.declineReason ? `
+            <div style="background:#111;padding:16px;margin:0 0 16px;border-left:3px solid #F4C430">
+              <p style="font-size:14px;color:#ccc;margin:0;white-space:pre-wrap">${details.declineReason}</p>
+            </div>
+          ` : ''}
+          ${p('We hope to see you at another Sweet Dreams Music event soon — keep an eye on the events page for what\'s coming up.')}
+          ${btn('See upcoming events', `${SITE_URL}/events`)}
+        `
+      ),
+    });
+  } catch (e) { console.error('Email error (event rsvp decision):', e); }
+}
+
+/**
+ * Event cancellation notification to everyone who RSVP'd.
+ *
+ * Fired from PATCH /api/admin/events/[id] when `is_cancelled` transitions
+ * false→true. We BCC all attendees in a single send rather than N sends
+ * — keeps us inside Resend's per-second cap and doesn't leak the roster
+ * to other attendees. `toEmails` must only contain users who opted in
+ * (status='going' or 'maybe'); `not_going` recipients are intentionally
+ * skipped because they already said they weren't coming.
+ */
+export async function sendEventCancellation(details: {
+  toEmails: string[];
+  eventTitle: string;
+  eventStartsAt: string; // ISO
+  eventLocation: string | null;
+  reason: string | null;
+}) {
+  if (details.toEmails.length === 0) return;
+  try {
+    const whenFormatted = new Date(details.eventStartsAt).toLocaleString('en-US', {
+      weekday: 'short', month: 'long', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+    });
+    await resend.emails.send({
+      from: FROM,
+      to: FROM, // send-only address — real recipients go via bcc
+      bcc: details.toEmails,
+      subject: `Cancelled: ${details.eventTitle}`,
+      html: wrap(`
+        ${h1('Event Cancelled')}
+        ${p(`<strong style="color:#fff">${details.eventTitle}</strong> has been cancelled.`)}
+        ${detailTable(`
+          ${detail('Event', details.eventTitle)}
+          ${detail('Was scheduled for', whenFormatted)}
+          ${details.eventLocation ? detail('Was at', details.eventLocation) : ''}
+        `)}
+        ${details.reason ? `
+          <p style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:0.05em;margin:20px 0 8px">Note from the team</p>
+          <div style="background:#111;padding:16px;margin:0 0 16px;border-left:3px solid #F4C430">
+            <p style="font-size:14px;color:#ccc;margin:0;white-space:pre-wrap">${details.reason}</p>
+          </div>
+        ` : ''}
+        ${p('We\'re sorry for the inconvenience. Keep an eye on our events page — we\'ll post anything we reschedule or replace this with.')}
+        ${btn('See upcoming events', `${SITE_URL}/events`)}
+      `),
+    });
+  } catch (e) { console.error('Email error (event cancellation):', e); }
+}
+
+/**
+ * Sweet Spot inquiry email.
+ *
+ * Sent to Jay + Cole when a band (or a prospective band) fills out the Sweet Spot
+ * inquiry form at /bands/sweet-spot/inquire. Distinct from the generic contact
+ * form so Jay and Cole can filter these as "Sweet Spot leads" in their inbox
+ * instead of wading through all site contact submissions.
+ *
+ * `replyTo` is set to the inquirer's email so hitting Reply in Gmail goes
+ * straight back to them, not to our send-only studio@ address.
+ */
+export async function sendSweetSpotInquiry(details: {
+  name: string;
+  bandName: string;
+  email: string;
+  phone: string;
+  preferredTime: string;
+  message: string;
+}) {
+  try {
+    await resend.emails.send({
+      from: FROM,
+      to: ['jayvalleo@sweetdreams.us', 'cole@sweetdreams.us'],
+      replyTo: details.email,
+      subject: `Sweet Spot Inquiry — ${details.bandName}`,
+      html: wrap(`
+        ${h1('Sweet Spot Inquiry')}
+        ${p(`<strong style="color:#F4C430">${details.bandName}</strong> wants to set up a 30-min call about the Sweet Spot.`)}
+        ${detailTable(`
+          ${detail('Band', details.bandName)}
+          ${detail('Contact', details.name)}
+          ${detail('Email', details.email)}
+          ${detail('Phone', details.phone)}
+          ${detail('Preferred call time', details.preferredTime)}
+        `)}
+        ${details.message ? `
+          <p style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:0.05em;margin:20px 0 8px">Additional notes</p>
+          <div style="background:#111;padding:16px;margin:0 0 16px;border-left:3px solid #F4C430">
+            <p style="font-size:14px;color:#ccc;margin:0;white-space:pre-wrap">${details.message}</p>
+          </div>
+        ` : ''}
+        ${p('<span style="color:#888;font-size:12px">Reply directly to this email to reach the band — replies go to their address, not studio@.</span>')}
+      `),
+    });
+  } catch (e) { console.error('Email error (sweet spot inquiry):', e); }
+}
