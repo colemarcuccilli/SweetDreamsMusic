@@ -1513,6 +1513,130 @@ export async function sendMediaSessionEngineerAlert(to: string, details: {
 }
 
 /**
+ * Media session reminder (1 hour before). Mirrors `sendSessionReminder` for
+ * studio bookings but routes through the media-session shape. The cron at
+ * /api/cron/session-reminders fans this out alongside studio reminders so
+ * every kind of session in the system gets the same hour-before nudge.
+ */
+export async function sendMediaSessionReminder(to: string, details: {
+  buyerName: string;
+  sessionKindLabel: string;
+  startsAt: string;
+  endsAt: string;
+  location: 'studio' | 'external';
+  externalLocationText: string | null;
+  engineerName: string;
+}) {
+  try {
+    const start = new Date(details.startsAt);
+    const end = new Date(details.endsAt);
+    const startLabel = start.toLocaleString('en-US', {
+      weekday: 'short', month: 'long', day: 'numeric',
+      hour: 'numeric', minute: '2-digit',
+    });
+    const endLabel = end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    const locationLabel = details.location === 'studio'
+      ? 'Sweet Dreams Studio (Fort Wayne)'
+      : details.externalLocationText || 'External — see scheduling notes';
+    await resend.emails.send({
+      from: FROM,
+      to,
+      subject: `Session in 1 Hour — ${details.sessionKindLabel}`,
+      html: wrap(
+        h1('SESSION REMINDER') +
+        p(`Hey ${details.buyerName}, your ${details.sessionKindLabel.toLowerCase()} starts in about 1 hour.`) +
+        detailTable(
+          detail('Type', details.sessionKindLabel) +
+          detail('When', `${startLabel} – ${endLabel}`) +
+          detail('Where', locationLabel) +
+          detail('Engineer', details.engineerName)
+        ) +
+        p('Arrive a few minutes early. See you soon!')
+      ),
+    });
+  } catch (e) { console.error('Email error (media session reminder):', e); }
+}
+
+/**
+ * Media session reminder for the engineer. Same window, different audience —
+ * the engineer needs the same heads-up as the buyer.
+ */
+export async function sendMediaSessionReminderToEngineer(to: string, details: {
+  engineerName: string;
+  buyerName: string;
+  sessionKindLabel: string;
+  startsAt: string;
+  endsAt: string;
+  location: 'studio' | 'external';
+  externalLocationText: string | null;
+}) {
+  try {
+    const start = new Date(details.startsAt);
+    const end = new Date(details.endsAt);
+    const startLabel = start.toLocaleString('en-US', {
+      weekday: 'short', month: 'long', day: 'numeric',
+      hour: 'numeric', minute: '2-digit',
+    });
+    const endLabel = end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+    const locationLabel = details.location === 'studio'
+      ? 'Sweet Dreams Studio'
+      : details.externalLocationText || 'External (see scheduling notes)';
+    await resend.emails.send({
+      from: FROM,
+      to,
+      subject: `Heads up — ${details.sessionKindLabel} for ${details.buyerName} in 1 hour`,
+      html: wrap(
+        h1('UPCOMING MEDIA SESSION') +
+        p(`Hey ${details.engineerName}, your ${details.sessionKindLabel.toLowerCase()} with ${details.buyerName} kicks off in about an hour.`) +
+        detailTable(
+          detail('Buyer', details.buyerName) +
+          detail('Type', details.sessionKindLabel) +
+          detail('When', `${startLabel} – ${endLabel}`) +
+          detail('Where', locationLabel)
+        ) +
+        p('Reply to the team if anything\'s off — you don\'t need to confirm.')
+      ),
+    });
+  } catch (e) { console.error('Email error (media session engineer reminder):', e); }
+}
+
+/**
+ * Media deliverables ready — sent to the buyer the FIRST time admin attaches
+ * deliverables to a media_bookings row (transition from no deliverables to
+ * having deliverables). Subsequent additions don't fire this email, both to
+ * avoid spam and because the spec called for a "first deliverable" trigger
+ * specifically. Admin who wants to flag a major batch update can email
+ * directly.
+ *
+ * The CTA points back to the order detail page where the items are listed.
+ */
+export async function sendMediaDeliverablesReady(to: string, details: {
+  buyerName: string;
+  offeringTitle: string;
+  bookingId: string;
+  itemCount: number;
+}) {
+  try {
+    await resend.emails.send({
+      from: FROM,
+      to,
+      subject: `Your Files Are Ready — ${details.offeringTitle}`,
+      html: wrap(
+        h1('YOUR FILES ARE READY') +
+        p(`Hey ${details.buyerName}, the first deliverables for <strong>${details.offeringTitle}</strong> just landed in your dashboard.`) +
+        detailTable(
+          detail('Order', details.offeringTitle) +
+          detail('Files Ready', `${details.itemCount} item${details.itemCount === 1 ? '' : 's'}`)
+        ) +
+        p('Open your order to download. We\'ll keep adding items as production wraps — feel free to bookmark the page.') +
+        btn('OPEN ORDER', `${SITE_URL}/dashboard/media/orders/${details.bookingId}`) +
+        p('<span style="color:#888;font-size:12px">If anything looks off, reply to this email and we\'ll sort it out.</span>')
+      ),
+    });
+  } catch (e) { console.error('Email error (deliverables ready):', e); }
+}
+
+/**
  * Media inquiry email — sent when a user submits the inquiry form on a
  * range-priced or band-by-request offering. Routes to the same inbox as
  * media purchase alerts (Cole + Jay) so leads get the same eyeballs.

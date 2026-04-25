@@ -537,14 +537,43 @@ function SessionRow({
   session: MediaSessionBooking;
   onChange: () => void;
 }) {
-  const [editing, setEditing] = useState(false);
+  // Two distinct edit modes:
+  //   - 'payout'  → mark a scheduled session complete + record payout dollars
+  //   - 'details' → edit time/location/notes on a scheduled session (Phase E)
+  const [editMode, setEditMode] = useState<null | 'payout' | 'details'>(null);
   const [payoutDollars, setPayoutDollars] = useState(
     session.engineer_payout_cents != null
       ? String(session.engineer_payout_cents / 100)
       : '',
   );
+
+  // Detail-edit form state. Convert ISO timestamps to the browser's local
+  // datetime-local format for the picker. Local-tz quirks: the input value
+  // must be `YYYY-MM-DDTHH:MM` with NO seconds/timezone suffix.
+  const toLocalInput = (iso: string) => {
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+  const [editStarts, setEditStarts] = useState(toLocalInput(session.starts_at));
+  const [editEnds, setEditEnds] = useState(toLocalInput(session.ends_at));
+  const [editLocation, setEditLocation] = useState<'studio' | 'external'>(session.location);
+  const [editExternalText, setEditExternalText] = useState(session.external_location_text ?? '');
+  const [editNotes, setEditNotes] = useState(session.notes ?? '');
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function cancelEdit() {
+    setEditMode(null);
+    setError(null);
+    // Reset detail form to current row state in case user toggled back open
+    setEditStarts(toLocalInput(session.starts_at));
+    setEditEnds(toLocalInput(session.ends_at));
+    setEditLocation(session.location);
+    setEditExternalText(session.external_location_text ?? '');
+    setEditNotes(session.notes ?? '');
+  }
 
   async function complete() {
     const cents = Math.round((Number(payoutDollars) || 0) * 100);
@@ -569,10 +598,49 @@ function SessionRow({
         setSubmitting(false);
         return;
       }
-      setEditing(false);
+      setEditMode(null);
       onChange();
     } catch (e) {
       console.error('[admin-media-orders] complete error:', e);
+      setError('Network error');
+      setSubmitting(false);
+    }
+  }
+
+  async function saveDetails() {
+    if (editLocation === 'external' && editExternalText.trim().length < 3) {
+      setError('External shoots need a location description');
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      // datetime-local inputs return browser-local strings without TZ.
+      // Construct Dates and ship ISO so the server stores UTC consistently.
+      const startsIso = new Date(editStarts).toISOString();
+      const endsIso = new Date(editEnds).toISOString();
+      const res = await fetch(`/api/admin/media/sessions/${session.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          starts_at: startsIso,
+          ends_at: endsIso,
+          location: editLocation,
+          external_location_text:
+            editLocation === 'external' ? editExternalText.trim() : null,
+          notes: editNotes.trim() || null,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error || 'Could not save changes');
+        setSubmitting(false);
+        return;
+      }
+      setEditMode(null);
+      onChange();
+    } catch (e) {
+      console.error('[admin-media-orders] save details error:', e);
       setError('Network error');
       setSubmitting(false);
     }
@@ -619,7 +687,7 @@ function SessionRow({
             ? 'Studio'
             : session.external_location_text || 'External'}
         </p>
-        {editing && (
+        {editMode === 'payout' && (
           <div className="mt-2 flex items-center gap-2">
             <span className="font-mono text-[11px] text-black/60">Payout $</span>
             <input
@@ -641,36 +709,118 @@ function SessionRow({
             </button>
             <button
               type="button"
-              onClick={() => setEditing(false)}
+              onClick={cancelEdit}
               className="font-mono text-xs text-black/50 hover:text-black"
             >
               Cancel
             </button>
           </div>
         )}
+        {editMode === 'details' && (
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 p-3 bg-black/[0.03] border border-black/10">
+            <label className="text-xs">
+              <span className="block font-mono text-[10px] uppercase text-black/50 mb-0.5">Starts</span>
+              <input
+                type="datetime-local"
+                value={editStarts}
+                onChange={(e) => setEditStarts(e.target.value)}
+                className="w-full px-2 py-1 border border-black/15 bg-white text-sm"
+              />
+            </label>
+            <label className="text-xs">
+              <span className="block font-mono text-[10px] uppercase text-black/50 mb-0.5">Ends</span>
+              <input
+                type="datetime-local"
+                value={editEnds}
+                onChange={(e) => setEditEnds(e.target.value)}
+                className="w-full px-2 py-1 border border-black/15 bg-white text-sm"
+              />
+            </label>
+            <label className="text-xs">
+              <span className="block font-mono text-[10px] uppercase text-black/50 mb-0.5">Location</span>
+              <select
+                value={editLocation}
+                onChange={(e) => setEditLocation(e.target.value as 'studio' | 'external')}
+                className="w-full px-2 py-1 border border-black/15 bg-white text-sm"
+              >
+                <option value="studio">studio</option>
+                <option value="external">external</option>
+              </select>
+            </label>
+            {editLocation === 'external' && (
+              <label className="text-xs">
+                <span className="block font-mono text-[10px] uppercase text-black/50 mb-0.5">Where</span>
+                <input
+                  type="text"
+                  value={editExternalText}
+                  onChange={(e) => setEditExternalText(e.target.value)}
+                  className="w-full px-2 py-1 border border-black/15 bg-white text-sm"
+                />
+              </label>
+            )}
+            <label className="text-xs md:col-span-2">
+              <span className="block font-mono text-[10px] uppercase text-black/50 mb-0.5">Notes</span>
+              <textarea
+                rows={2}
+                value={editNotes}
+                onChange={(e) => setEditNotes(e.target.value)}
+                className="w-full px-2 py-1 border border-black/15 bg-white text-sm resize-y"
+              />
+            </label>
+            <div className="md:col-span-2 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={saveDetails}
+                disabled={submitting}
+                className="font-mono text-xs px-3 py-1 bg-black text-white hover:bg-accent hover:text-black disabled:opacity-30 inline-flex items-center gap-1"
+              >
+                <Save className="w-3 h-3" />
+                {submitting ? 'Saving…' : 'Save details'}
+              </button>
+              <button
+                type="button"
+                onClick={cancelEdit}
+                className="font-mono text-xs text-black/50 hover:text-black"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
         {error && (
           <p className="font-mono text-[11px] text-red-700 mt-1">{error}</p>
         )}
       </div>
-      {!editing && session.status === 'scheduled' && (
-        <button
-          type="button"
-          onClick={() => setEditing(true)}
-          className="font-mono text-[11px] text-black/60 hover:text-black inline-flex items-center gap-1 shrink-0"
-        >
-          <Pencil className="w-3 h-3" />
-          Mark complete
-        </button>
+      {editMode === null && session.status === 'scheduled' && (
+        <div className="flex items-center gap-3 shrink-0">
+          <button
+            type="button"
+            onClick={() => setEditMode('details')}
+            className="font-mono text-[11px] text-black/60 hover:text-black inline-flex items-center gap-1"
+            title="Edit time/location/notes"
+          >
+            <Pencil className="w-3 h-3" />
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => setEditMode('payout')}
+            className="font-mono text-[11px] text-black/60 hover:text-black inline-flex items-center gap-1"
+          >
+            <CheckCircle2 className="w-3 h-3" />
+            Complete
+          </button>
+        </div>
       )}
-      {!editing && session.status === 'completed' && (
+      {editMode === null && session.status === 'completed' && (
         <button
           type="button"
-          onClick={() => setEditing(true)}
+          onClick={() => setEditMode('payout')}
           className="font-mono text-[11px] text-black/40 hover:text-black inline-flex items-center gap-1 shrink-0"
           title="Edit payout"
         >
           <Pencil className="w-3 h-3" />
-          Edit
+          Edit payout
         </button>
       )}
     </li>

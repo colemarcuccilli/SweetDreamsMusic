@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Users, Plus, Mail, AlertCircle, ArrowRight } from 'lucide-react';
+import { Users, Plus, Mail, AlertCircle, ArrowRight, Film } from 'lucide-react';
 import { getSessionUser } from '@/lib/auth';
 import { getUserBands, getPendingInvitesForEmail } from '@/lib/bands-server';
 import DashboardNav from '@/components/layout/DashboardNav';
@@ -223,6 +223,31 @@ export default async function BandsDashboardPage() {
                     </div>
                   </Link>
                 ))}
+              </div>
+
+              {/* Cross-link to media catalog — bands are eligible for the
+                  full Media Hub (music videos, photos, package builds).
+                  Surfacing it from the band hub closes the discovery loop
+                  Cole called out in the spec ("Cross-link from /bands"). */}
+              <div className="mt-10 border-2 border-accent bg-accent/5 p-6 flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-3 min-w-0">
+                  <Film className="w-6 h-6 text-accent shrink-0" />
+                  <div className="min-w-0">
+                    <p className="font-mono text-sm font-bold uppercase tracking-wider">
+                      Media for your band
+                    </p>
+                    <p className="font-mono text-xs text-black/60">
+                      Music videos, photo shoots, cover art, full release packages.
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href="/dashboard/media"
+                  className="bg-black text-white font-mono text-xs font-bold uppercase tracking-wider px-4 py-3 hover:bg-accent hover:text-black transition-colors no-underline inline-flex items-center gap-2 shrink-0"
+                >
+                  Open Media Hub
+                  <ArrowRight className="w-3 h-3" />
+                </Link>
               </div>
             </div>
           )}

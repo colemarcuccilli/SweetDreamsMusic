@@ -60,9 +60,31 @@ export async function GET(request: NextRequest) {
 
   const { data: mediaSales } = await mediaSalesQuery;
 
+  // Phase E follow-up: include media_session_bookings payouts. The new
+  // Media Hub flow records engineer pay on `media_session_bookings.engineer_payout_cents`
+  // when admin marks a session complete. Without this fetch, those earnings
+  // would only show on the Engineer Media Sessions tab and never roll up
+  // into the engineer's total earnings calculation here.
+  let mediaSessionsQuery = supabase
+    .from('media_session_bookings')
+    .select('id, parent_booking_id, starts_at, ends_at, session_kind, location, status, engineer_payout_cents, engineer_payout_paid_at')
+    .eq('engineer_id', user.id)
+    .eq('status', 'completed')
+    .not('engineer_payout_cents', 'is', null)
+    .order('starts_at', { ascending: false });
+
+  // Same date filter — use the payout-paid timestamp if present; otherwise
+  // fall back to ends_at for sessions that completed without an explicit
+  // payout date stamped (shouldn't happen in normal flow but defensive).
+  if (from) mediaSessionsQuery = mediaSessionsQuery.gte('starts_at', from);
+  if (to) mediaSessionsQuery = mediaSessionsQuery.lte('starts_at', `${to}T23:59:59`);
+
+  const { data: mediaSessions } = await mediaSessionsQuery;
+
   return NextResponse.json({
     bookings: bookings || [],
     mediaSales: mediaSales || [],
+    mediaSessions: mediaSessions || [],
     engineerName,
   });
 }

@@ -108,12 +108,19 @@ export default async function DashboardMediaPage() {
                     <p className="font-mono text-3xl font-bold mb-1">
                       {balance.hoursRemaining.toFixed(1)} hrs
                     </p>
-                    <p className="font-mono text-xs text-white/60">
+                    <p className="font-mono text-xs text-white/60 mb-3">
                       Studio time available — use it on any session.{' '}
                       {balance.costBasisCents > 0 && (
                         <>Value: {formatCents(balance.costBasisCents)}.</>
                       )}
                     </p>
+                    <Link
+                      href="/dashboard/media/credits"
+                      className="font-mono text-[11px] font-bold uppercase tracking-wider text-accent hover:underline inline-flex items-center gap-1 no-underline"
+                    >
+                      Book studio time with credits
+                      <ArrowRight className="w-3 h-3" />
+                    </Link>
                   </>
                 ) : (
                   <>

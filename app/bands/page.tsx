@@ -378,6 +378,17 @@ export default function BandsPage() {
               Go to band hub
             </Link>
           </div>
+          {/* Cross-link to media catalog — Phase B scope item. Bands shopping
+              for the Sweet Spot often want to compare it against music-video
+              packages, photo work, and standalone shoots. Placing this under
+              the primary CTAs keeps the inquire path dominant while still
+              surfacing the broader catalog for browsers. */}
+          <p className="font-mono text-xs text-black/60 mt-6">
+            Looking for music videos, photos, or shorts for your band?{' '}
+            <Link href="/media" className="underline hover:text-black font-bold">
+              Browse the full media catalog →
+            </Link>
+          </p>
         </div>
       </section>
     </>

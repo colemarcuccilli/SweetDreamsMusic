@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/server';
+import { sendMediaDeliverablesReady } from '@/lib/email';
 
 const ALLOWED_STATUSES = new Set([
   'inquiry',
@@ -70,6 +71,15 @@ export async function PATCH(
   }
 
   const service = createServiceClient();
+
+  // Read the row before updating so we can detect "first deliverable"
+  // transitions for the buyer-notification email. Single row read; cheap.
+  const { data: prevRow } = await service
+    .from('media_bookings')
+    .select('deliverables, user_id, offering_id')
+    .eq('id', id)
+    .maybeSingle();
+
   const { data, error } = await service
     .from('media_bookings')
     .update(update)
@@ -81,5 +91,42 @@ export async function PATCH(
     console.error('[admin/media/bookings] PATCH error:', error);
     return NextResponse.json({ error: 'Could not update booking' }, { status: 400 });
   }
+
+  // Phase E follow-up: first-deliverable notification.
+  // Trigger conditions:
+  //   1. This PATCH actually touched the deliverables field
+  //   2. Previous state had no items (null, missing, or items=[])
+  //   3. New state has at least 1 item
+  // Subsequent additions don't fire — admin can email batch updates manually.
+  // Fire-and-forget: any email failure is logged but never breaks the PATCH.
+  if ('deliverables' in update && prevRow) {
+    type DeliverablesShape = { items?: Array<{ label: string; url: string }> } | null;
+    const prevItems = ((prevRow as { deliverables?: DeliverablesShape }).deliverables?.items ?? []);
+    const newItems = ((update.deliverables as DeliverablesShape)?.items ?? []);
+    if (prevItems.length === 0 && newItems.length > 0) {
+      try {
+        const buyerId = (prevRow as { user_id: string }).user_id;
+        const offeringId = (prevRow as { offering_id: string }).offering_id;
+        const [{ data: buyerProfile }, { data: offeringRow }] = await Promise.all([
+          service.from('profiles').select('display_name, full_name, email').eq('user_id', buyerId).maybeSingle(),
+          service.from('media_offerings').select('title').eq('id', offeringId).maybeSingle(),
+        ]);
+        const buyer = buyerProfile as { display_name?: string; full_name?: string; email?: string } | null;
+        const offering = offeringRow as { title?: string } | null;
+        const buyerEmail = buyer?.email;
+        if (buyerEmail) {
+          await sendMediaDeliverablesReady(buyerEmail, {
+            buyerName: buyer?.full_name || buyer?.display_name || buyerEmail.split('@')[0] || 'there',
+            offeringTitle: offering?.title || 'your media order',
+            bookingId: id,
+            itemCount: newItems.length,
+          });
+        }
+      } catch (e) {
+        console.error('[admin/media/bookings] deliverables ready email error:', e);
+      }
+    }
+  }
+
   return NextResponse.json({ booking: data });
 }

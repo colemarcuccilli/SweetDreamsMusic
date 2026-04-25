@@ -145,6 +145,22 @@ export default function Accounting() {
   const [allTimeMediaSales, setAllTimeMediaSales] = useState<typeof mediaSales>([]);
   const [allTimeBeatPurchases, setAllTimeBeatPurchases] = useState<BeatPurchase[]>([]);
   const [allTimeCancelledBookings, setAllTimeCancelledBookings] = useState<typeof cancelledBookings>([]);
+  // Phase E follow-up: media_session_bookings completed payouts. Kept as a
+  // parallel array (vs. merged into mediaSales) because the shapes differ
+  // and we want the data fed straight into computeEarnings without breaking
+  // the legacy media_sales reading paths. The engineerNameMap translates
+  // engineer_id → display name (matched against the ENGINEERS roster).
+  const [allTimeMediaSessions, setAllTimeMediaSessions] = useState<
+    Array<{
+      id: string;
+      engineer_id: string;
+      starts_at: string;
+      session_kind: string;
+      location: string;
+      engineer_payout_cents: number | null;
+    }>
+  >([]);
+  const [engineerNameMap, setEngineerNameMap] = useState<Record<string, string>>({});
 
   // Payout tracking
   const [payouts, setPayouts] = useState<{ id: string; person_name: string; amount: number; method: string; note: string | null; period_label: string | null; created_at: string }[]>([]);
@@ -199,6 +215,8 @@ export default function Accounting() {
     setAllTimeBeatPurchases(data.beatPurchases || []);
     setAllTimeMediaSales(data.mediaSales || []);
     setAllTimeCancelledBookings(data.cancelledBookings || []);
+    setAllTimeMediaSessions(data.mediaSessions || []);
+    setEngineerNameMap(data.engineerNameMap || {});
     setPayouts(payoutsData.payouts || []);
     setCashLedger(cashData.entries || []);
   }
@@ -496,6 +514,8 @@ export default function Accounting() {
     bks: Booking[],
     media: typeof allTimeMediaSales,
     beats: BeatPurchase[],
+    mediaSessions: typeof allTimeMediaSessions = [],
+    engineerNames: Record<string, string> = {},
   ): Record<string, PersonEarnings> {
     const people: Record<string, PersonEarnings> = {};
     const init = (): PersonEarnings => ({ sessionCount: 0, sessionRevenue: 0, sessionPay: 0, sessionHours: 0, mediaCommission: 0, mediaSoldCount: 0, mediaWorkerPay: 0, mediaFilmedCount: 0, mediaEditedCount: 0, beatSales: 0, beatProducerPay: 0, beatCount: 0, totalPay: 0 });
@@ -551,6 +571,22 @@ export default function Accounting() {
       people[prod].beatProducerPay += Math.round(p.amount_paid * PRODUCER_COMMISSION);
     });
 
+    // Phase E: media_session_bookings completed payouts. The amount is admin-typed
+    // dollar value (no commission percentage) — we merge it directly into
+    // mediaWorkerPay and bump mediaFilmedCount/mediaEditedCount as a "did media
+    // work" indicator (we don't know which role they played without per-session
+    // metadata, so we increment filmed_count as the catch-all).
+    mediaSessions.forEach((s) => {
+      const engName = engineerNames[s.engineer_id];
+      const eng = normalizeName(engName);
+      if (!eng) return;
+      const cents = s.engineer_payout_cents ?? 0;
+      if (cents <= 0) return;
+      if (!people[eng]) people[eng] = init();
+      people[eng].mediaWorkerPay += cents;
+      people[eng].mediaFilmedCount++;
+    });
+
     Object.values(people).forEach(p => {
       p.totalPay = p.sessionPay + p.mediaCommission + p.mediaWorkerPay + p.beatProducerPay;
     });
@@ -597,7 +633,13 @@ export default function Accounting() {
   // ===== PAYROLL: Selected period + all-time earnings =====
   const payrollData = useMemo(() => {
     // All-time earnings
-    const allTimePeople = computeEarnings(allTimeBookings, allTimeMediaSales, allTimeBeatPurchases);
+    const allTimePeople = computeEarnings(
+      allTimeBookings,
+      allTimeMediaSales,
+      allTimeBeatPurchases,
+      allTimeMediaSessions,
+      engineerNameMap,
+    );
 
     // All-time payouts by person (normalized)
     const normalizedPayouts: Record<string, number> = {};
@@ -616,7 +658,19 @@ export default function Accounting() {
     const periodBookings = allTimeBookings.filter(b => b.start_time >= periodStartStr && b.start_time <= periodEndStr);
     const periodMedia = allTimeMediaSales.filter(m => m.created_at >= periodStartStr && m.created_at <= periodEndStr);
     const periodBeats = allTimeBeatPurchases.filter(p => p.created_at >= periodStartStr && p.created_at <= periodEndStr);
-    const periodPeople = computeEarnings(periodBookings, periodMedia, periodBeats);
+    // Phase E: media sessions filtered to the pay period by starts_at (when
+    // the session happened, not when admin recorded the payout). This matches
+    // how bookings are filtered — engineers earn for the period they worked.
+    const periodMediaSessions = allTimeMediaSessions.filter(
+      (s) => s.starts_at >= periodStartStr && s.starts_at <= periodEndStr,
+    );
+    const periodPeople = computeEarnings(
+      periodBookings,
+      periodMedia,
+      periodBeats,
+      periodMediaSessions,
+      engineerNameMap,
+    );
 
     // Pending sessions this period — bookings scheduled within the period that
     // have NOT yet been marked completed. These don't add to earned/balance
@@ -700,7 +754,7 @@ export default function Accounting() {
       periodLabel, periodStart: periodStartStr, periodEnd: periodEndStr,
       periodPayoutTotal,
     };
-  }, [allTimeBookings, allTimeMediaSales, allTimeBeatPurchases, allTimeCancelledBookings, payouts, payPeriods, payrollPeriodIndex]);
+  }, [allTimeBookings, allTimeMediaSales, allTimeBeatPurchases, allTimeCancelledBookings, allTimeMediaSessions, engineerNameMap, payouts, payPeriods, payrollPeriodIndex]);
 
   // Payroll data for overview tab (date-filtered) - keep the existing behavior for overview
   const filteredPayrollData = useMemo(() => {

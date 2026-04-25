@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { DollarSign, TrendingUp, Calendar, Filter } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
 import { ENGINEER_SESSION_SPLIT, MEDIA_SELLER_COMMISSION } from '@/lib/constants';
@@ -30,6 +30,20 @@ interface MediaSale {
   description: string;
   amount: number;
   created_at: string;
+}
+
+// Phase E: media_session_bookings payouts surfaced alongside legacy media_sales.
+// The shape is intentionally narrow — display + sum only.
+interface MediaSessionPayout {
+  id: string;
+  parent_booking_id: string;
+  starts_at: string;
+  ends_at: string;
+  session_kind: string;
+  location: string;
+  status: string;
+  engineer_payout_cents: number | null;
+  engineer_payout_paid_at: string | null;
 }
 
 const ROOM_LABELS: Record<string, string> = {
@@ -89,6 +103,7 @@ function getDateRange(preset: DatePreset, selectedMonth: string): { from: string
 export default function EngineerAccounting() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [mediaSales, setMediaSales] = useState<MediaSale[]>([]);
+  const [mediaSessions, setMediaSessions] = useState<MediaSessionPayout[]>([]);
   const [engineerName, setEngineerName] = useState('');
   const [loading, setLoading] = useState(true);
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth');
@@ -98,11 +113,11 @@ export default function EngineerAccounting() {
 
   const monthOptions = useMemo(() => getMonthOptions(), []);
 
-  useEffect(() => {
-    fetchData();
-  }, [datePreset, selectedMonth, customFrom, customTo]);
-
-  async function fetchData() {
+  // Hoisted via useCallback so the useEffect below can reference it before
+  // the declaration in source order without tripping the no-use-before-define
+  // / "cannot access before it is declared" lint rule. Closure captures the
+  // current filter state — useEffect's dep array fires it correctly on changes.
+  const fetchData = useCallback(async () => {
     setLoading(true);
     const range = datePreset === 'custom'
       ? (customFrom ? { from: customFrom, to: customTo || new Date().toISOString().split('T')[0] } : null)
@@ -116,9 +131,20 @@ export default function EngineerAccounting() {
     const data = await res.json();
     setBookings(data.bookings || []);
     setMediaSales(data.mediaSales || []);
+    setMediaSessions(data.mediaSessions || []);
     setEngineerName(data.engineerName || '');
     setLoading(false);
-  }
+  }, [datePreset, selectedMonth, customFrom, customTo]);
+
+  useEffect(() => {
+    // The fetchData call indirectly triggers setLoading/setBookings/etc.
+    // We accept the cascading-render cost: this is a deps-change refetch
+    // pattern that's used consistently across the codebase, and the
+    // alternative (Suspense + use() hook) is a bigger refactor than
+    // this gap fix is scoped for.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchData();
+  }, [fetchData]);
 
   const invited = useMemo(() =>
     bookings.filter((b) => b.requested_engineer === engineerName),
@@ -146,6 +172,14 @@ export default function EngineerAccounting() {
     mediaSales.reduce((s, m) => s + m.amount, 0),
   [mediaSales]);
   const mediaCommission = Math.round(mediaTotal * MEDIA_COMMISSION);
+
+  // Phase E: media session payouts. Unlike legacy media_sales (which tracks
+  // gross sale amount and applies a commission percentage), media_session_bookings
+  // payouts are admin-typed dollar amounts directly — no percentage math.
+  // Sum and display as-is.
+  const mediaSessionPay = useMemo(() =>
+    mediaSessions.reduce((s, m) => s + (m.engineer_payout_cents ?? 0), 0),
+  [mediaSessions]);
 
   const totalHours = useMemo(() =>
     bookings.reduce((s, b) => s + b.duration, 0),
@@ -217,14 +251,23 @@ export default function EngineerAccounting() {
             <StatCard icon={DollarSign} label="Deposits Collected" value={formatCents(totalDeposits)} />
             <StatCard icon={DollarSign} label="Completed Sessions" value={String(completed.length)} />
             <StatCard icon={TrendingUp} label="Media Commission (15%)" value={formatCents(mediaCommission)} />
-            <StatCard icon={DollarSign} label="Total Payout" value={formatCents(engineerSessionPay + mediaCommission)} accent />
+            <StatCard icon={DollarSign} label="Media Session Pay" value={formatCents(mediaSessionPay)} />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <StatCard
+              icon={DollarSign}
+              label="Total Payout"
+              value={formatCents(engineerSessionPay + mediaCommission + mediaSessionPay)}
+              accent
+            />
           </div>
 
           {/* Split Explanation */}
           <div className="border border-black/10 p-4">
             <p className="font-mono text-xs text-black/70">
               <strong className="text-black">Revenue Split:</strong> You earn 60% of session revenue. Business retains 40%.
-              Media sales you bring in earn a 15% commission.
+              Media sales you bring in earn a 15% commission. Media session payouts (shoots, edits, etc.) are admin-set per session.
             </p>
           </div>
 
@@ -274,6 +317,37 @@ export default function EngineerAccounting() {
                     <div className="text-right">
                       <span className="text-black/70">{formatCents(sale.amount)}</span>
                       <span className="font-bold ml-3 text-accent">{formatCents(Math.round(sale.amount * MEDIA_COMMISSION))}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Media Sessions — Phase E payouts from media_session_bookings */}
+          {mediaSessions.length > 0 && (
+            <div>
+              <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">
+                Media Sessions ({mediaSessions.length})
+              </h3>
+              <div className="space-y-1">
+                {mediaSessions.map((s) => (
+                  <div key={s.id} className="flex justify-between items-center py-3 px-3 border-b border-black/5 font-mono text-xs">
+                    <div>
+                      <span className="font-semibold capitalize">
+                        {s.session_kind.replace('-', ' ')}
+                      </span>
+                      <span className="text-black/40 ml-2 capitalize">
+                        · {s.location}
+                      </span>
+                      <span className="text-black/60 ml-3">
+                        {new Date(s.starts_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-bold text-accent">
+                        {formatCents(s.engineer_payout_cents ?? 0)}
+                      </span>
                     </div>
                   </div>
                 ))}
