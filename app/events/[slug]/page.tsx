@@ -176,6 +176,22 @@ export default async function EventDetailPage({ params }: Props) {
         </section>
       )}
 
+      {/* Full flyer — uncropped, natural aspect, centered. The dark hero above
+          uses the same image cropped as a backdrop for atmosphere; this is the
+          one the visitor actually reads. */}
+      {event.cover_image_url && (
+        <section className="bg-white py-10 sm:py-14">
+          <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={event.cover_image_url}
+              alt={`${event.title} flyer`}
+              className="block w-full h-auto mx-auto border border-black/10"
+            />
+          </div>
+        </section>
+      )}
+
       {/* Description + RSVP */}
       <section className="bg-white text-black py-16 sm:py-20">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-3 gap-10">

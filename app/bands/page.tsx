@@ -125,9 +125,9 @@ export default function BandsPage() {
             mix, a full video, short-form clips, and a feature on the Sweet Dreams YouTube channel.
           </p>
           <p className="font-mono text-white/70 text-body-sm max-w-2xl mb-10">
-            Flat rate — <strong className="text-accent">$2,500</strong>. Bands on Sweet Dreams Music can book
-            directly with an $800 deposit. New to us? Reach out and we&apos;ll walk you through it on a 30-min
-            call.
+            A flat-rate, release-ready video session. Bands signed up on Sweet Dreams Music can book directly
+            from their band hub. New to us? Reach out and we&apos;ll walk you through pricing and logistics on
+            a 30-min call.
           </p>
           <div className="flex flex-col sm:flex-row gap-4">
             <Link
@@ -258,9 +258,9 @@ export default function BandsPage() {
                 studio calendar so nothing double-books.
               </p>
               <ul className="font-mono text-black/60 text-body-sm space-y-2 mb-6">
-                <li>· $800 deposit via Stripe at booking</li>
-                <li>· $1,700 remainder by cash, check, or transfer before the shoot</li>
-                <li>· Flat $2,500 — no surcharges stack</li>
+                <li>· 4 hours filming + 2 hours setup held on the studio calendar</li>
+                <li>· Stripe deposit holds your dates, remainder by cash, check, or transfer</li>
+                <li>· Flat-rate pricing visible inside your band hub once signed in</li>
               </ul>
               <Link
                 href="/dashboard/bands"

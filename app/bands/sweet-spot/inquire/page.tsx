@@ -88,8 +88,9 @@ export default function SweetSpotInquirePage() {
             <li className="flex gap-3">
               <span className="text-accent font-bold flex-shrink-0">04</span>
               <span>
-                <strong>Booking logistics.</strong> Flat $2,500 — $800 Stripe deposit to hold the dates, the
-                $1,700 remainder by cash, check, or transfer before the shoot.
+                <strong>Booking logistics.</strong> Flat-rate pricing — we&apos;ll cover the number on the
+                call. A Stripe deposit holds your dates; remainder is due by cash, check, or transfer
+                before the shoot.
               </span>
             </li>
           </ul>

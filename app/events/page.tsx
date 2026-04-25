@@ -90,42 +90,53 @@ export default async function EventsPage() {
         </section>
       ) : (
         <section className="bg-white text-black py-20 sm:py-28">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
-              {events.map((event) => {
-                const startsAt = new Date(event.starts_at);
-                const dateStr = startsAt.toLocaleDateString('en-US', {
-                  weekday: 'short',
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                });
-                const timeStr = startsAt.toLocaleTimeString('en-US', {
-                  hour: 'numeric',
-                  minute: '2-digit',
-                });
-                const isPublic = allowsDirectRsvp(event);
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10 md:space-y-14">
+            {events.map((event) => {
+              const startsAt = new Date(event.starts_at);
+              const dateStr = startsAt.toLocaleDateString('en-US', {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+              });
+              const timeStr = startsAt.toLocaleTimeString('en-US', {
+                hour: 'numeric',
+                minute: '2-digit',
+              });
+              const isPublic = allowsDirectRsvp(event);
 
-                return (
-                  <Link
-                    key={event.id}
-                    href={`/events/${event.slug}`}
-                    className="group no-underline text-black border-2 border-black/10 hover:border-black transition-colors flex flex-col"
-                  >
-                    {/* Cover image or fallback */}
-                    <div className="relative aspect-[16/10] bg-black/5 overflow-hidden">
+              return (
+                <Link
+                  key={event.id}
+                  href={`/events/${event.slug}`}
+                  className="group no-underline text-black block border-2 border-black/10 hover:border-black transition-colors"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 md:items-stretch">
+                    {/* Flyer column. Source-order first so mobile (single-col)
+                        always stacks it on top. On md+, private events flip to
+                        order-2, putting the flyer on the right.
+
+                        The flex centering + max-h on the <img> preserves the
+                        flyer's natural aspect ratio while keeping rows from
+                        getting absurdly tall on portrait posters. */}
+                    <div
+                      className={`relative bg-black/5 flex items-center justify-center overflow-hidden ${
+                        isPublic ? '' : 'md:order-2'
+                      }`}
+                    >
                       {event.cover_image_url ? (
-                        // Using a plain <img> because cover URLs may be from
-                        // Supabase Storage or external sources we haven't
-                        // whitelisted in next.config.js' remotePatterns.
+                        // Plain <img> on purpose: flyer aspect ratios aren't
+                        // known at build time. next/image needs explicit
+                        // width/height, which would force a crop. Natural
+                        // aspect = no crop = the whole flyer the admin uploaded.
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={event.cover_image_url}
                           alt={event.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          className="block w-full h-auto md:w-auto md:max-w-full md:max-h-[640px]"
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-accent/20 to-black/20">
+                        <div className="aspect-[4/5] w-full flex items-center justify-center bg-gradient-to-br from-accent/20 to-black/20">
                           <Calendar className="w-16 h-16 text-black/30" strokeWidth={1.25} />
                         </div>
                       )}
@@ -137,43 +148,49 @@ export default async function EventsPage() {
                       )}
                     </div>
 
-                    {/* Body */}
-                    <div className="p-5 flex-1 flex flex-col">
-                      <h2 className="text-heading-sm mb-2 group-hover:text-accent transition-colors">
+                    {/* Info column. md:order-1 on private events keeps it on
+                        the left of the desktop grid. Mobile keeps source order
+                        (flyer first) regardless. */}
+                    <div
+                      className={`p-6 sm:p-8 md:p-10 flex flex-col justify-center ${
+                        isPublic ? '' : 'md:order-1'
+                      }`}
+                    >
+                      <h2 className="text-heading-md md:text-heading-lg mb-3 group-hover:text-accent transition-colors leading-tight">
                         {event.title}
                       </h2>
                       {event.tagline && (
-                        <p className="font-mono text-sm text-black/60 mb-4 line-clamp-2">
+                        <p className="font-mono text-sm sm:text-base text-black/70 mb-6 leading-relaxed">
                           {event.tagline}
                         </p>
                       )}
 
-                      <div className="space-y-1.5 mt-auto pt-4 border-t border-black/5">
-                        <div className="flex items-center gap-2 font-mono text-xs text-black/70">
-                          <Calendar className="w-3.5 h-3.5 text-accent shrink-0" />
+                      <div className="space-y-2 pt-5 border-t border-black/10">
+                        <div className="flex items-center gap-2.5 font-mono text-sm text-black/80">
+                          <Calendar className="w-4 h-4 text-accent shrink-0" />
                           <span>{dateStr}</span>
                         </div>
-                        <div className="flex items-center gap-2 font-mono text-xs text-black/70">
-                          <Clock className="w-3.5 h-3.5 text-accent shrink-0" />
+                        <div className="flex items-center gap-2.5 font-mono text-sm text-black/80">
+                          <Clock className="w-4 h-4 text-accent shrink-0" />
                           <span>{timeStr}</span>
                         </div>
                         {event.location && (
-                          <div className="flex items-center gap-2 font-mono text-xs text-black/70">
-                            <MapPin className="w-3.5 h-3.5 text-accent shrink-0" />
-                            <span className="truncate">{event.location}</span>
+                          <div className="flex items-center gap-2.5 font-mono text-sm text-black/80">
+                            <MapPin className="w-4 h-4 text-accent shrink-0" />
+                            <span>{event.location}</span>
                           </div>
                         )}
                       </div>
 
-                      <div className="mt-5 inline-flex items-center gap-1.5 font-mono text-xs font-bold uppercase tracking-wider text-accent group-hover:gap-2 transition-all">
+                      <div className="mt-7 inline-flex items-center gap-1.5 font-mono text-sm font-bold uppercase tracking-wider text-accent group-hover:gap-2.5 transition-all">
                         {isPublic ? 'RSVP' : 'View & Request'}
-                        <ArrowRight className="w-3.5 h-3.5" />
+                        <ArrowRight className="w-4 h-4" />
                       </div>
                     </div>
-                  </Link>
-                );
-              })}
-            </div>
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         </section>
       )}

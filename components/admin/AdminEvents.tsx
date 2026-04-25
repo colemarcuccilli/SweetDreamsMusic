@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Calendar, Plus, Edit2, Trash2, XCircle, Eye, EyeOff, Users, Send,
-  CheckCircle, ArrowLeft, Mail, MapPin, Clock, AlertCircle,
+  CheckCircle, ArrowLeft, Mail, MapPin, Clock, AlertCircle, Upload, Image as ImageIcon,
 } from 'lucide-react';
 import {
   visibilityLabel,
@@ -581,13 +581,11 @@ function FormView(props: {
         />
       </Field>
 
-      <Field label="Cover image URL" hint="Optional. Shown as the event hero.">
-        <input
-          type="url"
-          value={form.cover_image_url || ''}
-          onChange={(e) => update('cover_image_url', e.target.value)}
-          placeholder="https://..."
-          className="w-full border-2 border-black px-3 py-2 font-mono text-xs focus:border-accent focus:outline-none"
+      <Field label="Flyer / cover image" hint="Upload at any size — the listing and detail page show it uncropped. JPG, PNG, WebP, GIF, or AVIF.">
+        <FlyerUploader
+          currentUrl={form.cover_image_url || null}
+          onUploaded={(url) => update('cover_image_url', url)}
+          onRemove={() => update('cover_image_url', null)}
         />
       </Field>
 
@@ -651,6 +649,155 @@ function Field({ label, required, hint, children }: { label: string; required?: 
       </label>
       {children}
       {hint && <p className="font-mono text-[10px] text-black/40 mt-1">{hint}</p>}
+    </div>
+  );
+}
+
+// ─── Flyer uploader ─────────────────────────────────────────────────
+//
+// Three-step signed-URL upload (same shape used by bands + profiles):
+//   1. Ask /api/admin/events/cover/upload-url for a one-time URL
+//   2. PUT the file directly to Supabase Storage (browser → Supabase)
+//   3. Update the parent form with the resulting publicUrl
+//
+// Why direct-to-Supabase instead of multipart-to-our-API: Vercel functions
+// cap request bodies at 4.5MB. Flyers (especially uncompressed photos) can
+// blow that cap. The API stays in the auth + path-construction lane only.
+
+function FlyerUploader(props: {
+  currentUrl: string | null;
+  onUploaded: (url: string) => void;
+  onRemove: () => void;
+}) {
+  const { currentUrl, onUploaded, onRemove } = props;
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleFile(file: File) {
+    setError(null);
+    if (!file.type.startsWith('image/')) {
+      setError('That doesn\'t look like an image file.');
+      return;
+    }
+    // 25MB cap. Generous because flyers tend to be larger than typical
+    // profile photos. The browser uploads direct to Supabase, so the Vercel
+    // 4.5MB body limit isn't the constraint here — this cap is just to
+    // keep the bucket from growing wild.
+    if (file.size > 25 * 1024 * 1024) {
+      setError('File is too large. Max 25 MB.');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      // 1. Get signed URL.
+      const urlRes = await fetch('/api/admin/events/cover/upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: file.name }),
+      });
+      if (!urlRes.ok) {
+        const data = await urlRes.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to start upload');
+      }
+      const { signedUrl, publicUrl } = await urlRes.json();
+
+      // 2. PUT directly to Supabase Storage.
+      const uploadRes = await fetch(signedUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type },
+        body: file,
+      });
+      if (!uploadRes.ok) throw new Error('Upload to storage failed');
+
+      // 3. Tell the parent form. The publicUrl gets persisted with the
+      // event row when the admin clicks Save.
+      onUploaded(publicUrl);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = ''; // allow re-uploading the same file
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void handleFile(f);
+        }}
+      />
+
+      {currentUrl ? (
+        <div className="border-2 border-black p-3 space-y-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={currentUrl}
+            alt="Flyer preview"
+            className="block max-h-80 w-auto mx-auto"
+          />
+          <div className="flex items-center justify-between gap-2 pt-2 border-t border-black/10">
+            <p className="font-mono text-[10px] text-black/50 truncate flex-1">
+              {currentUrl.split('/').pop()}
+            </p>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => inputRef.current?.click()}
+                disabled={uploading}
+                className="font-mono text-[10px] font-bold uppercase tracking-wider px-2.5 py-1.5 bg-black/5 hover:bg-black/10 disabled:opacity-50 inline-flex items-center gap-1.5"
+              >
+                <Upload className="w-3 h-3" />
+                {uploading ? 'Uploading…' : 'Replace'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onRemove();
+                  setError(null);
+                }}
+                disabled={uploading}
+                className="font-mono text-[10px] font-bold uppercase tracking-wider px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 disabled:opacity-50 inline-flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3 h-3" /> Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          disabled={uploading}
+          className="w-full border-2 border-dashed border-black/30 hover:border-black hover:bg-black/[0.02] py-10 flex flex-col items-center justify-center gap-2 transition-colors disabled:opacity-50"
+        >
+          {uploading ? (
+            <>
+              <Upload className="w-6 h-6 text-accent animate-pulse" />
+              <p className="font-mono text-xs">Uploading…</p>
+            </>
+          ) : (
+            <>
+              <ImageIcon className="w-6 h-6 text-black/40" />
+              <p className="font-mono text-xs font-bold uppercase tracking-wider">Choose a flyer</p>
+              <p className="font-mono text-[10px] text-black/40">JPG / PNG / WebP — max 25 MB</p>
+            </>
+          )}
+        </button>
+      )}
+
+      {error && (
+        <p className="font-mono text-[10px] text-red-700 bg-red-50 px-2 py-1.5 inline-flex items-center gap-1.5">
+          <AlertCircle className="w-3 h-3" /> {error}
+        </p>
+      )}
     </div>
   );
 }
