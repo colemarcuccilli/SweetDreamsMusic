@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Shield, Wrench, User, Music, Rocket, Bell, Users, PartyPopper } from 'lucide-react';
+import { LayoutDashboard, Shield, Wrench, User, Music, Rocket, Bell, Users, PartyPopper, Film } from 'lucide-react';
 import type { UserRole } from '@/lib/constants';
 import SignOutButton from '@/components/auth/SignOutButton';
 
@@ -22,6 +22,11 @@ export default function DashboardNav({ role, isProducer, displayName, email, pro
     { href: '/dashboard/hub', label: 'Artist Hub', icon: Rocket, show: true },
     { href: '/dashboard/bands', label: 'Bands', icon: Users, show: true },
     { href: '/dashboard/events', label: 'Events', icon: PartyPopper, show: true },
+    // Media Hub — visible to every logged-in user. Visibility filtering
+    // (solo doesn't see band-only offerings) happens *inside* the page,
+    // not at the tab level. Rule per Cole: tab is universal, catalog
+    // adapts.
+    { href: '/dashboard/media', label: 'Media', icon: Film, show: true },
     { href: '/engineer', label: 'Engineer', icon: Wrench, show: role === 'engineer' || role === 'admin' },
     { href: '/producer', label: 'Producer', icon: Music, show: isProducer === true },
     { href: '/admin', label: 'Admin', icon: Shield, show: role === 'admin' },

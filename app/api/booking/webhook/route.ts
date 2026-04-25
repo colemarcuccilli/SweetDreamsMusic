@@ -669,6 +669,101 @@ export async function POST(request: NextRequest) {
             console.error('Private sale email error:', e);
           }
         }
+      } else if (meta.type === 'media_purchase') {
+        // ── Media Hub purchase ──────────────────────────────────────
+        // Customer paid in full for a media offering (package or
+        // standalone). Phase C: full payment up front, no deposit logic
+        // — calendars + date-locking ship in Phase D.
+        //
+        // Webhook is the single source of truth for media_bookings +
+        // studio_credits writes (the checkout API only creates the
+        // Stripe session — never inserts rows directly, which keeps
+        // accounting honest in the face of abandoned/expired sessions).
+        const offeringId = meta.offering_id;
+        const offeringSlug = meta.offering_slug;
+        const studioHours = parseInt(meta.studio_hours_included || '0', 10);
+        const buyerId = meta.buyer_id;
+        const buyerName = meta.buyer_name || meta.buyer_email?.split('@')[0] || 'Buyer';
+        const buyerEmail = session.customer_details?.email || meta.buyer_email;
+        const bandId = meta.band_id || null;
+        const amountPaid = session.amount_total || 0;
+
+        // 1. Create the media_bookings row. Status = 'deposited' even
+        //    though it's full payment — that's our "paid, in production
+        //    queue, awaiting scheduling" state. Final scheduling moves
+        //    it to 'scheduled' once a date is on the calendar.
+        const { data: newBooking, error: bookingErr } = await supabase
+          .from('media_bookings')
+          .insert({
+            offering_id: offeringId,
+            user_id: buyerId,
+            band_id: bandId,
+            status: 'deposited',
+            final_price_cents: amountPaid,
+            deposit_cents: amountPaid,
+            stripe_payment_intent_id: session.payment_intent as string,
+            deposit_paid_at: new Date().toISOString(),
+            final_paid_at: new Date().toISOString(),
+          })
+          .select('id')
+          .single();
+
+        if (bookingErr) {
+          // Stripe retries 5xx, but our event-id dedup table will swallow
+          // a retry. Log + ACK rather than 5xx so we don't stack errors.
+          console.error('[webhook] media_bookings insert failed:', bookingErr);
+        }
+
+        // 2. If the package includes studio hours, create the credit row
+        //    ("gift card"). Owner is XOR'd per the studio_credits_owner_xor
+        //    constraint: band_id if attached to a band, else user_id.
+        //    cost_basis_cents tracks the deferred-revenue liability — the
+        //    full amount paid that will be recognized as the engineer
+        //    works the hours.
+        if (studioHours > 0 && newBooking) {
+          const creditOwner = bandId
+            ? { band_id: bandId, user_id: null }
+            : { user_id: buyerId, band_id: null };
+
+          const { error: creditErr } = await supabase.from('studio_credits').insert({
+            ...creditOwner,
+            source_booking_id: newBooking.id,
+            hours_granted: studioHours,
+            hours_used: 0,
+            cost_basis_cents: amountPaid,
+          });
+          if (creditErr) {
+            console.error('[webhook] studio_credits insert failed:', creditErr);
+          }
+        }
+
+        // 3. Award XP for the purchase — same hook the beat purchases use,
+        //    same event name pattern. Skip silently if the buyer's profile
+        //    isn't found (defensive — they should have one since checkout
+        //    is gated on auth, but profile-row-creation is async via
+        //    triggers, so brand-new users could race).
+        if (buyerId && newBooking) {
+          try {
+            await awardXP(supabase, buyerId, 'book_session', {
+              referenceId: newBooking.id,
+              metadata: {
+                kind: 'media_purchase',
+                offering_slug: offeringSlug,
+                amount_cents: amountPaid,
+              },
+            });
+          } catch { /* skip XP on failure — never block the sale */ }
+        }
+
+        console.log(
+          `[webhook] media_purchase processed: offering=${offeringSlug} buyer=${buyerName} (${buyerEmail}) band=${bandId || 'none'} hours=${studioHours} amount=${amountPaid}`,
+        );
+
+        // Phase C does NOT send a custom confirmation email — Stripe's
+        // automatic receipt covers the buyer side. Phase C.2 will add a
+        // sendMediaPurchaseConfirmation template with the configured
+        // manifest (slot breakdown, prepaid balance summary, what to
+        // expect next) and an admin alert to Cole + Jay.
       }
       break;
     }
