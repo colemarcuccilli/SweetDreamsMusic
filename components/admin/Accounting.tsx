@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { DollarSign, TrendingUp, Calendar, Music, Users, Filter, ChevronDown } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
 import { PRODUCER_COMMISSION, PLATFORM_COMMISSION, ENGINEER_SESSION_SPLIT, BUSINESS_SESSION_SPLIT, MEDIA_SELLER_COMMISSION, MEDIA_BUSINESS_CUT, MEDIA_WORKER_TOTAL, ENGINEERS } from '@/lib/constants';
+import CreditsLiabilityPanel from './CreditsLiabilityPanel';
 
 interface Booking {
   id: string;
@@ -910,6 +911,9 @@ export default function Accounting() {
                   <StatCard icon={DollarSign} label="Total Kept from Cancelled" value={formatCents(cancelledBookings.reduce((s, b) => s + (b.actual_deposit_paid || 0), 0))} accent />
                 </div>
               )}
+
+              {/* Phase E — prepaid credits liability (deferred revenue) */}
+              <CreditsLiabilityPanel />
 
               {/* Monthly breakdown */}
               {sessionsByMonth.length > 0 && (

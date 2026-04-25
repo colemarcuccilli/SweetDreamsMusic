@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   Plus,
   XCircle,
+  Download,
 } from 'lucide-react';
 import { getSessionUser } from '@/lib/auth';
 import { getUserBands } from '@/lib/bands-server';
@@ -62,6 +63,7 @@ export default async function OrderDetailPage({
     final_price_cents: number;
     created_at: string;
     notes_to_us: string | null;
+    deliverables: { items?: Array<{ label: string; url: string; kind?: string; added_at?: string }> } | null;
   };
 
   // Ownership check
@@ -306,6 +308,44 @@ export default async function OrderDetailPage({
               </details>
             )}
           </div>
+
+          {/* Deliverables — admin populates as production wraps */}
+          {booking.deliverables?.items && booking.deliverables.items.length > 0 && (
+            <div>
+              <p className="font-mono text-[11px] uppercase tracking-wider text-black/50 mb-3">
+                Your deliverables
+              </p>
+              <ul className="space-y-2">
+                {booking.deliverables.items.map((d, i) => (
+                  <li
+                    key={i}
+                    className="flex items-center justify-between gap-3 border-2 border-black/10 p-3 hover:border-accent transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-bold truncate">{d.label}</p>
+                      {d.kind && (
+                        <p className="font-mono text-[10px] uppercase tracking-wider text-black/50">
+                          {d.kind}
+                          {d.added_at && (
+                            <> · added {new Date(d.added_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</>
+                          )}
+                        </p>
+                      )}
+                    </div>
+                    <a
+                      href={d.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-mono text-xs uppercase tracking-wider text-accent hover:underline inline-flex items-center gap-1 shrink-0"
+                    >
+                      <Download className="w-3 h-3" />
+                      Open
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {booking.notes_to_us && (
             <div>
