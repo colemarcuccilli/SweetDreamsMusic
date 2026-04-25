@@ -1274,6 +1274,172 @@ export async function sendEventCancellation(details: {
 }
 
 /**
+ * Media Hub purchase confirmation — sent to the buyer after Stripe webhook
+ * processes a `media_purchase`. Wraps the offering title, total paid, the
+ * configurator's selections (one bullet per slot), and the prepaid balance
+ * granted (if any). Falls back gracefully when the package wasn't
+ * configurable — `configurationLines` is just an empty array in that case
+ * and the "Your build" panel is omitted.
+ *
+ * The "what happens next" copy mirrors what we tell session bookers:
+ * production reaches out within 1 business day to lock dates. Phase D will
+ * upgrade this to a direct calendar link when scheduling self-serves.
+ */
+export async function sendMediaPurchaseConfirmation(to: string, details: {
+  buyerName: string;
+  offeringTitle: string;
+  amountPaid: number;
+  studioHoursIncluded: number;
+  bandAttached: boolean;
+  configurationLines: string[];
+  bookingId?: string;
+}) {
+  try {
+    const ownerLabel = details.bandAttached ? 'your band' : 'your account';
+    const buildSection = details.configurationLines.length > 0
+      ? `
+        <p style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:0.05em;margin:24px 0 8px">Your build</p>
+        <div style="background:#111;padding:16px;margin:0 0 16px;border-left:3px solid #F4C430">
+          <ul style="color:#ccc;font-size:14px;line-height:1.8;padding-left:20px;margin:0">
+            ${details.configurationLines.map((line) => `<li>${line}</li>`).join('')}
+          </ul>
+        </div>
+      `
+      : '';
+    const creditSection = details.studioHoursIncluded > 0
+      ? `
+        <div style="margin-top:24px;padding:20px;background:#111;border-left:3px solid #F4C430">
+          ${p('<strong style="color:#F4C430">🎙️ Prepaid Studio Time</strong>')}
+          ${p(`Your purchase loaded <strong>${details.studioHoursIncluded} hour${details.studioHoursIncluded === 1 ? '' : 's'}</strong> of recording time onto ${ownerLabel}'s prepaid balance. Schedule whenever you're ready — no expiration, no rush.`)}
+        </div>
+      `
+      : '';
+
+    await resend.emails.send({
+      from: FROM,
+      to,
+      subject: `Order Confirmed — ${details.offeringTitle}`,
+      html: wrap(
+        h1('ORDER CONFIRMED') +
+        p(`Hey ${details.buyerName}, we received your payment for <strong style="color:#F4C430">${details.offeringTitle}</strong>. Production starts now.`) +
+        detailTable(
+          detail('Order', details.offeringTitle) +
+          detail('Total', formatMoney(details.amountPaid)) +
+          (details.studioHoursIncluded > 0
+            ? detail('Studio Hours', `${details.studioHoursIncluded} hr${details.studioHoursIncluded === 1 ? '' : 's'} added to ${ownerLabel}'s balance`)
+            : '') +
+          (details.bookingId ? detail('Reference', details.bookingId.slice(0, 8)) : '')
+        ) +
+        buildSection +
+        creditSection +
+        '<br/>' +
+        p('A producer reaches out within 1 business day to lock in scheduling, gather any references, and walk you through next steps.') +
+        btn('VIEW IN DASHBOARD', `${SITE_URL}/dashboard/media`) +
+        p('<span style="color:#888;font-size:12px">Reply to this email if you need to flag anything before we start.</span>')
+      ),
+    });
+  } catch (e) { console.error('Email error (media purchase confirmation):', e); }
+}
+
+/**
+ * Admin alert for a media purchase. Goes to Cole + Jay so the production
+ * team sees the order land in real time. Uses the same email the Sweet
+ * Spot inquiries route to (`jayvalleo@sweetdreams.us`, `cole@sweetdreams.us`)
+ * rather than the generic SUPER_ADMINS list — these are media-specific and
+ * Jay's the production lead, not the studio operator.
+ *
+ * `replyTo` is set to the buyer's email so an admin hitting Reply lands in
+ * the buyer's inbox, not back in the studio@ send-only address.
+ */
+export async function sendMediaPurchaseAdminAlert(details: {
+  buyerName: string;
+  buyerEmail: string;
+  offeringTitle: string;
+  amountPaid: number;
+  studioHoursIncluded: number;
+  bandAttached: boolean;
+  configurationLines: string[];
+}) {
+  try {
+    const buildSection = details.configurationLines.length > 0
+      ? `
+        <p style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:0.05em;margin:24px 0 8px">Their build</p>
+        <div style="background:#111;padding:16px;margin:0 0 16px;border-left:3px solid #F4C430">
+          <ul style="color:#ccc;font-size:14px;line-height:1.8;padding-left:20px;margin:0">
+            ${details.configurationLines.map((line) => `<li>${line}</li>`).join('')}
+          </ul>
+        </div>
+      `
+      : '';
+
+    await resend.emails.send({
+      from: FROM,
+      to: ['jayvalleo@sweetdreams.us', 'cole@sweetdreams.us'],
+      replyTo: details.buyerEmail,
+      subject: `Media Sale — ${details.offeringTitle} — ${formatMoney(details.amountPaid)}`,
+      html: wrap(
+        h1('MEDIA SALE') +
+        p(`<strong style="color:#F4C430">${details.buyerName}</strong> just bought <strong>${details.offeringTitle}</strong>.`) +
+        detailTable(
+          detail('Buyer', details.buyerName) +
+          detail('Email', details.buyerEmail) +
+          detail('Offering', details.offeringTitle) +
+          detail('Amount', formatMoney(details.amountPaid)) +
+          (details.studioHoursIncluded > 0
+            ? detail('Studio Hours', `${details.studioHoursIncluded} hr${details.studioHoursIncluded === 1 ? '' : 's'} (${details.bandAttached ? 'band balance' : 'personal balance'})`)
+            : detail('Studio Hours', 'none')) +
+          detail('Attribution', details.bandAttached ? 'Band' : 'Personal')
+        ) +
+        buildSection +
+        btn('OPEN ADMIN', `${SITE_URL}/admin`) +
+        p('<span style="color:#888;font-size:12px">Reply to this email to reach the buyer directly.</span>')
+      ),
+    });
+  } catch (e) { console.error('Email error (media admin alert):', e); }
+}
+
+/**
+ * Media inquiry email — sent when a user submits the inquiry form on a
+ * range-priced or band-by-request offering. Routes to the same inbox as
+ * media purchase alerts (Cole + Jay) so leads get the same eyeballs.
+ */
+export async function sendMediaInquiry(details: {
+  inquirerName: string;
+  inquirerEmail: string;
+  offeringTitle: string;
+  offeringSlug: string;
+  bandName: string | null;
+  message: string;
+}) {
+  try {
+    await resend.emails.send({
+      from: FROM,
+      to: ['jayvalleo@sweetdreams.us', 'cole@sweetdreams.us'],
+      replyTo: details.inquirerEmail,
+      subject: `Media Inquiry — ${details.offeringTitle}${details.bandName ? ` (${details.bandName})` : ''}`,
+      html: wrap(
+        h1('MEDIA INQUIRY') +
+        p(`<strong style="color:#F4C430">${details.inquirerName}</strong> wants to talk about <strong>${details.offeringTitle}</strong>.`) +
+        detailTable(
+          detail('Inquirer', details.inquirerName) +
+          detail('Email', details.inquirerEmail) +
+          (details.bandName ? detail('Band', details.bandName) : '') +
+          detail('Offering', details.offeringTitle) +
+          detail('Slug', details.offeringSlug)
+        ) +
+        `
+          <p style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:0.05em;margin:20px 0 8px">Their message</p>
+          <div style="background:#111;padding:16px;margin:0 0 16px;border-left:3px solid #F4C430">
+            <p style="font-size:14px;color:#ccc;margin:0;white-space:pre-wrap">${details.message}</p>
+          </div>
+        ` +
+        p('<span style="color:#888;font-size:12px">Reply to this email to reach the inquirer directly.</span>')
+      ),
+    });
+  } catch (e) { console.error('Email error (media inquiry):', e); }
+}
+
+/**
  * Sweet Spot inquiry email.
  *
  * Sent to Jay + Cole when a band (or a prospective band) fills out the Sweet Spot

@@ -1,22 +1,22 @@
 // app/dashboard/media/[slug]/page.tsx
 //
-// Offering detail page — the buy surface. For Phase C:
+// Offering detail page — the buy surface. As of Phase C.2 there are three
+// CTA modes:
 //
-//   • Fixed-price offerings (standalone or package): show full description +
-//     component breakdown (for packages) + "Buy" button → POSTs to checkout.
-//   • Inquire-priced offerings (price_cents and ranges all NULL): show
-//     description + "Send an inquiry" CTA pointing to /contact for now. The
-//     band-by-request inquiry form lives in Phase D.
-//   • Band-only offerings hit by a non-band viewer: 404 (visibility filter).
+//   • Configurable package      → "Configure & Buy" links to /configure wizard
+//   • Fixed-price + non-config  → "Buy" button POSTs base price directly
+//   • Inquire-priced / ranged   → "Send an inquiry" routes to /inquire form
+//   • Band-only + solo viewer   → 404 (visibility filter)
 //
-// The slot-by-slot configurator wizard with severity options + skip-item
-// math is deferred to Phase C.2 — current seed data uses fixed prices, so
-// shipping the wizard isn't blocking revenue.
+// "Configurable" means the offering has any slot the buyer can change —
+// either skippable or with severity options. See `isOfferingConfigurable`.
+// Standalones (no `components`) and packages with all-fixed slots (Sweet
+// Spot Band) take the direct buy path.
 
 import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Check, Clock, Mail } from 'lucide-react';
+import { ArrowLeft, Check, Clock, Mail, Settings2, ArrowRight } from 'lucide-react';
 import { getSessionUser } from '@/lib/auth';
 import { getUserBands } from '@/lib/bands-server';
 import { getOfferingBySlug } from '@/lib/media-server';
@@ -25,6 +25,7 @@ import {
   isOfferingVisibleTo,
   viewerEligibilityFromBands,
 } from '@/lib/media';
+import { isOfferingConfigurable } from '@/lib/media-config';
 import DashboardNav from '@/components/layout/DashboardNav';
 import MediaBuyButton from '@/components/media/MediaBuyButton';
 
@@ -80,6 +81,12 @@ export default async function OfferingDetailPage({
 
   // The "buy now" path — only available when there's a single fixed price.
   const isBuyable = !isInquireOnly && !isPriceRange && offering.price_cents != null;
+
+  // "Configurable" overrides direct-buy: if the package has skippable or
+  // severity-tiered slots we route through the wizard so the buyer can
+  // adjust the price + scope. Sweet Spot Band has price_cents but no
+  // configurable slots → still takes the direct buy path.
+  const isConfigurable = isBuyable && isOfferingConfigurable(offering);
 
   return (
     <>
@@ -179,10 +186,39 @@ export default async function OfferingDetailPage({
         </section>
       )}
 
-      {/* Buy / inquire CTA */}
+      {/* Buy / configure / inquire CTA */}
       <section className="bg-black text-white py-12 sm:py-16 border-t border-white/10">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          {isBuyable ? (
+          {isConfigurable ? (
+            <>
+              <h2 className="text-heading-lg mb-3">BUILD YOUR PACKAGE</h2>
+              <p className="font-mono text-body-sm text-white/70 max-w-2xl mb-6">
+                This package has options. Walk through each piece, pick your
+                production tier or drop items you don&apos;t need, and the price
+                updates as you go. You only pay for what you keep.
+                {offering.studio_hours_included > 0 && (
+                  <>
+                    {' '}Studio recording hours land in your prepaid balance the
+                    moment payment clears — schedule whenever you&apos;re ready.
+                  </>
+                )}
+              </p>
+              <Link
+                href={`/dashboard/media/${offering.slug}/configure`}
+                className="bg-accent text-black font-mono text-base font-bold tracking-wider uppercase px-8 py-4 hover:bg-accent/90 transition-colors no-underline inline-flex items-center gap-2"
+              >
+                <Settings2 className="w-4 h-4" />
+                Configure &amp; Buy
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+              <p className="font-mono text-xs text-white/50 mt-4">
+                Or grab the package as-priced — no configuration needed.
+              </p>
+              <div className="mt-2">
+                <MediaBuyButton slug={offering.slug} title={`${offering.title} (default)`} />
+              </div>
+            </>
+          ) : isBuyable ? (
             <>
               <h2 className="text-heading-lg mb-3">READY TO BOOK?</h2>
               <p className="font-mono text-body-sm text-white/70 max-w-2xl mb-6">
@@ -210,7 +246,7 @@ export default async function OfferingDetailPage({
                   : "This one's a custom build. Tell us about the project and we'll come back with a tailored proposal."}
               </p>
               <Link
-                href={`/contact?ref=media:${offering.slug}`}
+                href={`/dashboard/media/${offering.slug}/inquire`}
                 className="bg-accent text-black font-mono text-base font-bold tracking-wider uppercase px-8 py-4 hover:bg-accent/90 transition-colors no-underline inline-flex items-center gap-2"
               >
                 <Mail className="w-4 h-4" />

@@ -1,18 +1,20 @@
 // app/api/media/checkout/route.ts
 //
-// Creates a Stripe Checkout session for a media offering. Phase C: full
-// payment, no deposit logic — calendars / date-locking ship in Phase D and
-// that's when partial deposits become useful.
+// Creates a Stripe Checkout session for a media offering. Phase C.2: accepts
+// an optional `configured_components` snapshot from the wizard, validates it
+// against the offering's slot schema, and recomputes the final price
+// server-side so client tampering can never change what gets charged.
 //
 // Flow:
 //   1. Authenticate (401 if no session)
 //   2. Look up offering by slug; reject if not found, not active, or inquire-priced
-//   3. Re-check visibility against viewer (defense-in-depth — the page also
-//      filters, but never trust the client to refuse a non-visible buy)
-//   4. Create Stripe checkout session with full unit_amount
-//   5. Stash everything the webhook needs in `metadata` (booking shape, hours,
-//      band attribution) — webhook is the single source of truth for writing
-//      `media_bookings` and `studio_credits`
+//   3. Re-check visibility against viewer (defense-in-depth)
+//   4. If `configured_components` was sent: validate + recompute price
+//      else: use the offering's base price
+//   5. Create Stripe checkout session with the recomputed unit_amount
+//   6. Stash everything the webhook needs in `metadata` — including a
+//      stringified config snapshot so the webhook can write it to
+//      media_bookings.configured_components
 //
 // Mirrors `app/api/beats/checkout/route.ts` for tone and structure.
 
@@ -22,6 +24,14 @@ import { createClient } from '@/lib/supabase/server';
 import { getOfferingBySlug } from '@/lib/media-server';
 import { getUserBands } from '@/lib/bands-server';
 import { isOfferingVisibleTo, viewerEligibilityFromBands } from '@/lib/media';
+import {
+  type ConfiguredComponents,
+  computeConfiguredPriceCents,
+  describeConfig,
+  isOfferingConfigurable,
+  validateConfig,
+  EMPTY_CONFIG,
+} from '@/lib/media-config';
 import { SITE_URL } from '@/lib/constants';
 
 export async function POST(request: NextRequest) {
@@ -34,9 +44,11 @@ export async function POST(request: NextRequest) {
 
   // ── Parse + validate input ──────────────────────────────────────────
   let slug: string | undefined;
+  let rawConfig: unknown;
   try {
     const body = await request.json();
     slug = body.slug;
+    rawConfig = body.configured_components;
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
@@ -51,9 +63,6 @@ export async function POST(request: NextRequest) {
   }
 
   // ── Visibility check (defense-in-depth) ─────────────────────────────
-  // Anonymous viewers can't get here (we 401'd above). Solo users can't buy
-  // band offerings. Page already enforces this; this is the server-side
-  // double-check that prevents direct API calls bypassing the UI filter.
   const bandMemberships = await getUserBands(user.id);
   const viewer = viewerEligibilityFromBands({
     authenticated: true,
@@ -65,7 +74,7 @@ export async function POST(request: NextRequest) {
 
   // ── Buyability check ────────────────────────────────────────────────
   // Inquire-priced or range-priced offerings can't auto-checkout — they
-  // need an inquiry flow (covered by the page's "Send inquiry" CTA).
+  // need an inquiry flow.
   const hasFixedPrice =
     offering.price_cents != null &&
     offering.price_range_low_cents == null &&
@@ -73,6 +82,51 @@ export async function POST(request: NextRequest) {
   if (!hasFixedPrice) {
     return NextResponse.json(
       { error: 'This offering requires a custom quote — please send an inquiry' },
+      { status: 400 },
+    );
+  }
+
+  // ── Validate + parse configured_components (if sent) ────────────────
+  // Acceptable shapes:
+  //   • undefined / missing      → use base price (legacy / non-configurable offerings)
+  //   • { selections: { ... } }  → validate against schema, recompute price
+  // Any other shape → 400.
+  let config: ConfiguredComponents = EMPTY_CONFIG;
+  if (rawConfig !== undefined && rawConfig !== null) {
+    if (
+      typeof rawConfig !== 'object' ||
+      !('selections' in (rawConfig as object)) ||
+      typeof (rawConfig as { selections: unknown }).selections !== 'object'
+    ) {
+      return NextResponse.json(
+        { error: 'configured_components must be an object with a `selections` map' },
+        { status: 400 },
+      );
+    }
+    const selections = (rawConfig as { selections: Record<string, unknown> }).selections;
+    // Coerce to typed snapshot — any non-conforming entries get rejected
+    // by validateConfig below.
+    config = { selections: selections as ConfiguredComponents['selections'] };
+
+    // Reject configs sent against non-configurable offerings — likely a
+    // client bug or someone poking the API directly. Empty selections are
+    // tolerated (treated as "use base price").
+    if (Object.keys(config.selections).length > 0 && !isOfferingConfigurable(offering)) {
+      return NextResponse.json(
+        { error: 'This offering has no configurable slots' },
+        { status: 400 },
+      );
+    }
+
+    const err = validateConfig(offering, config);
+    if (err) return NextResponse.json({ error: err }, { status: 400 });
+  }
+
+  // ── Recompute price (canonical, server-side) ────────────────────────
+  const computedPrice = computeConfiguredPriceCents(offering, config);
+  if (computedPrice == null || computedPrice <= 0) {
+    return NextResponse.json(
+      { error: 'Unable to compute a valid price for this configuration' },
       { status: 400 },
     );
   }
@@ -91,12 +145,28 @@ export async function POST(request: NextRequest) {
     'Buyer';
 
   // ── Band attribution ────────────────────────────────────────────────
-  // If the buyer is in exactly one band, the studio credits attach to the
-  // band. If they're in multiple bands or none, credits attach to the user.
-  // Multi-band attribution is a Phase D problem (the band hub will let
-  // members pick the band before purchase).
+  // Single band → band credit. Multi/zero → personal credit.
   const bandIdForCredits =
     bandMemberships.length === 1 ? bandMemberships[0]?.band_id ?? null : null;
+
+  // ── Build a description that reflects the configuration ────────────
+  // Stripe shows this on the checkout page and in the receipt, so it's the
+  // first place the buyer sees their selections written back to them.
+  const decisionLines = describeConfig(offering, config);
+  const baseDescription =
+    offering.public_blurb ?? offering.description ?? offering.title;
+  const description =
+    decisionLines.length > 0
+      ? `${baseDescription}\n\nYour build: ${decisionLines.join(' · ')}`
+      : baseDescription;
+
+  // ── Stash config in metadata ────────────────────────────────────────
+  // Stripe metadata fields are limited to 500 chars each. Our largest
+  // realistic config (Album with 4 slots × ~30 chars per entry) fits well
+  // under that. We JSON.stringify so the webhook can re-parse without
+  // re-fetching the offering. If it ever blows the limit we'd switch to
+  // chunked metadata or a Supabase staging row, but it's fine for now.
+  const configJson = JSON.stringify(config);
 
   // ── Create Stripe checkout ──────────────────────────────────────────
   try {
@@ -110,10 +180,10 @@ export async function POST(request: NextRequest) {
             currency: 'usd',
             product_data: {
               name: offering.title,
-              description: offering.public_blurb ?? offering.description ?? undefined,
+              description: description.slice(0, 500), // Stripe limit
               tax_code: 'txcd_20030000', // Professional services - photography & video
             },
-            unit_amount: offering.price_cents!,
+            unit_amount: computedPrice,
           },
           quantity: 1,
         },
@@ -122,21 +192,27 @@ export async function POST(request: NextRequest) {
       cancel_url: `${SITE_URL}/dashboard/media/${offering.slug}?status=cancelled`,
       customer_email: user.email,
       metadata: {
-        // Type discriminator — webhook switches on this
         type: 'media_purchase',
-        // Offering snapshot (so webhook doesn't need to re-fetch)
         offering_id: offering.id,
         offering_slug: offering.slug,
         offering_title: offering.title,
         offering_kind: offering.kind,
-        // Studio hours that should flow into studio_credits on success
         studio_hours_included: String(offering.studio_hours_included || 0),
-        // Buyer
         buyer_id: user.id,
         buyer_email: user.email,
         buyer_name: buyerName,
-        // Band attribution (empty string = personal credit)
         band_id: bandIdForCredits ?? '',
+        // Snapshot of the wizard's choices — webhook will save this to
+        // media_bookings.configured_components verbatim. Empty selections
+        // are stored too so the row's snapshot is unambiguous.
+        configured_components: configJson.slice(0, 500),
+        // Pre-rendered human-readable summary of the wizard choices, joined
+        // with ' · '. Webhook splits on this separator to populate the
+        // confirmation email's "Your build" list. Storing the rendered
+        // strings here means the webhook never has to re-fetch the offering
+        // schema to translate slot keys into labels.
+        configuration_summary:
+          decisionLines.length > 0 ? decisionLines.join(' · ').slice(0, 500) : '',
       },
     });
 

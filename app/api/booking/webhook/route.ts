@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
 import { createServiceClient } from '@/lib/supabase/server';
-import { sendBookingConfirmation, sendAdminBookingAlert, sendEngineerNewBookingAlert, sendEngineerPriorityAlert } from '@/lib/email';
+import {
+  sendBookingConfirmation,
+  sendAdminBookingAlert,
+  sendEngineerNewBookingAlert,
+  sendEngineerPriorityAlert,
+  sendMediaPurchaseConfirmation,
+  sendMediaPurchaseAdminAlert,
+} from '@/lib/email';
 import { ENGINEERS, type Room } from '@/lib/constants';
 import { calculatePriorityExpiry, getPriorityHoursLabel, calculateRescheduleDeadline } from '@/lib/priority';
 import { awardXP } from '@/lib/xp-system';
@@ -681,12 +688,29 @@ export async function POST(request: NextRequest) {
         // accounting honest in the face of abandoned/expired sessions).
         const offeringId = meta.offering_id;
         const offeringSlug = meta.offering_slug;
+        const offeringTitle = meta.offering_title || offeringSlug;
         const studioHours = parseInt(meta.studio_hours_included || '0', 10);
         const buyerId = meta.buyer_id;
         const buyerName = meta.buyer_name || meta.buyer_email?.split('@')[0] || 'Buyer';
         const buyerEmail = session.customer_details?.email || meta.buyer_email;
         const bandId = meta.band_id || null;
         const amountPaid = session.amount_total || 0;
+
+        // Configurator snapshot — Phase C.2. We JSON.parse the metadata
+        // string the checkout API stashed; if it's missing or malformed
+        // we fall back to null so the booking row still writes. The
+        // snapshot is stored verbatim into media_bookings.configured_components
+        // so admins can see what the buyer chose without re-deriving from
+        // the price.
+        let configuredComponents: unknown = null;
+        if (meta.configured_components) {
+          try {
+            configuredComponents = JSON.parse(meta.configured_components);
+          } catch {
+            console.warn('[webhook] media_purchase config parse failed — storing raw');
+            configuredComponents = { raw: meta.configured_components };
+          }
+        }
 
         // 1. Create the media_bookings row. Status = 'deposited' even
         //    though it's full payment — that's our "paid, in production
@@ -699,9 +723,11 @@ export async function POST(request: NextRequest) {
             user_id: buyerId,
             band_id: bandId,
             status: 'deposited',
+            configured_components: configuredComponents,
             final_price_cents: amountPaid,
             deposit_cents: amountPaid,
             stripe_payment_intent_id: session.payment_intent as string,
+            stripe_session_id: session.id,
             deposit_paid_at: new Date().toISOString(),
             final_paid_at: new Date().toISOString(),
           })
@@ -755,15 +781,50 @@ export async function POST(request: NextRequest) {
           } catch { /* skip XP on failure — never block the sale */ }
         }
 
+        // 4. Confirmation email to the buyer + admin alert. Both are
+        //    fire-and-forget (own try/catch inside the email helpers) so
+        //    a Resend outage can never block the booking write or fail
+        //    the webhook back to Stripe.
+        //
+        //    The configuration summary is whatever the checkout API stashed
+        //    in `configuration_summary` metadata — already pre-rendered as
+        //    "Cover art — included · 3 shorts — premium · ...", joined on
+        //    ` · `. We split here so each line renders as its own bullet.
+        const configurationLines = meta.configuration_summary
+          ? meta.configuration_summary.split(' · ').filter(Boolean)
+          : [];
+        if (buyerEmail) {
+          try {
+            await sendMediaPurchaseConfirmation(buyerEmail, {
+              buyerName,
+              offeringTitle,
+              amountPaid,
+              studioHoursIncluded: studioHours,
+              bandAttached: !!bandId,
+              configurationLines,
+              bookingId: newBooking?.id,
+            });
+          } catch (e) {
+            console.error('[webhook] media confirmation email error:', e);
+          }
+        }
+        try {
+          await sendMediaPurchaseAdminAlert({
+            buyerName,
+            buyerEmail: buyerEmail || 'unknown',
+            offeringTitle,
+            amountPaid,
+            studioHoursIncluded: studioHours,
+            bandAttached: !!bandId,
+            configurationLines,
+          });
+        } catch (e) {
+          console.error('[webhook] media admin alert error:', e);
+        }
+
         console.log(
           `[webhook] media_purchase processed: offering=${offeringSlug} buyer=${buyerName} (${buyerEmail}) band=${bandId || 'none'} hours=${studioHours} amount=${amountPaid}`,
         );
-
-        // Phase C does NOT send a custom confirmation email — Stripe's
-        // automatic receipt covers the buyer side. Phase C.2 will add a
-        // sendMediaPurchaseConfirmation template with the configured
-        // manifest (slot breakdown, prepaid balance summary, what to
-        // expect next) and an admin alert to Cole + Jay.
       }
       break;
     }
