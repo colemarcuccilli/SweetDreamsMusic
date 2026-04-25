@@ -93,7 +93,7 @@ export default function MediaInquiryForm({
           within 1 business day with next steps and a tailored quote.
         </p>
         <p className="font-mono text-xs text-black/60">
-          Inquiry recorded under your account — you'll see it in the dashboard once it
+          Inquiry recorded under your account — you&apos;ll see it in the dashboard once it
           moves into production.
         </p>
       </div>

@@ -231,7 +231,7 @@ function SessionCard({
         {session.notes && (
           <p className="flex items-start gap-1 mt-1.5 text-black/60">
             <FileText className="w-3 h-3 mt-0.5 shrink-0" />
-            <span className="italic">"{session.notes}"</span>
+            <span className="italic">&ldquo;{session.notes}&rdquo;</span>
           </p>
         )}
         {session.status === 'completed' && session.engineer_payout_cents != null && (

@@ -7,11 +7,11 @@
 //
 // Auth: admin-only.
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 
-export async function GET(_request: NextRequest) {
+export async function GET() {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: 'Login required' }, { status: 401 });
   if (user.role !== 'admin') return NextResponse.json({ error: 'Admin only' }, { status: 403 });

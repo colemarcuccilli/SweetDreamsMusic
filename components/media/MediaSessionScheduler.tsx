@@ -51,12 +51,13 @@ export default function MediaSessionScheduler({
   const router = useRouter();
 
   // Default to tomorrow at 2pm — sensible "next available" without being
-  // creepy. Format as YYYY-MM-DD for the date input.
-  const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
-  const defaultDate = tomorrow.toISOString().slice(0, 10);
-
+  // creepy. Format as YYYY-MM-DD for the date input. Lazy-initialised in
+  // useState so Date.now() runs once at mount, never on re-render.
   const [kind, setKind] = useState<MediaSessionKind>('video');
-  const [date, setDate] = useState(defaultDate);
+  const [date, setDate] = useState(() => {
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    return tomorrow.toISOString().slice(0, 10);
+  });
   const [startTime, setStartTime] = useState('14:00');
   const [durationHours, setDurationHours] = useState(
     KIND_DEFAULT_DURATION_HOURS.video,

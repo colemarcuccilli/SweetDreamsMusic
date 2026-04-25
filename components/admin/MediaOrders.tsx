@@ -281,10 +281,31 @@ function BookingPanel({
   }
 
   useEffect(() => {
-    loadSessions();
-    // Re-sync local state if booking row changes (after parent refresh).
+    // Inline the fetch so the effect's only dependency is booking.id —
+    // loadSessions captured via closure would invalidate the dep array
+    // unnecessarily. We re-sync local state if the parent refresh swapped
+    // in a different booking row (status / deliverables) at the same id.
+    let cancelled = false;
+    (async () => {
+      setLoadingSessions(true);
+      try {
+        const res = await fetch(
+          `/api/media/sessions?parent_booking_id=${booking.id}`,
+          { cache: 'no-store' },
+        );
+        const data = await res.json();
+        if (!cancelled && res.ok) setSessions(data.sessions || []);
+      } catch (e) {
+        console.error('[admin-media-orders] sessions fetch error:', e);
+      } finally {
+        if (!cancelled) setLoadingSessions(false);
+      }
+    })();
     setStatus(booking.status);
     setDeliverables(booking.deliverables?.items ?? []);
+    return () => {
+      cancelled = true;
+    };
   }, [booking.id, booking.status, booking.deliverables]);
 
   async function saveStatus() {

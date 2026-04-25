@@ -75,14 +75,6 @@ export default function MediaConfigurator({ offering }: { offering: MediaOfferin
     }));
   };
 
-  const clearChoice = (slotKey: string) => {
-    setConfig((prev) => {
-      const next = { ...prev.selections };
-      delete next[slotKey];
-      return { selections: next };
-    });
-  };
-
   // Has the buyer made an explicit decision for this slot? Used to gate
   // the "Next" button — we don't auto-advance them past skippable slots
   // until they say yes/no, because the default isn't always obvious.
@@ -187,7 +179,6 @@ export default function MediaConfigurator({ offering }: { offering: MediaOfferin
             slot={currentSlot}
             choice={config.selections[currentSlot.key]}
             onChoose={(c) => setChoice(currentSlot.key, c)}
-            onClear={() => clearChoice(currentSlot.key)}
           />
         )}
 
@@ -261,12 +252,10 @@ function SlotStep({
   slot,
   choice,
   onChoose,
-  onClear: _onClear,
 }: {
   slot: OfferingComponentSlot;
   choice: SlotChoice | undefined;
   onChoose: (c: SlotChoice) => void;
-  onClear: () => void;
 }) {
   const tierOpts = slot.options ?? [];
   const sortedTiers = [...tierOpts].sort((a, b) => a.delta - b.delta);
@@ -398,7 +387,7 @@ function ReviewStep({
       <div>
         <h2 className="text-2xl font-bold mb-2">Review your build</h2>
         <p className="font-mono text-xs text-black/50">
-          Confirm your selections, then we'll route you to secure checkout.
+          Confirm your selections, then we&apos;ll route you to secure checkout.
         </p>
       </div>
 
@@ -441,7 +430,7 @@ function ReviewStep({
       </div>
 
       <p className="font-mono text-[11px] text-black/40">
-        Full payment processed now. Studio recording hours included in this package land in your prepaid balance — schedule them whenever you're ready.
+        Full payment processed now. Studio recording hours included in this package land in your prepaid balance — schedule them whenever you&apos;re ready.
       </p>
     </div>
   );

@@ -107,8 +107,8 @@ export default async function SchedulePage({
           </h1>
           <p className="font-mono text-sm text-black/60 mb-8">
             Pick a date, engineer, and location. We check conflicts against the
-            studio calendar AND existing media work — you'll get a clear error
-            if the slot's already taken.
+            studio calendar AND existing media work — you&apos;ll get a clear error
+            if the slot&apos;s already taken.
           </p>
 
           <MediaSessionScheduler

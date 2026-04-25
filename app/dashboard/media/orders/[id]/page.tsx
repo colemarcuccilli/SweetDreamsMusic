@@ -184,7 +184,7 @@ export default async function OrderDetailPage({
                     Includes <strong>{offering.studio_hours_included} hours</strong> of
                     studio time on your prepaid balance — book those via{' '}
                     <Link href="/book" className="underline hover:text-accent">/book</Link>{' '}
-                    when you're ready.
+                    when you&apos;re ready.
                   </p>
                 )}
               </div>
@@ -215,16 +215,16 @@ export default async function OrderDetailPage({
                 </p>
                 {canSchedule ? (
                   <p className="text-sm text-black/50">
-                    Pick a date, engineer, and location — we'll handle conflict checks.
+                    Pick a date, engineer, and location — we&apos;ll handle conflict checks.
                   </p>
                 ) : booking.status === 'inquiry' ? (
                   <p className="text-sm text-black/50">
-                    This is an inquiry. Once we lock pricing and you pay, you'll be able
+                    This is an inquiry. Once we lock pricing and you pay, you&apos;ll be able
                     to schedule sessions here.
                   </p>
                 ) : (
                   <p className="text-sm text-black/50">
-                    Sessions can't be scheduled in this status.
+                    Sessions can&apos;t be scheduled in this status.
                   </p>
                 )}
               </div>
@@ -277,7 +277,7 @@ export default async function OrderDetailPage({
                               : s.external_location_text || 'External (TBD)'}
                           </p>
                           <p>Engineer: {engineerName}</p>
-                          {s.notes && <p className="mt-1.5 italic text-black/50">"{s.notes}"</p>}
+                          {s.notes && <p className="mt-1.5 italic text-black/50">&ldquo;{s.notes}&rdquo;</p>}
                         </div>
                       </div>
                       {s.status === 'scheduled' && (
