@@ -16,13 +16,14 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowRight, Package as PackageIcon, Sparkles, Wallet } from 'lucide-react';
+import { ArrowRight, Package as PackageIcon, Sparkles, Wallet, Calendar } from 'lucide-react';
 import { getSessionUser } from '@/lib/auth';
 import { getUserBands } from '@/lib/bands-server';
 import {
   getActiveOfferings,
   getStudioCreditBalanceForUser,
 } from '@/lib/media-server';
+import { getMediaBookingsForOwner } from '@/lib/media-scheduling-server';
 import {
   groupOfferings,
   isOfferingVisibleTo,
@@ -51,11 +52,18 @@ export default async function DashboardMediaPage() {
     bandCount: bandMemberships.length,
   });
 
-  // Parallel fetch — catalog and credit balance are independent.
-  const [allOfferings, balance] = await Promise.all([
+  // Parallel fetch — catalog, credit balance, and order count are
+  // independent. Order count drives the "Your orders" entry point in
+  // the hero — if zero we still show the link, but with hint copy.
+  const [allOfferings, balance, orders] = await Promise.all([
     getActiveOfferings(),
     getStudioCreditBalanceForUser(user.id),
+    getMediaBookingsForOwner({
+      userId: user.id,
+      bandIds: bandMemberships.map((m) => m.band_id),
+    }),
   ]);
+  const orderCount = orders.length;
 
   const visible = allOfferings.filter((o) => isOfferingVisibleTo(o, viewer));
   const { packages, services } = groupOfferings(visible);
@@ -86,34 +94,57 @@ export default async function DashboardMediaPage() {
               </p>
             </div>
 
-            {/* Prepaid balance — the "gift card" widget */}
-            <div className="bg-white/[0.04] border border-white/15 p-5 sm:min-w-[320px]">
-              <div className="flex items-center gap-2 mb-2">
-                <Wallet className="w-4 h-4 text-accent" />
-                <p className="font-mono text-xs font-semibold tracking-[0.2em] uppercase text-white/60">
-                  Prepaid Balance
-                </p>
+            {/* Prepaid balance + orders link — the "gift card" widget */}
+            <div className="space-y-3 sm:min-w-[320px]">
+              <div className="bg-white/[0.04] border border-white/15 p-5">
+                <div className="flex items-center gap-2 mb-2">
+                  <Wallet className="w-4 h-4 text-accent" />
+                  <p className="font-mono text-xs font-semibold tracking-[0.2em] uppercase text-white/60">
+                    Prepaid Balance
+                  </p>
+                </div>
+                {balance.hoursRemaining > 0 ? (
+                  <>
+                    <p className="font-mono text-3xl font-bold mb-1">
+                      {balance.hoursRemaining.toFixed(1)} hrs
+                    </p>
+                    <p className="font-mono text-xs text-white/60">
+                      Studio time available — use it on any session.{' '}
+                      {balance.costBasisCents > 0 && (
+                        <>Value: {formatCents(balance.costBasisCents)}.</>
+                      )}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-mono text-3xl font-bold mb-1 text-white/30">0 hrs</p>
+                    <p className="font-mono text-xs text-white/60">
+                      Buy a package to load your balance with studio time.
+                    </p>
+                  </>
+                )}
               </div>
-              {balance.hoursRemaining > 0 ? (
-                <>
-                  <p className="font-mono text-3xl font-bold mb-1">
-                    {balance.hoursRemaining.toFixed(1)} hrs
-                  </p>
-                  <p className="font-mono text-xs text-white/60">
-                    Studio time available — use it on any session.{' '}
-                    {balance.costBasisCents > 0 && (
-                      <>Value: {formatCents(balance.costBasisCents)}.</>
-                    )}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="font-mono text-3xl font-bold mb-1 text-white/30">0 hrs</p>
-                  <p className="font-mono text-xs text-white/60">
-                    Buy a package to load your balance with studio time.
-                  </p>
-                </>
-              )}
+
+              {/* Orders entry point — schedule sessions, view deliverables */}
+              <Link
+                href="/dashboard/media/orders"
+                className="block bg-accent text-black border border-accent p-4 hover:bg-accent/90 transition-colors no-underline"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4" />
+                    <span className="font-mono text-xs font-bold uppercase tracking-wider">
+                      Your orders {orderCount > 0 && <>· {orderCount}</>}
+                    </span>
+                  </div>
+                  <ArrowRight className="w-3 h-3" />
+                </div>
+                <p className="font-mono text-[11px] mt-1 text-black/70">
+                  {orderCount > 0
+                    ? 'Schedule sessions and view deliverables.'
+                    : 'When you buy, your orders + sessions land here.'}
+                </p>
+              </Link>
             </div>
           </div>
         </div>

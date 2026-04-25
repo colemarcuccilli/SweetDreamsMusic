@@ -1399,6 +1399,120 @@ export async function sendMediaPurchaseAdminAlert(details: {
 }
 
 /**
+ * Media session scheduling — buyer confirmation. Sent when a buyer schedules
+ * a media_session_bookings row from their order detail page. Lays out the
+ * date, time, location, and assigned engineer so the buyer's calendar
+ * matches what's in our system.
+ *
+ * No re-scheduling link in the body for now — Phase D MVP requires cancel +
+ * recreate. The button routes to the order detail page where they can
+ * inspect or cancel.
+ */
+export async function sendMediaSessionScheduled(to: string, details: {
+  buyerName: string;
+  offeringTitle: string;
+  sessionKindLabel: string;
+  startsAt: string; // ISO
+  endsAt: string;   // ISO
+  location: 'studio' | 'external';
+  externalLocationText: string | null;
+  engineerName: string;
+}) {
+  try {
+    const when = new Date(details.startsAt).toLocaleString('en-US', {
+      weekday: 'short', month: 'long', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+    });
+    const endTime = new Date(details.endsAt).toLocaleTimeString('en-US', {
+      hour: 'numeric', minute: '2-digit',
+    });
+    const locationLabel = details.location === 'studio'
+      ? 'Sweet Dreams Studio (Fort Wayne)'
+      : details.externalLocationText || 'External — details to follow';
+    await resend.emails.send({
+      from: FROM,
+      to,
+      subject: `Session Scheduled — ${details.sessionKindLabel} for ${details.offeringTitle}`,
+      html: wrap(
+        h1('SESSION SCHEDULED') +
+        p(`Hey ${details.buyerName}, your ${details.sessionKindLabel.toLowerCase()} for <strong>${details.offeringTitle}</strong> is locked in.`) +
+        detailTable(
+          detail('Type', details.sessionKindLabel) +
+          detail('Engineer', details.engineerName) +
+          detail('Starts', when) +
+          detail('Ends', endTime) +
+          detail('Location', locationLabel)
+        ) +
+        p('We\'ll send a reminder before the session. If you need to cancel, you can do that from your order page.') +
+        btn('VIEW ORDER', `${SITE_URL}/dashboard/media/orders`)
+      ),
+    });
+  } catch (e) { console.error('Email error (media session scheduled):', e); }
+}
+
+/**
+ * Media session scheduling — engineer alert. Sent to the assigned engineer
+ * the moment a buyer locks the session. Engineer's view of the world: who,
+ * what, when, where, and any notes the buyer left.
+ *
+ * No "claim/decline" affordance — these sessions are pre-assigned (the
+ * buyer picked the engineer in the form). If the engineer can't make it,
+ * they coordinate with admin to reassign.
+ */
+export async function sendMediaSessionEngineerAlert(to: string, details: {
+  engineerName: string;
+  buyerName: string;
+  offeringTitle: string;
+  sessionKindLabel: string;
+  startsAt: string;
+  endsAt: string;
+  location: 'studio' | 'external';
+  externalLocationText: string | null;
+  notes: string | null;
+}) {
+  try {
+    const when = new Date(details.startsAt).toLocaleString('en-US', {
+      weekday: 'short', month: 'long', day: 'numeric', year: 'numeric',
+      hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+    });
+    const endTime = new Date(details.endsAt).toLocaleTimeString('en-US', {
+      hour: 'numeric', minute: '2-digit',
+    });
+    const locationLabel = details.location === 'studio'
+      ? 'Sweet Dreams Studio'
+      : details.externalLocationText || 'External (location TBD)';
+    const notesSection = details.notes
+      ? `
+        <p style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:0.05em;margin:20px 0 8px">Buyer notes</p>
+        <div style="background:#111;padding:16px;margin:0 0 16px;border-left:3px solid #F4C430">
+          <p style="font-size:14px;color:#ccc;margin:0;white-space:pre-wrap">${details.notes}</p>
+        </div>
+      `
+      : '';
+    await resend.emails.send({
+      from: FROM,
+      to,
+      subject: `Media Session Booked — ${details.sessionKindLabel} for ${details.buyerName}`,
+      html: wrap(
+        h1('MEDIA SESSION BOOKED') +
+        p(`Hey ${details.engineerName}, you've been assigned a ${details.sessionKindLabel.toLowerCase()} for <strong>${details.buyerName}</strong>.`) +
+        detailTable(
+          detail('Buyer', details.buyerName) +
+          detail('Order', details.offeringTitle) +
+          detail('Type', details.sessionKindLabel) +
+          detail('Starts', when) +
+          detail('Ends', endTime) +
+          detail('Location', locationLabel)
+        ) +
+        notesSection +
+        p('This session is on your calendar. Reach out to the buyer if you need to coordinate logistics — reply to this email goes to the team, not the buyer directly.') +
+        btn('OPEN DASHBOARD', `${SITE_URL}/engineer`)
+      ),
+    });
+  } catch (e) { console.error('Email error (media session engineer alert):', e); }
+}
+
+/**
  * Media inquiry email — sent when a user submits the inquiry form on a
  * range-priced or band-by-request offering. Routes to the same inbox as
  * media purchase alerts (Cole + Jay) so leads get the same eyeballs.
