@@ -9,7 +9,9 @@ export async function GET() {
 
   const { data: bookings, error } = await supabase
     .from('bookings')
-    .select('id, customer_name, customer_email, artist_name, start_time, end_time, duration, room, total_amount, deposit_amount, remainder_amount, actual_deposit_paid, status, created_at, admin_notes, requested_engineer, priority_expires_at, engineer_passed, reschedule_deadline')
+    // Round 4: pull band-booking surface fields so unclaimed sessions
+    // show the same 3-day group + Sweet Spot badges as the claimed list.
+    .select('id, customer_name, customer_email, artist_name, start_time, end_time, duration, room, total_amount, deposit_amount, remainder_amount, actual_deposit_paid, status, created_at, admin_notes, requested_engineer, priority_expires_at, engineer_passed, reschedule_deadline, booking_group_id, sweet_spot_addon, setup_minutes_before, band_id')
     .is('engineer_name', null)
     .in('status', ['confirmed', 'pending'])
     .order('start_time', { ascending: true });

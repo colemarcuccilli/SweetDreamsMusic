@@ -37,6 +37,19 @@ interface ParentRow {
   offering_id: string;
   user_id: string;
   band_id: string | null;
+  // Round 4: project_details lands here so engineers reading their
+  // schedule can see what the project actually is without clicking
+  // into the buyer's order page.
+  project_details: {
+    project_name?: string | null;
+    artist_name?: string | null;
+    songs?: string | null;
+    references?: string | null;
+    vibe?: string | null;
+    release_date?: string | null;
+    notes?: string | null;
+  } | null;
+  configured_components: unknown | null;
 }
 
 interface OfferingRow {
@@ -234,6 +247,15 @@ function SessionCard({
             <span className="italic">&ldquo;{session.notes}&rdquo;</span>
           </p>
         )}
+
+        {/* Round 4: project_details from the parent media_booking. We
+            collapse this into a tight inline block so engineers reading
+            many sessions can scan the row quickly — full details still
+            available on the buyer's order page if needed. Only renders
+            when the buyer actually filled out the questionnaire. */}
+        {parent?.project_details && (
+          <ProjectDetailsBlock details={parent.project_details} />
+        )}
         {session.status === 'completed' && session.engineer_payout_cents != null && (
           <p className="flex items-center gap-1 mt-2 text-black/70 font-bold">
             <DollarSign className="w-3 h-3" />
@@ -247,5 +269,65 @@ function SessionCard({
         )}
       </div>
     </li>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Compact project-details block for engineer cards. Renders only the
+// fields the engineer actually needs at a glance — artist + songs + vibe
+// — and tucks references / release date / notes behind a <details>
+// disclosure so the card stays scannable.
+// ──────────────────────────────────────────────────────────────────────
+function ProjectDetailsBlock({
+  details,
+}: {
+  details: NonNullable<ParentRow['project_details']>;
+}) {
+  const hasExtras = !!(details.references || details.release_date || details.notes);
+  const hasCore = !!(details.artist_name || details.songs || details.vibe);
+  if (!hasCore && !hasExtras) return null;
+
+  return (
+    <div className="mt-2 pt-2 border-t border-black/10">
+      <p className="font-mono text-[10px] uppercase tracking-wider font-bold text-black/60 mb-1">
+        Project details
+      </p>
+      {hasCore && (
+        <ul className="space-y-0.5 text-black/70">
+          {details.artist_name && (
+            <li><strong className="text-black">Artist:</strong> {details.artist_name}</li>
+          )}
+          {details.songs && (
+            <li><strong className="text-black">Songs:</strong> {details.songs}</li>
+          )}
+          {details.vibe && (
+            <li><strong className="text-black">Vibe:</strong> {details.vibe}</li>
+          )}
+        </ul>
+      )}
+      {hasExtras && (
+        <details className="mt-1.5">
+          <summary className="cursor-pointer text-black/50 hover:text-black/80">
+            More
+          </summary>
+          <ul className="mt-1 space-y-0.5 text-black/70">
+            {details.references && (
+              <li><strong className="text-black">References:</strong> {details.references}</li>
+            )}
+            {details.release_date && (
+              <li>
+                <strong className="text-black">Target release:</strong>{' '}
+                {new Date(details.release_date).toLocaleDateString('en-US', {
+                  month: 'short', day: 'numeric', year: 'numeric',
+                })}
+              </li>
+            )}
+            {details.notes && (
+              <li><strong className="text-black">Notes:</strong> {details.notes}</li>
+            )}
+          </ul>
+        </details>
+      )}
+    </div>
   );
 }

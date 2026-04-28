@@ -60,6 +60,15 @@ export default async function OrderDetailPage({
     band_id: string | null;
     status: string;
     configured_components: unknown | null;
+    project_details: {
+      project_name?: string | null;
+      artist_name?: string | null;
+      songs?: string | null;
+      references?: string | null;
+      vibe?: string | null;
+      release_date?: string | null;
+      notes?: string | null;
+    } | null;
     final_price_cents: number;
     created_at: string;
     notes_to_us: string | null;
@@ -347,6 +356,49 @@ export default async function OrderDetailPage({
             </div>
           )}
 
+          {/* Project details — captured at the questionnaire step. We
+              render every field that has a value so the buyer can quickly
+              eyeball what we have on file (and reach out if something
+              needs correcting). Optional fields just hide when empty. */}
+          {booking.project_details && (
+            <div>
+              <p className="font-mono text-[11px] uppercase tracking-wider text-black/50 mb-3">
+                Project details on file
+              </p>
+              <div className="border-2 border-black/10 p-5 space-y-3">
+                {booking.project_details.project_name && (
+                  <ProjectDetailRow label="Project" value={booking.project_details.project_name} />
+                )}
+                {booking.project_details.artist_name && (
+                  <ProjectDetailRow label="Artist" value={booking.project_details.artist_name} />
+                )}
+                {booking.project_details.songs && (
+                  <ProjectDetailRow label="Songs" value={booking.project_details.songs} multiline />
+                )}
+                {booking.project_details.vibe && (
+                  <ProjectDetailRow label="Vibe / mood" value={booking.project_details.vibe} multiline />
+                )}
+                {booking.project_details.references && (
+                  <ProjectDetailRow label="References" value={booking.project_details.references} multiline />
+                )}
+                {booking.project_details.release_date && (
+                  <ProjectDetailRow
+                    label="Target release"
+                    value={new Date(booking.project_details.release_date).toLocaleDateString('en-US', {
+                      month: 'long', day: 'numeric', year: 'numeric',
+                    })}
+                  />
+                )}
+                {booking.project_details.notes && (
+                  <ProjectDetailRow label="Extra notes" value={booking.project_details.notes} multiline />
+                )}
+              </div>
+              <p className="font-mono text-[11px] text-black/40 mt-2">
+                Need to update something? Reply to your order confirmation email and we&apos;ll fix it.
+              </p>
+            </div>
+          )}
+
           {booking.notes_to_us && (
             <div>
               <p className="font-mono text-[11px] uppercase tracking-wider text-black/50 mb-2">
@@ -360,5 +412,35 @@ export default async function OrderDetailPage({
         </div>
       </section>
     </>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Tiny presentational helper. Multiline values keep their line breaks
+// (whitespace-pre-wrap) so a buyer who pasted a list of references gets
+// a readable list back, not a single mashed-together paragraph.
+// ──────────────────────────────────────────────────────────────────────
+function ProjectDetailRow({
+  label,
+  value,
+  multiline,
+}: {
+  label: string;
+  value: string;
+  multiline?: boolean;
+}) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-[120px_1fr] gap-1 sm:gap-3">
+      <p className="font-mono text-[11px] uppercase tracking-wider text-black/50">
+        {label}
+      </p>
+      <p
+        className={`text-sm text-black/85 ${
+          multiline ? 'whitespace-pre-wrap' : ''
+        }`}
+      >
+        {value}
+      </p>
+    </div>
   );
 }

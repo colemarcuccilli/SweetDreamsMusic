@@ -27,6 +27,25 @@ interface Booking {
   reschedule_requested?: boolean;
   stripe_customer_id?: string | null;
   stripe_payment_intent_id?: string | null;
+  // Round 4: surfaces from the new band-booking workflow.
+  // - booking_group_id present means this row is part of a 3×8 day block.
+  //   We render a "Day X of 3" badge so the engineer knows it's not a
+  //   one-off session.
+  // - sweet_spot_addon present means the band tacked a Sweet Spot filming
+  //   session onto the END of this day. The duration is already inflated
+  //   on this row (duration = 8 + extra_filming_hours), but the engineer
+  //   needs to know to expect cameras + extra crew for the last 2 hours.
+  // - setup_minutes_before tells them when to arrive — band day 1 has
+  //   60 free minutes of setup before metered hours start.
+  booking_group_id?: string | null;
+  sweet_spot_addon?: {
+    kind?: '8hr-addon' | '3day-addon';
+    filmingDayIndex?: 0 | 1 | 2;
+    price_cents?: number;
+    extra_filming_hours?: number;
+  } | null;
+  setup_minutes_before?: number | null;
+  band_id?: string | null;
 }
 
 interface StudioBooking {
@@ -770,6 +789,15 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
               ⚠ Reschedule Requested
             </p>
           )}
+
+          {/* Round 4: band-booking workflow badges. We surface three
+              orthogonal signals so the engineer reads the row correctly:
+                1. 3-day block — badge says "Day X of 3" (group_id).
+                2. Free 1-hour setup — adjusts arrival time.
+                3. Sweet Spot add-on — extra 2hr filming at the END of
+                   the session, with extra crew/cameras to expect. */}
+          <BandBookingBadges booking={booking} />
+
           <p className="font-mono text-xs text-black/60 mt-1">
             {date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })}
             {' · '}
@@ -777,6 +805,11 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
             {' · '}
             {booking.duration}hr
             {booking.room && ` · ${booking.room === 'studio_a' ? 'Studio A' : 'Studio B'}`}
+            {!!booking.setup_minutes_before && booking.setup_minutes_before > 0 && (
+              <span className="text-accent font-bold">
+                {' '}· arrive {booking.setup_minutes_before}min early for setup
+              </span>
+            )}
           </p>
         </div>
         <div className="text-right">
@@ -1507,6 +1540,42 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
 
       {chargeError && (
         <p className="font-mono text-xs text-red-600 mt-2">{chargeError}</p>
+      )}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Round 4: badge cluster for band-booking workflow signals.
+// Shown right under the customer name on each session card so the
+// engineer reads them BEFORE the date/time line. Empty render when
+// none of the fields apply, so existing solo + 4hr/8hr band sessions
+// look exactly as they did before.
+// ──────────────────────────────────────────────────────────────────────
+function BandBookingBadges({ booking }: { booking: Booking }) {
+  const inGroup = !!booking.booking_group_id;
+  const addon = booking.sweet_spot_addon;
+  const hasAddon = !!addon?.kind;
+
+  if (!inGroup && !hasAddon) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 mt-1">
+      {inGroup && (
+        <span
+          className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 bg-purple-100 text-purple-900 font-bold"
+          title="Part of a 3-day band block"
+        >
+          3-Day Block
+        </span>
+      )}
+      {hasAddon && (
+        <span
+          className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 bg-accent text-black font-bold"
+          title={`Sweet Spot filming at the end of this session (+${addon?.extra_filming_hours ?? 2}hr)`}
+        >
+          + Sweet Spot Filming
+        </span>
       )}
     </div>
   );

@@ -56,15 +56,20 @@ export async function GET() {
   if (parentIds.length === 0) {
     return NextResponse.json({ sessions: rows, parents: [] });
   }
+  // Pull project_details + configured_components alongside the parent
+  // booking — engineers reading their schedule shouldn't need to dig into
+  // the buyer's order detail page to see what the project actually is.
   const { data: parents } = await service
     .from('media_bookings')
-    .select('id, offering_id, user_id, band_id')
+    .select('id, offering_id, user_id, band_id, project_details, configured_components')
     .in('id', parentIds);
   const parentRows = (parents || []) as Array<{
     id: string;
     offering_id: string;
     user_id: string;
     band_id: string | null;
+    project_details: Record<string, unknown> | null;
+    configured_components: unknown | null;
   }>;
   const offeringIds = Array.from(new Set(parentRows.map((p) => p.offering_id)));
   const buyerIds = Array.from(new Set(parentRows.map((p) => p.user_id)));
