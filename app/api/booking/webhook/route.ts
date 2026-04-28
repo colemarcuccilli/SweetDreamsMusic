@@ -102,6 +102,10 @@ export async function POST(request: NextRequest) {
           reschedule_deadline: rescheduleDeadline,
           admin_notes: meta.notes || null,
           band_id: meta.band_id || null,
+          // Free setup hour reservation (migration 041). Band 4/8hr sessions
+          // pad 60 minutes; everything else stays at 0. Sourced from
+          // /api/booking/create which decides this when stamping metadata.
+          setup_minutes_before: parseInt(meta.setup_minutes_before || '0', 10) || 0,
         }).select().single();
 
         // Send emails — use Fort Wayne timezone since Vercel runs UTC
@@ -877,6 +881,10 @@ export async function POST(request: NextRequest) {
             reschedule_deadline: rescheduleDeadline,
             admin_notes: asyncMeta.notes || null,
             band_id: asyncMeta.band_id || null,
+            // Free setup hour padding (migration 041) — same shape as the
+            // sync branch above. Async (Cash App / bank transfer) bookings
+            // need to honor this too or the calendar would under-block.
+            setup_minutes_before: parseInt(asyncMeta.setup_minutes_before || '0', 10) || 0,
           }).select().single();
 
           // Send all emails

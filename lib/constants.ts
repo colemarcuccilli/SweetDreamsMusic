@@ -80,12 +80,40 @@ export const SWEET_4 = {
   studio_b: { hours: 4, price: 18000, label: 'The Sweet 4 — Studio B', perHour: 4500 }, // $180
 } as const;
 
-// Band Recording — Studio A only
+// Band Recording — Studio A only.
+//
+// Updated 2026-04-28 per Cole:
+//   • 4hr  → $440 flat (was $400). Includes free 1hr of setup before.
+//   • 8hr  → $700 flat (was $680/$85hr). Includes free 1hr of setup before.
+//   • 3×8  → $1,800 unchanged. Setup hour applies to day 1 only — days 2-3
+//            are already on hold for that band, so the studio doesn't need
+//            extra padding.
+//
+// Setup-hour padding is recorded on the row via bookings.setup_minutes_before
+// (migration 041). Conflict checks subtract that many minutes from start_time
+// when computing the blocked window. The customer-facing PRICE here covers
+// only the session itself; the setup hour is free.
 export const BAND_PRICING = [
-  { hours: 4, price: 40000, label: '4 Hours', perHour: 10000, note: 'Minimum booking' },
-  { hours: 8, price: 68000, label: '8 Hours', perHour: 8500, note: '$85/hour' },
-  { hours: 24, price: 180000, label: '3 Days (8hr each)', perHour: 7500, note: '$75/hour' },
+  { hours: 4, price: 44000, label: '4 Hours', perHour: 11000, note: 'Free 1-hr setup before' },
+  { hours: 8, price: 70000, label: '8 Hours', perHour: 8750, note: 'Flat. Free 1-hr setup before' },
+  { hours: 24, price: 180000, label: '3 Days (8hr each)', perHour: 7500, note: '$75/hr · setup hr on day 1 only' },
 ] as const;
+
+// How much free setup time to pad before a band session on the calendar.
+// Bands need to load gear, mic the drums, etc. before the metered hours
+// start. Set on bookings.setup_minutes_before for self-serve band 4/8hr
+// sessions. The 3×8 block sets it on day 1 only.
+export const BAND_SETUP_MINUTES = 60;
+
+// Sweet Spot pricing (cents). Standalone is the premium price; bundling
+// with an existing 1×8hr or 3×8hr band session unlocks the discounted
+// add-on rates per Cole 2026-04-28. The 3-day full Sweet Spot is the
+// best value because the studio is already on hold for those dates.
+export const SWEET_SPOT_PRICING = {
+  standalone: 250000,        // $2,500 — original price, used by /media catalog
+  addOnTo8hrSession: 200000, // $2,000 — bundle with one 8hr band session
+  addOnTo3DayFull: 100000,   // $1,000 — bundle with the 3×8 band block
+} as const;
 
 export const STUDIO_HOURS = {
   // Open 24 hours

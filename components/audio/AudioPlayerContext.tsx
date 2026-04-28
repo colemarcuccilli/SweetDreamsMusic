@@ -81,18 +81,43 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
     };
   }, []);
 
+  // Wrap audio.play() so we can swallow the harmless AbortError that
+  // fires when the user rapidly switches tracks (the browser reports the
+  // PREVIOUS play() promise as interrupted by the new src/load). Anything
+  // else still surfaces. https://goo.gl/LdLk22
+  const safePlay = (audio: HTMLAudioElement) => {
+    const p = audio.play();
+    if (p && typeof p.then === 'function') {
+      p.catch((err: unknown) => {
+        if (err instanceof DOMException && (err.name === 'AbortError' || err.name === 'NotAllowedError')) {
+          // AbortError: superseded by another src change. NotAllowedError:
+          // browser autoplay policy (e.g., before any user gesture). Both
+          // are user-recoverable — they'll click again, we don't want to log.
+          return;
+        }
+        console.error('[audio] play error:', err);
+      });
+    }
+  };
+
   const play = useCallback((track: AudioTrack) => {
     const audio = audioRef.current;
     if (!audio) return;
 
     if (currentTrack?.id === track.id) {
-      // Same track — just resume
-      audio.play();
+      // Same track — just resume.
+      safePlay(audio);
     } else {
-      // New track
+      // New track. The order matters: pause first to release any pending
+      // play() promise from the prior src, THEN swap src + call load() to
+      // make the abort intent explicit, THEN play. This is the canonical
+      // workaround for the "play() interrupted by a new load request" race
+      // when the user clicks one beat then quickly clicks another.
+      audio.pause();
       audio.src = track.previewUrl;
       audio.loop = isLooping;
-      audio.play();
+      audio.load();
+      safePlay(audio);
       setCurrentTrack(track);
       setCurrentTime(0);
 
@@ -113,7 +138,7 @@ export function AudioPlayerProvider({ children }: { children: React.ReactNode })
     const audio = audioRef.current;
     if (!audio || !currentTrack) return;
     if (audio.paused) {
-      audio.play();
+      safePlay(audio);
     } else {
       audio.pause();
     }

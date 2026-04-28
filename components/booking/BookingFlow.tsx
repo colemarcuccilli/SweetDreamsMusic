@@ -301,7 +301,8 @@ export default function BookingFlow({
     <div className="space-y-16">
       {/* Band-mode context banner — makes it obvious the user is in a
           different flow than usual, and lets them bail to solo if they
-          clicked the wrong link. */}
+          clicked the wrong link. The free-setup-hour disclosure lives
+          here too so it's the first thing the band reads. */}
       {isBandMode && band && (
         <div className="border-2 border-black bg-yellow-300 p-4 sm:p-5 flex items-start gap-3">
           <Music2 className="w-5 h-5 text-black flex-shrink-0 mt-0.5" />
@@ -312,6 +313,11 @@ export default function BookingFlow({
             <p className="font-mono text-xs text-black/70 mt-1">
               Band sessions run in Studio A at a flat rate. You&apos;re the paying customer on file —
               invoices and confirmations come to your email.
+            </p>
+            <p className="font-mono text-xs text-black/80 mt-2 font-bold">
+              ✓ Includes a <strong>free 1-hour setup window</strong> before your session — engineer
+              arrives early to set up amps, mic the drums, etc. The clock on your booked hours
+              starts at the time you pick.
             </p>
           </div>
         </div>

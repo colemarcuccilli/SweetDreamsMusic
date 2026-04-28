@@ -232,6 +232,11 @@ export async function POST(request: NextRequest) {
         same_day_fee: String(pricing.sameDayFee),
         guest_count: String(guestCount),
         guest_fee: String(pricing.guestFee),
+        // Free setup hour reservation for band 4hr / 8hr sessions only.
+        // Solo sessions get 0 (default behavior). The 24hr 3-day band block
+        // is admin-only and not routed through this endpoint, so we don't
+        // worry about its day-1-only padding rule here.
+        setup_minutes_before: isBandBooking ? '60' : '0',
       },
     });
 

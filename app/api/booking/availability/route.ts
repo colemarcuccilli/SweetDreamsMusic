@@ -17,9 +17,13 @@ export async function GET(request: NextRequest) {
   const dayStart = `${date}T00:00:00`;
   const dayEnd = `${date}T23:59:59`;
 
+  // Pull setup_minutes_before so we can extend the blocked window for band
+  // sessions that have a free setup hour reserved (migration 041). For
+  // existing rows / non-band rows the column defaults to 0 and the math
+  // collapses to the old behavior.
   const { data: bookings, error } = await supabase
     .from('bookings')
-    .select('start_time, duration')
+    .select('start_time, duration, setup_minutes_before')
     .gte('start_time', dayStart)
     .lte('start_time', dayEnd)
     .in('status', ['confirmed', 'pending']);
@@ -36,13 +40,25 @@ export async function GET(request: NextRequest) {
     .gte('start_time', dayStart)
     .lte('start_time', dayEnd);
 
-  // Convert bookings to blocked half-hour slots (decimal: 18.5 = 6:30 PM)
+  // Convert bookings to blocked half-hour slots (decimal: 18.5 = 6:30 PM).
+  //
+  // Phase 4 (band setup hour): each row may carry setup_minutes_before. We
+  // pad the start of the blocked window backward by that many minutes so a
+  // 4hr band session at 2pm correctly blocks 1pm-6pm (5hr total) instead
+  // of just 2pm-6pm. Default is 0 → no behavior change for legacy rows.
   const bookedSlots: number[] = [];
   for (const booking of bookings || []) {
     const st = new Date(booking.start_time);
-    const startSlot = st.getUTCHours() + st.getUTCMinutes() / 60;
+    const setupHours = (booking.setup_minutes_before || 0) / 60;
+    // Move the block start earlier by the setup window. Modulo 24 to wrap
+    // when a midnight session has a setup hour spilling to the prior day —
+    // unusual but won't break the math.
+    const startSlot = (
+      st.getUTCHours() + st.getUTCMinutes() / 60 - setupHours + 24
+    ) % 24;
     const hours = booking.duration || 1;
-    const halfHourCount = hours * 2;
+    const totalHours = hours + setupHours;
+    const halfHourCount = Math.ceil(totalHours * 2);
     for (let i = 0; i < halfHourCount; i++) {
       const slot = (startSlot + i * 0.5) % 24;
       if (!bookedSlots.includes(slot)) {

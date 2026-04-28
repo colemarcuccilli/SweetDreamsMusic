@@ -83,78 +83,145 @@ const SWEET_SPOT_INCLUDES = [
 ] as const;
 
 // Standard band recording pricing. Mirrors BAND_PRICING in lib/constants.ts.
+// Updated 2026-04-28 per Cole: 4hr → $440 (was $400), 8hr → $700 flat (was
+// $680). Each booking now reserves an additional 1-hr SETUP slot before the
+// session — included free, but it changes the calendar math: a 4hr session
+// blocks a 5hr window, an 8hr blocks 9hr. The 3×8 day package only adds the
+// setup hour to day one (the rest of the studio is already on hold for those
+// dates). Pricing on `/book` and the band booking flow needs to follow.
 const BAND_PRICING = [
-  { label: '4 Hours', price: '$400', note: 'Minimum booking' },
-  { label: '8 Hours', price: '$680', note: '$85 / hour' },
-  { label: '3 × 8hr Days', price: '$1,800', note: '$75 / hour — best for full-length tracking' },
+  { label: '4 Hours', price: '$440', note: 'Includes free 1-hr setup before' },
+  { label: '8 Hours', price: '$700', note: 'Flat rate. Free 1-hr setup before' },
+  { label: '3 × 8hr Days', price: '$1,800', note: '$75 / hr · setup hr on day 1 only' },
+] as const;
+
+// Quick pitch tiles for the new "What bands do here" section. Sweet Spot is
+// one of four — record, film, Sweet Spot, hub — instead of dominating the page.
+const BAND_FEATURES = [
+  {
+    icon: Mic2,
+    title: 'Band Recording',
+    blurb: 'Full-room tracking with the band rate. 4hr / 8hr / 3-day options. Live drums, amps, the works.',
+    href: '#band-recording',
+    cta: 'See pricing',
+  },
+  {
+    icon: Camera,
+    title: 'Band Filming',
+    blurb: 'Music videos, on-floor multicam, performance shoots. Film and record at the same studio.',
+    href: '/media',
+    cta: 'See media catalog',
+  },
+  {
+    icon: Sparkles,
+    title: 'The Sweet Spot',
+    blurb: 'Our flagship live-band video showcase. Two songs, full mix, short-form clips, featured on our YouTube.',
+    href: '#sweet-spot',
+    cta: 'About the Sweet Spot',
+  },
+  {
+    icon: Users,
+    title: 'Band Hub',
+    blurb: 'Collab on bookings, manage members, share files. Every band on the platform gets one.',
+    href: '/dashboard/bands',
+    cta: 'Open band hub',
+  },
 ] as const;
 
 export default function BandsPage() {
   return (
     <>
       {/* ═══════════════════════════════════════════════════════════════
-          HERO — Sweet Spot branded, image bleed
+          HERO — slim. Heavy paragraphs were dropped per Cole's feedback;
+          the page no longer leads with Sweet Spot copy. The four-feature
+          tile section right below carries the explanation work.
           ═══════════════════════════════════════════════════════════════ */}
-      <section className="relative bg-black text-white py-24 sm:py-32 overflow-hidden">
+      <section className="relative bg-black text-white py-20 sm:py-28 overflow-hidden">
         <Image
           src={SWEET_SPOT_PHOTOS[0].src}
-          alt="Sweet Spot live band session"
+          alt="Sweet Dreams band sessions"
           fill
-          className="object-cover opacity-30"
+          className="object-cover opacity-25"
           priority
           sizes="100vw"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/40 to-black/80" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-black/50 to-black/85" />
         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-4 mb-8">
-            <Image
-              src={SWEET_SPOT_LOGO}
-              alt="The Sweet Spot"
-              width={88}
-              height={88}
-              className="w-16 h-16 sm:w-20 sm:h-20 object-contain"
-              priority
-            />
-            <p className="font-mono text-accent text-xs sm:text-sm font-semibold tracking-[0.3em] uppercase">
-              Sweet Dreams Music — Live Band Video Series
-            </p>
-          </div>
-          <h1 className="text-display-lg mb-8">THE SWEET SPOT</h1>
-          <p className="font-mono text-white/80 text-body-md max-w-2xl mb-4">
-            A premium live-band video session from our Fort Wayne tracking floor. Two songs, one professional
-            mix, a full video, short-form clips, and a feature on the Sweet Dreams YouTube channel.
+          <p className="font-mono text-accent text-xs sm:text-sm font-semibold tracking-[0.3em] uppercase mb-3">
+            Bands at Sweet Dreams Music
           </p>
-          <p className="font-mono text-white/70 text-body-sm max-w-2xl mb-10">
-            A flat-rate, release-ready video session. Bands signed up on Sweet Dreams Music can book directly
-            from their band hub. New to us? Reach out and we&apos;ll walk you through pricing and logistics on
-            a 30-min call.
-          </p>
+          <h1 className="text-display-md sm:text-display-lg mb-8">RECORD. FILM. RELEASE.</h1>
           <div className="flex flex-col sm:flex-row gap-4">
             <Link
-              href="/bands/sweet-spot/inquire"
+              href="#band-recording"
               className="bg-accent text-black font-mono text-base font-bold tracking-wider uppercase px-8 py-4 hover:bg-accent/90 transition-colors no-underline inline-flex items-center justify-center gap-2"
+            >
+              <Calendar className="w-4 h-4" />
+              Book a band session
+            </Link>
+            <Link
+              href="/bands/sweet-spot/inquire"
+              className="border-2 border-white text-white font-mono text-base font-bold tracking-wider uppercase px-8 py-4 hover:bg-white hover:text-black transition-colors no-underline inline-flex items-center justify-center gap-2"
             >
               <MessageCircle className="w-4 h-4" />
               Inquire about Sweet Spot
-            </Link>
-            <Link
-              href="#band-recording"
-              className="border-2 border-white text-white font-mono text-base font-bold tracking-wider uppercase px-8 py-4 hover:bg-white hover:text-black transition-colors no-underline inline-flex items-center justify-center"
-            >
-              Or just book a band session
             </Link>
           </div>
         </div>
       </section>
 
       {/* ═══════════════════════════════════════════════════════════════
-          WHAT THE SWEET SPOT IS — explain it properly
+          WHAT BANDS DO HERE — four-feature tile grid, broader than the old
+          Sweet-Spot-only pitch. Each tile links into the relevant deeper
+          section or another page; Sweet Spot is one tile among four.
           ═══════════════════════════════════════════════════════════════ */}
-      <section className="bg-white text-black py-20 sm:py-28">
+      <section className="bg-white text-black py-16 sm:py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="font-mono text-xs sm:text-sm font-semibold tracking-[0.3em] uppercase mb-3 text-black/50">
-            What Is the Sweet Spot?
+            What bands do here
           </p>
+          <h2 className="text-heading-xl mb-10 sm:mb-12">EVERYTHING UNDER ONE ROOF</h2>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+            {BAND_FEATURES.map((f) => (
+              <Link
+                key={f.title}
+                href={f.href}
+                className="group border-2 border-black/10 p-6 hover:border-accent transition-colors no-underline text-black flex flex-col"
+              >
+                <f.icon className="w-7 h-7 text-accent mb-4" strokeWidth={1.5} />
+                <h3 className="text-heading-md mb-2">{f.title}</h3>
+                <p className="font-mono text-sm text-black/65 leading-relaxed mb-4 flex-grow">
+                  {f.blurb}
+                </p>
+                <span className="font-mono text-[11px] font-bold uppercase tracking-wider inline-flex items-center gap-1 text-accent group-hover:gap-2 transition-all mt-auto">
+                  {f.cta} <ArrowRight className="w-3 h-3" />
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ═══════════════════════════════════════════════════════════════
+          WHAT THE SWEET SPOT IS — explain it properly. Deep-link target
+          for the four-feature grid (#sweet-spot). Top accent border
+          separates it from the broader band-features tile section above.
+          ═══════════════════════════════════════════════════════════════ */}
+      <section id="sweet-spot" className="bg-white text-black py-20 sm:py-28 border-t-4 border-accent scroll-mt-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-4 mb-4">
+            <Image
+              src={SWEET_SPOT_LOGO}
+              alt="The Sweet Spot"
+              width={64}
+              height={64}
+              className="w-12 h-12 sm:w-14 sm:h-14 object-contain"
+            />
+            <p className="font-mono text-xs sm:text-sm font-semibold tracking-[0.3em] uppercase text-black/50">
+              Sweet Dreams Music — Live Band Video Series
+            </p>
+          </div>
           <h2 className="text-heading-xl mb-8">A RELEASE-READY VIDEO SESSION</h2>
           <div className="max-w-3xl mb-12 sm:mb-16">
             <p className="font-mono text-black/80 text-body-md mb-4">

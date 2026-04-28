@@ -52,7 +52,15 @@ export default async function OfferingDetailPage({
 }) {
   const { slug } = await params;
   const user = await getSessionUser();
-  if (!user) redirect(`/login?redirect=/dashboard/media/${slug}`);
+  if (!user) {
+    // Diagnostic log for the "logged-in user gets bounced to /login" report —
+    // if this fires while the user is signed in, it means the cookie didn't
+    // round-trip on this request (most often: stale dev-server secret after
+    // restart, or a partially-refreshed Supabase session). Helps narrow down
+    // the issue without breaking flow.
+    console.warn(`[dashboard/media/[slug]] no session user on slug=${slug} — redirecting to /login`);
+    redirect(`/login?redirect=/dashboard/media/${slug}`);
+  }
 
   const offering = await getOfferingBySlug(slug);
   if (!offering) notFound();
