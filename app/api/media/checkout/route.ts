@@ -1,29 +1,35 @@
 // app/api/media/checkout/route.ts
 //
-// Creates a Stripe Checkout session for a media offering. Phase C.2: accepts
-// an optional `configured_components` snapshot from the wizard, validates it
-// against the offering's slot schema, and recomputes the final price
-// server-side so client tampering can never change what gets charged.
+// Creates a Stripe Checkout session for media offerings. Two body shapes
+// are accepted:
 //
-// Flow:
-//   1. Authenticate (401 if no session)
-//   2. Look up offering by slug; reject if not found, not active, or inquire-priced
-//   3. Re-check visibility against viewer (defense-in-depth)
-//   4. If `configured_components` was sent: validate + recompute price
-//      else: use the offering's base price
-//   5. Create Stripe checkout session with the recomputed unit_amount
-//   6. Stash everything the webhook needs in `metadata` — including a
-//      stringified config snapshot so the webhook can write it to
-//      media_bookings.configured_components
+//   • SINGLE-ITEM (legacy / direct buy + multi-page details flow):
+//       { slug, configured_components?, project_details? }
 //
-// Mirrors `app/api/beats/checkout/route.ts` for tone and structure.
+//   • CART (new /dashboard/media cart pattern):
+//       { cart: [ { slug, configured_components?, project_details }, ... ] }
+//
+// The cart shape produces one Stripe line item per cart entry. Server
+// validates + recomputes each item independently — the buyer's cart
+// could be tampered with on the wire, but every price hitting Stripe
+// comes from the offering row's `components` JSONB + the server-side
+// `computeConfiguredPriceCents` helper.
+//
+// Webhook (`booking/webhook` `media_purchase` branch) receives the cart
+// JSON in metadata and fans out into one media_bookings row per item.
+// Stripe metadata is 500 char per field, so we chunk the cart snapshot
+// across `cart_part_0`…`cart_part_N` keys when it's large.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
 import { createClient } from '@/lib/supabase/server';
 import { getOfferingBySlug } from '@/lib/media-server';
 import { getUserBands } from '@/lib/bands-server';
-import { isOfferingVisibleTo, viewerEligibilityFromBands } from '@/lib/media';
+import {
+  type MediaOffering,
+  isOfferingVisibleTo,
+  viewerEligibilityFromBands,
+} from '@/lib/media';
 import {
   type ConfiguredComponents,
   computeConfiguredPriceCents,
@@ -33,211 +39,298 @@ import {
   EMPTY_CONFIG,
 } from '@/lib/media-config';
 import { SITE_URL } from '@/lib/constants';
+import type Stripe from 'stripe';
+
+// Chunk a long string into Stripe-metadata-sized pieces. Stripe's per-field
+// limit is 500 chars; we leave a small margin for safety.
+const STRIPE_META_CHUNK = 480;
+function chunkForMetadata(value: string): string[] {
+  if (!value) return [];
+  const out: string[] = [];
+  for (let i = 0; i < value.length; i += STRIPE_META_CHUNK) {
+    out.push(value.slice(i, i + STRIPE_META_CHUNK));
+  }
+  return out;
+}
+
+interface CartLine {
+  slug: string;
+  configured_components?: ConfiguredComponents;
+  project_details?: Record<string, unknown>;
+  // Resolved server-side after lookup + validation:
+  offering: MediaOffering;
+  config: ConfiguredComponents;
+  computedPriceCents: number;
+  decisionLines: string[];
+}
 
 export async function POST(request: NextRequest) {
   // ── Auth ────────────────────────────────────────────────────────────
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user || !user.email) {
-    return NextResponse.json({ error: 'Login required to purchase media services' }, { status: 401 });
+    return NextResponse.json(
+      { error: 'Login required to purchase media services' },
+      { status: 401 },
+    );
   }
 
-  // ── Parse + validate input ──────────────────────────────────────────
-  let slug: string | undefined;
-  let rawConfig: unknown;
-  let rawProjectDetails: unknown;
+  // ── Parse body ──────────────────────────────────────────────────────
+  let body: Record<string, unknown>;
   try {
-    const body = await request.json();
-    slug = body.slug;
-    rawConfig = body.configured_components;
-    rawProjectDetails = body.project_details;
+    body = await request.json();
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
-  if (!slug || typeof slug !== 'string') {
-    return NextResponse.json({ error: 'slug required' }, { status: 400 });
+
+  // Normalize: cart shape vs single-item shape. Both go through the same
+  // per-item validator; the cart shape just iterates.
+  const rawCart = Array.isArray(body.cart) ? body.cart : null;
+  const incomingItems: Array<{
+    slug?: unknown;
+    configured_components?: unknown;
+    project_details?: unknown;
+  }> = rawCart ?? [
+    {
+      slug: body.slug,
+      configured_components: body.configured_components,
+      project_details: body.project_details,
+    },
+  ];
+  if (incomingItems.length === 0) {
+    return NextResponse.json({ error: 'Cart is empty' }, { status: 400 });
+  }
+  if (incomingItems.length > 12) {
+    // Sanity cap — protect against accidental DoS / metadata blowout.
+    return NextResponse.json(
+      { error: 'Cart has too many items — max 12 per order' },
+      { status: 400 },
+    );
   }
 
-  // Project details — accepted as a plain object. We don't enforce a strict
-  // shape here (the form does that client-side); the webhook stores it
-  // verbatim into media_bookings.project_details JSONB. NULL is fine for
-  // legacy / direct API consumers that skip the new step.
-  let projectDetails: Record<string, unknown> | null = null;
-  if (rawProjectDetails && typeof rawProjectDetails === 'object' && !Array.isArray(rawProjectDetails)) {
-    projectDetails = rawProjectDetails as Record<string, unknown>;
-  }
-
-  // ── Look up offering ────────────────────────────────────────────────
-  const offering = await getOfferingBySlug(slug);
-  if (!offering || !offering.is_active) {
-    return NextResponse.json({ error: 'Offering not found or unavailable' }, { status: 404 });
-  }
-
-  // ── Visibility check (defense-in-depth) ─────────────────────────────
+  // ── Visibility + band attribution shared by all items ───────────────
   const bandMemberships = await getUserBands(user.id);
   const viewer = viewerEligibilityFromBands({
     authenticated: true,
     bandCount: bandMemberships.length,
   });
-  if (!isOfferingVisibleTo(offering, viewer)) {
-    return NextResponse.json({ error: 'Offering not available for your account' }, { status: 403 });
-  }
+  const bandIdForCredits =
+    bandMemberships.length === 1 ? bandMemberships[0]?.band_id ?? null : null;
 
-  // ── Buyability check ────────────────────────────────────────────────
-  // Inquire-priced or range-priced offerings can't auto-checkout — they
-  // need an inquiry flow.
-  const hasFixedPrice =
-    offering.price_cents != null &&
-    offering.price_range_low_cents == null &&
-    offering.price_range_high_cents == null;
-  if (!hasFixedPrice) {
-    return NextResponse.json(
-      { error: 'This offering requires a custom quote — please send an inquiry' },
-      { status: 400 },
-    );
-  }
-
-  // ── Validate + parse configured_components (if sent) ────────────────
-  // Acceptable shapes:
-  //   • undefined / missing      → use base price (legacy / non-configurable offerings)
-  //   • { selections: { ... } }  → validate against schema, recompute price
-  // Any other shape → 400.
-  let config: ConfiguredComponents = EMPTY_CONFIG;
-  if (rawConfig !== undefined && rawConfig !== null) {
-    if (
-      typeof rawConfig !== 'object' ||
-      !('selections' in (rawConfig as object)) ||
-      typeof (rawConfig as { selections: unknown }).selections !== 'object'
-    ) {
-      return NextResponse.json(
-        { error: 'configured_components must be an object with a `selections` map' },
-        { status: 400 },
-      );
-    }
-    const selections = (rawConfig as { selections: Record<string, unknown> }).selections;
-    // Coerce to typed snapshot — any non-conforming entries get rejected
-    // by validateConfig below.
-    config = { selections: selections as ConfiguredComponents['selections'] };
-
-    // Reject configs sent against non-configurable offerings — likely a
-    // client bug or someone poking the API directly. Empty selections are
-    // tolerated (treated as "use base price").
-    if (Object.keys(config.selections).length > 0 && !isOfferingConfigurable(offering)) {
-      return NextResponse.json(
-        { error: 'This offering has no configurable slots' },
-        { status: 400 },
-      );
-    }
-
-    const err = validateConfig(offering, config);
-    if (err) return NextResponse.json({ error: err }, { status: 400 });
-  }
-
-  // ── Recompute price (canonical, server-side) ────────────────────────
-  const computedPrice = computeConfiguredPriceCents(offering, config);
-  if (computedPrice == null || computedPrice <= 0) {
-    return NextResponse.json(
-      { error: 'Unable to compute a valid price for this configuration' },
-      { status: 400 },
-    );
-  }
-
-  // ── Buyer profile (for Stripe metadata + emails downstream) ─────────
   const { data: buyerProfile } = await supabase
     .from('profiles')
     .select('display_name, full_name')
     .eq('user_id', user.id)
     .single();
-
   const buyerName =
     buyerProfile?.full_name ||
     buyerProfile?.display_name ||
     user.email.split('@')[0] ||
     'Buyer';
 
-  // ── Band attribution ────────────────────────────────────────────────
-  // Single band → band credit. Multi/zero → personal credit.
-  const bandIdForCredits =
-    bandMemberships.length === 1 ? bandMemberships[0]?.band_id ?? null : null;
+  // ── Validate every cart line ────────────────────────────────────────
+  const lines: CartLine[] = [];
+  for (let i = 0; i < incomingItems.length; i++) {
+    const raw = incomingItems[i];
+    const slug = typeof raw.slug === 'string' ? raw.slug : '';
+    if (!slug) {
+      return NextResponse.json(
+        { error: `Cart item ${i + 1}: slug required` },
+        { status: 400 },
+      );
+    }
 
-  // ── Build a description that reflects the configuration ────────────
-  // Stripe shows this on the checkout page and in the receipt, so it's the
-  // first place the buyer sees their selections written back to them.
-  const decisionLines = describeConfig(offering, config);
-  const baseDescription =
-    offering.public_blurb ?? offering.description ?? offering.title;
-  const description =
-    decisionLines.length > 0
-      ? `${baseDescription}\n\nYour build: ${decisionLines.join(' · ')}`
-      : baseDescription;
+    const offering = await getOfferingBySlug(slug);
+    if (!offering || !offering.is_active) {
+      return NextResponse.json(
+        { error: `Cart item ${i + 1}: offering "${slug}" not found or unavailable` },
+        { status: 404 },
+      );
+    }
+    if (!isOfferingVisibleTo(offering, viewer)) {
+      return NextResponse.json(
+        { error: `Cart item ${i + 1}: offering not available for your account` },
+        { status: 403 },
+      );
+    }
 
-  // ── Stash config in metadata ────────────────────────────────────────
-  // Stripe metadata fields are limited to 500 chars each. Our largest
-  // realistic config (Album with 4 slots × ~30 chars per entry) fits well
-  // under that. We JSON.stringify so the webhook can re-parse without
-  // re-fetching the offering. If it ever blows the limit we'd switch to
-  // chunked metadata or a Supabase staging row, but it's fine for now.
-  const configJson = JSON.stringify(config);
+    // Buyability: only fixed-price offerings can auto-checkout. Range /
+    // inquire-only items belong in the inquiry flow, not here.
+    const hasFixedPrice =
+      offering.price_cents != null &&
+      offering.price_range_low_cents == null &&
+      offering.price_range_high_cents == null;
+    if (!hasFixedPrice) {
+      return NextResponse.json(
+        { error: `Cart item ${i + 1}: "${offering.title}" requires a custom quote — send an inquiry instead` },
+        { status: 400 },
+      );
+    }
 
-  // ── Create Stripe checkout ──────────────────────────────────────────
+    // Configured components — same validation as the single-item path.
+    let config: ConfiguredComponents = EMPTY_CONFIG;
+    const rawConfig = raw.configured_components;
+    if (rawConfig !== undefined && rawConfig !== null) {
+      if (
+        typeof rawConfig !== 'object' ||
+        Array.isArray(rawConfig) ||
+        !('selections' in rawConfig) ||
+        typeof (rawConfig as { selections: unknown }).selections !== 'object'
+      ) {
+        return NextResponse.json(
+          { error: `Cart item ${i + 1}: configured_components must be an object with a 'selections' map` },
+          { status: 400 },
+        );
+      }
+      const selections = (rawConfig as { selections: Record<string, unknown> }).selections;
+      config = { selections: selections as ConfiguredComponents['selections'] };
+      if (Object.keys(config.selections).length > 0 && !isOfferingConfigurable(offering)) {
+        return NextResponse.json(
+          { error: `Cart item ${i + 1}: this offering has no configurable slots` },
+          { status: 400 },
+        );
+      }
+      const err = validateConfig(offering, config);
+      if (err) {
+        return NextResponse.json(
+          { error: `Cart item ${i + 1}: ${err}` },
+          { status: 400 },
+        );
+      }
+    }
+
+    const computedPriceCents = computeConfiguredPriceCents(offering, config);
+    if (computedPriceCents == null || computedPriceCents <= 0) {
+      return NextResponse.json(
+        { error: `Cart item ${i + 1}: unable to compute a valid price` },
+        { status: 400 },
+      );
+    }
+
+    // project_details is a plain object or null — no strict validation
+    // here, the form gates that; we just refuse arrays and primitives.
+    let projectDetails: Record<string, unknown> | undefined;
+    if (
+      raw.project_details &&
+      typeof raw.project_details === 'object' &&
+      !Array.isArray(raw.project_details)
+    ) {
+      projectDetails = raw.project_details as Record<string, unknown>;
+    }
+
+    lines.push({
+      slug,
+      configured_components: config,
+      project_details: projectDetails,
+      offering,
+      config,
+      computedPriceCents,
+      decisionLines: describeConfig(offering, config),
+    });
+  }
+
+  // ── Build Stripe line items ─────────────────────────────────────────
+  const stripeLineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = lines.map(
+    (line) => {
+      const baseDescription =
+        line.offering.public_blurb ?? line.offering.description ?? line.offering.title;
+      const description =
+        line.decisionLines.length > 0
+          ? `${baseDescription}\n\nYour build: ${line.decisionLines.join(' · ')}`
+          : baseDescription;
+      return {
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: line.offering.title,
+            description: description.slice(0, 500),
+            tax_code: 'txcd_20030000',
+          },
+          unit_amount: line.computedPriceCents,
+        },
+        quantity: 1,
+      };
+    },
+  );
+
+  // ── Build cart snapshot for the webhook ─────────────────────────────
+  // Each entry carries everything the webhook needs to insert one
+  // media_bookings row. The webhook re-fetches the offering by ID for
+  // fresh canonical data, but uses the per-item snapshot for the
+  // configured_components + project_details + studio_hours.
+  const cartSnapshot = lines.map((line) => ({
+    offering_id: line.offering.id,
+    offering_slug: line.offering.slug,
+    offering_title: line.offering.title,
+    offering_kind: line.offering.kind,
+    studio_hours_included: line.offering.studio_hours_included || 0,
+    price_cents: line.computedPriceCents,
+    configured_components: line.config,
+    project_details: line.project_details ?? null,
+    summary: line.decisionLines.join(' · '),
+  }));
+  const cartJson = JSON.stringify(cartSnapshot);
+
+  // Total studio hours across the cart — sum so a single grant can be
+  // written once. The webhook uses this for the `studio_credits` row.
+  const totalStudioHours = cartSnapshot.reduce(
+    (sum, c) => sum + (Number(c.studio_hours_included) || 0),
+    0,
+  );
+
+  // ── Metadata. Chunk the cart JSON across multiple fields if large. ─
+  const cartChunks = chunkForMetadata(cartJson);
+  if (cartChunks.length > 10) {
+    return NextResponse.json(
+      { error: 'Cart payload too large — try fewer items per checkout' },
+      { status: 400 },
+    );
+  }
+  const cartMeta: Record<string, string> = {};
+  cartChunks.forEach((chunk, i) => {
+    cartMeta[`cart_part_${i}`] = chunk;
+  });
+
   try {
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       mode: 'payment',
       automatic_tax: { enabled: true },
-      line_items: [
-        {
-          price_data: {
-            currency: 'usd',
-            product_data: {
-              name: offering.title,
-              description: description.slice(0, 500), // Stripe limit
-              tax_code: 'txcd_20030000', // Professional services - photography & video
-            },
-            unit_amount: computedPrice,
-          },
-          quantity: 1,
-        },
-      ],
+      line_items: stripeLineItems,
       success_url: `${SITE_URL}/dashboard/media?status=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${SITE_URL}/dashboard/media/${offering.slug}?status=cancelled`,
+      cancel_url: `${SITE_URL}/dashboard/media?status=cancelled`,
       customer_email: user.email,
       metadata: {
         type: 'media_purchase',
-        offering_id: offering.id,
-        offering_slug: offering.slug,
-        offering_title: offering.title,
-        offering_kind: offering.kind,
-        studio_hours_included: String(offering.studio_hours_included || 0),
+        // Backwards-compatible flat fields — the webhook still reads these
+        // when the cart is a single item. The richer cart snapshot below
+        // is what drives multi-item fan-out.
+        offering_id: lines[0].offering.id,
+        offering_slug: lines[0].offering.slug,
+        offering_title:
+          lines.length === 1
+            ? lines[0].offering.title
+            : `${lines.length} media items`,
+        offering_kind: lines[0].offering.kind,
+        studio_hours_included: String(totalStudioHours),
         buyer_id: user.id,
         buyer_email: user.email,
         buyer_name: buyerName,
         band_id: bandIdForCredits ?? '',
-        // Snapshot of the wizard's choices — webhook will save this to
-        // media_bookings.configured_components verbatim. Empty selections
-        // are stored too so the row's snapshot is unambiguous.
-        configured_components: configJson.slice(0, 500),
-        // Pre-rendered human-readable summary of the wizard choices, joined
-        // with ' · '. Webhook splits on this separator to populate the
-        // confirmation email's "Your build" list. Storing the rendered
-        // strings here means the webhook never has to re-fetch the offering
-        // schema to translate slot keys into labels.
-        configuration_summary:
-          decisionLines.length > 0 ? decisionLines.join(' · ').slice(0, 500) : '',
-        // Project details from the questionnaire step (Round 3b). Sliced
-        // to fit Stripe's 500-char per-field metadata limit. The webhook
-        // re-parses and stamps it into media_bookings.project_details.
-        // Empty string when the buyer skipped the questionnaire (e.g.,
-        // legacy direct API calls without the new step).
-        project_details: projectDetails
-          ? JSON.stringify(projectDetails).slice(0, 500)
-          : '',
+        // Number of cart parts so the webhook knows how many `cart_part_N`
+        // chunks to read. 0 means single-item legacy mode.
+        cart_count: String(lines.length),
+        cart_parts: String(cartChunks.length),
+        ...cartMeta,
       },
     });
 
     return NextResponse.json({ url: session.url });
   } catch (err) {
     console.error('[media] checkout creation error:', err);
-    return NextResponse.json({ error: 'Failed to create checkout session' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Failed to create checkout session' },
+      { status: 500 },
+    );
   }
 }

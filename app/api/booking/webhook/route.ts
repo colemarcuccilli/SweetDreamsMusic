@@ -826,101 +826,145 @@ export async function POST(request: NextRequest) {
         }
       } else if (meta.type === 'media_purchase') {
         // ── Media Hub purchase ──────────────────────────────────────
-        // Customer paid in full for a media offering (package or
-        // standalone). Phase C: full payment up front, no deposit logic
-        // — calendars + date-locking ship in Phase D.
-        //
-        // Webhook is the single source of truth for media_bookings +
-        // studio_credits writes (the checkout API only creates the
-        // Stripe session — never inserts rows directly, which keeps
-        // accounting honest in the face of abandoned/expired sessions).
-        const offeringId = meta.offering_id;
-        const offeringSlug = meta.offering_slug;
-        const offeringTitle = meta.offering_title || offeringSlug;
-        const studioHours = parseInt(meta.studio_hours_included || '0', 10);
+        // Round 5: the checkout API can now stash a CART of multiple
+        // offerings into the metadata under cart_part_0..N (chunked at
+        // 480 chars to stay inside Stripe's 500-char per-field limit).
+        // We reassemble + parse it here. When `cart_count > 0` we fan
+        // out into N media_bookings rows; the legacy single-item path
+        // (no cart parts) still works unchanged for direct API calls.
+        const offeringTitle = meta.offering_title || meta.offering_slug;
         const buyerId = meta.buyer_id;
         const buyerName = meta.buyer_name || meta.buyer_email?.split('@')[0] || 'Buyer';
         const buyerEmail = session.customer_details?.email || meta.buyer_email;
         const bandId = meta.band_id || null;
         const amountPaid = session.amount_total || 0;
+        const cartCount = parseInt(meta.cart_count || '0', 10);
+        const cartParts = parseInt(meta.cart_parts || '0', 10);
 
-        // Configurator snapshot — Phase C.2. We JSON.parse the metadata
-        // string the checkout API stashed; if it's missing or malformed
-        // we fall back to null so the booking row still writes. The
-        // snapshot is stored verbatim into media_bookings.configured_components
-        // so admins can see what the buyer chose without re-deriving from
-        // the price.
-        let configuredComponents: unknown = null;
-        if (meta.configured_components) {
+        // Reassemble the cart JSON from chunks. If the buyer hit the
+        // legacy single-item path, fall back to a synthetic cart with
+        // ONE entry built from the flat metadata fields.
+        let cart: Array<{
+          offering_id: string;
+          offering_slug: string;
+          offering_title: string;
+          offering_kind: string;
+          studio_hours_included: number;
+          price_cents: number;
+          configured_components: unknown;
+          project_details: unknown;
+          summary: string;
+        }> = [];
+
+        if (cartCount > 0 && cartParts > 0) {
+          let cartJson = '';
+          for (let i = 0; i < cartParts; i++) {
+            const chunk = meta[`cart_part_${i}`];
+            if (typeof chunk === 'string') cartJson += chunk;
+          }
           try {
-            configuredComponents = JSON.parse(meta.configured_components);
+            const parsed = JSON.parse(cartJson);
+            if (Array.isArray(parsed)) cart = parsed;
           } catch {
-            console.warn('[webhook] media_purchase config parse failed — storing raw');
-            configuredComponents = { raw: meta.configured_components };
+            console.error('[webhook] media_purchase cart parse failed — falling back to single-item');
           }
         }
 
-        // Round 3b: project details from the questionnaire step. Same
-        // tolerant parse pattern as configured_components — fall back to
-        // null if the buyer skipped the step (legacy callers + direct
-        // API hits) or the JSON didn't round-trip cleanly.
-        let projectDetails: unknown = null;
-        if (meta.project_details) {
-          try {
-            const parsed = JSON.parse(meta.project_details);
-            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-              projectDetails = parsed;
+        if (cart.length === 0) {
+          // Legacy single-item shape — build one cart entry from flat fields.
+          let configuredComponents: unknown = null;
+          if (meta.configured_components) {
+            try {
+              configuredComponents = JSON.parse(meta.configured_components);
+            } catch {
+              configuredComponents = { raw: meta.configured_components };
             }
-          } catch {
-            console.warn('[webhook] media_purchase project_details parse failed — storing raw');
-            projectDetails = { raw: meta.project_details };
           }
-        }
-
-        // 1. Create the media_bookings row. Status = 'deposited' even
-        //    though it's full payment — that's our "paid, in production
-        //    queue, awaiting scheduling" state. Final scheduling moves
-        //    it to 'scheduled' once a date is on the calendar.
-        const { data: newBooking, error: bookingErr } = await supabase
-          .from('media_bookings')
-          .insert({
-            offering_id: offeringId,
-            user_id: buyerId,
-            band_id: bandId,
-            status: 'deposited',
+          let projectDetails: unknown = null;
+          if (meta.project_details) {
+            try {
+              const parsed = JSON.parse(meta.project_details);
+              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                projectDetails = parsed;
+              }
+            } catch {
+              projectDetails = { raw: meta.project_details };
+            }
+          }
+          cart = [{
+            offering_id: meta.offering_id || '',
+            offering_slug: meta.offering_slug || '',
+            offering_title: offeringTitle || '',
+            offering_kind: meta.offering_kind || 'standalone',
+            studio_hours_included: parseInt(meta.studio_hours_included || '0', 10),
+            price_cents: amountPaid,
             configured_components: configuredComponents,
             project_details: projectDetails,
-            final_price_cents: amountPaid,
-            deposit_cents: amountPaid,
-            stripe_payment_intent_id: session.payment_intent as string,
-            stripe_session_id: session.id,
-            deposit_paid_at: new Date().toISOString(),
-            final_paid_at: new Date().toISOString(),
-          })
-          .select('id')
-          .single();
-
-        if (bookingErr) {
-          // Stripe retries 5xx, but our event-id dedup table will swallow
-          // a retry. Log + ACK rather than 5xx so we don't stack errors.
-          console.error('[webhook] media_bookings insert failed:', bookingErr);
+            summary: meta.configuration_summary || '',
+          }];
         }
 
-        // 2. If the package includes studio hours, create the credit row
-        //    ("gift card"). Owner is XOR'd per the studio_credits_owner_xor
-        //    constraint: band_id if attached to a band, else user_id.
-        //    cost_basis_cents tracks the deferred-revenue liability — the
-        //    full amount paid that will be recognized as the engineer
-        //    works the hours.
-        if (studioHours > 0 && newBooking) {
+        // Track all created booking IDs + the total studio hours for
+        // accounting (one studio_credits row per cart). The first row
+        // is the "primary" booking — we use its id for XP + emails.
+        const createdBookingIds: string[] = [];
+        let primaryBookingId: string | null = null;
+        let totalStudioHours = 0;
+
+        for (let idx = 0; idx < cart.length; idx++) {
+          const item = cart[idx];
+          // Status = 'deposited' (paid in full, awaiting scheduling).
+          // Per-item price_cents from the snapshot — server-side
+          // computeConfiguredPriceCents was the source of truth at
+          // checkout creation, so this number matches Stripe.
+          const { data: row, error: bookingErr } = await supabase
+            .from('media_bookings')
+            .insert({
+              offering_id: item.offering_id,
+              user_id: buyerId,
+              band_id: bandId,
+              status: 'deposited',
+              configured_components: item.configured_components,
+              project_details: item.project_details,
+              final_price_cents: item.price_cents,
+              deposit_cents: item.price_cents,
+              // Only the first row carries the Stripe payment intent / session
+              // since they all share the same checkout session. Putting them
+              // on every row would make the data redundant.
+              stripe_payment_intent_id: idx === 0 ? (session.payment_intent as string) : null,
+              stripe_session_id: session.id,
+              deposit_paid_at: new Date().toISOString(),
+              final_paid_at: new Date().toISOString(),
+            })
+            .select('id')
+            .single();
+
+          if (bookingErr) {
+            console.error(
+              `[webhook] media_bookings insert failed (item ${idx + 1}/${cart.length}):`,
+              bookingErr,
+            );
+          } else if (row) {
+            createdBookingIds.push((row as { id: string }).id);
+            if (!primaryBookingId) primaryBookingId = (row as { id: string }).id;
+          }
+
+          totalStudioHours += Number(item.studio_hours_included) || 0;
+        }
+
+        // 2. If the cart includes studio hours, create ONE credit row
+        //    ("gift card") for the total. Source-of-truth booking is
+        //    the first row that had a positive hours grant. Owner is
+        //    XOR'd per the studio_credits_owner_xor constraint.
+        if (totalStudioHours > 0 && primaryBookingId) {
           const creditOwner = bandId
             ? { band_id: bandId, user_id: null }
             : { user_id: buyerId, band_id: null };
 
           const { error: creditErr } = await supabase.from('studio_credits').insert({
             ...creditOwner,
-            source_booking_id: newBooking.id,
-            hours_granted: studioHours,
+            source_booking_id: primaryBookingId,
+            hours_granted: totalStudioHours,
             hours_used: 0,
             cost_basis_cents: amountPaid,
           });
@@ -928,6 +972,14 @@ export async function POST(request: NextRequest) {
             console.error('[webhook] studio_credits insert failed:', creditErr);
           }
         }
+
+        // For the rest of the side-effect block we keep the legacy
+        // variable names so the email + XP code below doesn't have to
+        // change. `studioHours` is the total grant for the whole cart;
+        // `newBooking` points to the primary row.
+        const studioHours = totalStudioHours;
+        const newBooking = primaryBookingId ? { id: primaryBookingId } : null;
+        const offeringSlug = cart[0]?.offering_slug || meta.offering_slug || '';
 
         // 3. Award XP for the purchase — same hook the beat purchases use,
         //    same event name pattern. Skip silently if the buyer's profile

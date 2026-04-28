@@ -16,7 +16,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowRight, Package as PackageIcon, Sparkles, Wallet, Calendar } from 'lucide-react';
+import { ArrowRight, Wallet, Calendar } from 'lucide-react';
 import { getSessionUser } from '@/lib/auth';
 import { getUserBands } from '@/lib/bands-server';
 import {
@@ -27,11 +27,11 @@ import { getMediaBookingsForOwner } from '@/lib/media-scheduling-server';
 import {
   groupOfferings,
   isOfferingVisibleTo,
-  formatOfferingPrice,
   viewerEligibilityFromBands,
 } from '@/lib/media';
 import { formatCents } from '@/lib/utils';
 import DashboardNav from '@/components/layout/DashboardNav';
+import MediaCatalogClient from '@/components/media/MediaCatalogClient';
 
 export const metadata: Metadata = {
   title: 'Media Hub — Sweet Dreams Music',
@@ -157,120 +157,17 @@ export default async function DashboardMediaPage() {
         </div>
       </section>
 
-      {/* CATALOG — Packages first (the AOV play). Same 4-up grid as
-          public /media for visual consistency, but tiles are clickable
-          Links into the detail page (no hover-dropdown — the click is
-          the interaction). Slot labels render as a bullet list inline
-          so the buyer can scan what's in the box without paragraph. */}
-      {packages.length > 0 && (
-        <section className="bg-white text-black py-12 sm:py-16">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center gap-3 mb-3">
-              <PackageIcon className="w-5 h-5 text-accent" />
-              <p className="font-mono text-xs sm:text-sm font-semibold tracking-[0.3em] uppercase text-black/50">
-                Studio Packages
-              </p>
-            </div>
-            <h2 className="text-heading-xl mb-3">RECORD, ROLLOUT, GROW.</h2>
-            <p className="font-mono text-body-sm text-black/70 max-w-2xl mb-10">
-              The bigger the bundle, the more you save. Studio hours inside a package land in
-              your <span className="text-accent font-bold">prepaid balance</span> automatically.
-            </p>
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-5">
-              {packages.map((pkg) => {
-                const slotLabels = (pkg.components?.slots ?? [])
-                  .map((s) => s.label)
-                  .filter((l): l is string => typeof l === 'string' && l.length > 0);
-                return (
-                  <Link
-                    key={pkg.id}
-                    href={`/dashboard/media/${pkg.slug}`}
-                    className="group border-2 border-black/10 p-5 sm:p-6 hover:border-accent transition-colors flex flex-col no-underline text-black"
-                  >
-                    <h3 className="font-mono text-base sm:text-lg font-bold uppercase tracking-wider mb-2">
-                      {pkg.title}
-                    </h3>
-                    <p className="font-mono text-lg font-bold text-accent mb-3">
-                      {formatOfferingPrice(pkg)}
-                    </p>
-                    {pkg.studio_hours_included > 0 && (
-                      <p className="font-mono text-[11px] font-bold uppercase tracking-wider text-black/60 mb-3">
-                        + {pkg.studio_hours_included} hrs studio time
-                      </p>
-                    )}
-                    {slotLabels.length > 0 ? (
-                      <ul className="space-y-1 mb-4 flex-grow">
-                        {slotLabels.map((label, i) => (
-                          <li key={i} className="font-mono text-xs leading-snug flex items-start gap-2">
-                            <span aria-hidden className="text-accent shrink-0">·</span>
-                            <span className="text-black/75">{label}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    ) : pkg.public_blurb ? (
-                      <p className="font-mono text-xs text-black/65 leading-relaxed mb-4 flex-grow">
-                        {pkg.public_blurb}
-                      </p>
-                    ) : null}
-                    <span className="font-mono text-[11px] font-bold uppercase tracking-wider inline-flex items-center gap-1 text-accent group-hover:gap-2 transition-all mt-auto">
-                      View &amp; book <ArrowRight className="w-3 h-3" />
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        </section>
+      {/* CATALOG — cart-pattern client component. Owns the cart state +
+          one-card-at-a-time expansion. Replaces the previous link-out
+          tiles with inline-expand cards: tap a package to see what's
+          included → "Build your package" expands the configurator inline
+          → fill project details → add to cart. À la carte cards do the
+          same minus the configurator. The persistent cart sidebar /
+          mobile bottom bar handles checkout for everything in one go. */}
+      {(packages.length > 0 || services.length > 0) && (
+        <MediaCatalogClient packages={packages} services={services} />
       )}
 
-      {/* CATALOG — À la carte (standalones). Tighter grid, smaller cards.
-          Standalones don't have components.slots so the cards stay short
-          — title, price, one-liner blurb, CTA. */}
-      {services.length > 0 && (
-        <section className="bg-black text-white py-12 sm:py-16">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center gap-3 mb-3">
-              <Sparkles className="w-5 h-5 text-accent" />
-              <p className="font-mono text-xs sm:text-sm font-semibold tracking-[0.3em] uppercase text-white/60">
-                À La Carte
-              </p>
-            </div>
-            <h2 className="text-heading-xl mb-3">EVERYTHING, INDIVIDUALLY</h2>
-            <p className="font-mono text-body-sm text-white/70 max-w-2xl mb-10">
-              Anything in a package, on its own. Pick what you need.
-            </p>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-              {services.map((svc) => (
-                <Link
-                  key={svc.id}
-                  href={`/dashboard/media/${svc.slug}`}
-                  className="group border border-white/15 p-4 sm:p-5 hover:border-accent hover:bg-white/[0.02] transition-colors no-underline text-white flex flex-col"
-                >
-                  <h3 className="font-mono text-sm font-bold uppercase tracking-wider mb-2">
-                    {svc.title}
-                  </h3>
-                  <p className="font-mono text-base font-bold text-accent mb-2">
-                    {formatOfferingPrice(svc)}
-                  </p>
-                  {svc.public_blurb && (
-                    <p className="font-mono text-[11px] text-white/60 leading-relaxed mb-3 flex-grow">
-                      {svc.public_blurb}
-                    </p>
-                  )}
-                  <span className="font-mono text-xs font-bold uppercase tracking-wider inline-flex items-center gap-1 text-white/80 group-hover:text-accent group-hover:gap-2 transition-all">
-                    View &amp; book <ArrowRight className="w-3 h-3" />
-                  </span>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* Empty state — no offerings visible to this viewer (admin-edited
-          catalogue could plausibly leave a viewer with nothing). */}
       {packages.length === 0 && services.length === 0 && (
         <section className="bg-white text-black py-20">
           <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
