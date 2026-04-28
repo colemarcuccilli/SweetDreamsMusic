@@ -183,14 +183,18 @@ export default function MediaCreditBookingForm({
         <Field label="Duration (hours)">
           <input
             type="number"
-            min={0.5}
-            max={Math.min(12, selectedPool?.hoursRemaining ?? 12)}
-            step={0.5}
+            min={1}
+            max={Math.min(12, Math.floor(selectedPool?.hoursRemaining ?? 12))}
+            step={1}
             value={duration}
-            onChange={(e) => setDuration(Number(e.target.value) || 0)}
+            onChange={(e) => setDuration(Math.floor(Number(e.target.value)) || 0)}
             className={inputCls}
             required
           />
+          <p className="font-mono text-[11px] text-black/40 mt-1">
+            Whole hours only. Live booking system stores integer durations; partial-hour credit
+            balances roll over to your next session.
+          </p>
         </Field>
         <Field label="Room">
           <select

@@ -68,8 +68,20 @@ export async function POST(request: NextRequest) {
   if (!/^\d{2}:\d{2}$/.test(startTime)) {
     return NextResponse.json({ error: 'start_time must be HH:MM' }, { status: 400 });
   }
-  if (!Number.isFinite(durationHoursRaw) || durationHoursRaw < 0.5 || durationHoursRaw > 12) {
-    return NextResponse.json({ error: 'duration_hours must be between 0.5 and 12' }, { status: 400 });
+  // The live `bookings.duration` column is INTEGER. Half-hour granularity
+  // would either error on insert or silently truncate, breaking accounting.
+  // Constrain to whole hours here so the credit flow matches the existing
+  // /book contract exactly.
+  if (
+    !Number.isFinite(durationHoursRaw) ||
+    durationHoursRaw < 1 ||
+    durationHoursRaw > 12 ||
+    !Number.isInteger(durationHoursRaw)
+  ) {
+    return NextResponse.json(
+      { error: 'duration_hours must be a whole number between 1 and 12' },
+      { status: 400 },
+    );
   }
   if (!VALID_ROOMS.includes(room)) {
     return NextResponse.json({ error: 'Invalid room' }, { status: 400 });
@@ -88,9 +100,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Round the duration to 0.5 increments to match how the rest of the system
-  // tracks studio time. e.g., 2.7 → 2.5; 2.8 → 3.0.
-  const durationHours = Math.round(durationHoursRaw * 2) / 2;
+  // Already validated to be a whole-hour integer above.
+  const durationHours = durationHoursRaw;
 
   // ── Validate credit ownership + balance ─────────────────────────────
   const service = createServiceClient();
