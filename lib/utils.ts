@@ -116,12 +116,14 @@ export function calculateSessionTotal(
 // surcharges — the package price is all-in, because the band IS the guest
 // list and the package framing exists precisely to be predictable.
 //
-// Self-serve flow supports 4h and 8h only. The 24h ("3 Days") tier is a
-// multi-session bundle that requires admin coordination — the UI routes it
-// to a contact CTA rather than trying to fake a 24-hour single booking.
+// As of 2026-04-28 the self-serve flow supports 4h, 8h, AND 24h (the 3-day
+// block). The 24h tier still requires admin follow-up by phone to pin
+// down logistics, but the deposit + calendar reservation goes through
+// the same Stripe checkout path as the shorter tiers. Webhook fans out
+// 24h into 3 separate booking rows linked by booking_group_id.
 
 export type BandSessionPricing = {
-  hours: 4 | 8;
+  hours: 4 | 8 | 24;
   tier: (typeof BAND_PRICING)[number];
   subtotal: number;
   nightFees: number;   // always 0 — flat-rate package
@@ -133,21 +135,45 @@ export type BandSessionPricing = {
 
 /**
  * Validates an arbitrary number is a supported self-serve band tier.
- * 24h tier exists in BAND_PRICING for display on the pricing page, but
- * isn't self-serve bookable — it requires multi-day coordination.
+ * As of 2026-04-28 the 24h ("3 Days") tier is self-serve bookable —
+ * checkout creates 3 linked bookings rows and admin follows up by phone
+ * to finalize details.
  */
-export function isSelfServeBandHours(h: unknown): h is 4 | 8 {
-  return h === 4 || h === 8;
+export function isSelfServeBandHours(h: unknown): h is 4 | 8 | 24 {
+  return h === 4 || h === 8 || h === 24;
 }
 
-export function calculateBandSessionTotal(hours: 4 | 8): BandSessionPricing {
+/**
+ * Bands can attach the Sweet Spot filming add-on on top of an 8hr or
+ * 24hr (3-day) session. Pricing per Cole 2026-04-28: $2,000 on top of an
+ * 8hr session, $1,000 on top of the 3-day block. The session length is
+ * extended by 2 hours of filming time — for 3-day, the band picks which
+ * day gets the filming hours appended.
+ */
+export type SweetSpotAddon =
+  | { kind: '8hr-addon' }
+  | { kind: '3day-addon'; filmingDayIndex: 0 | 1 | 2 };
+
+export function calculateBandSessionTotal(
+  hours: 4 | 8 | 24,
+  sweetSpot?: SweetSpotAddon | null,
+): BandSessionPricing {
   const tier = BAND_PRICING.find((t) => t.hours === hours);
   if (!tier) {
     // Should never hit this if callers type-gate via isSelfServeBandHours,
     // but belt-and-suspenders for JS callers.
-    throw new Error(`Invalid band tier: ${hours}h. Supported: 4, 8.`);
+    throw new Error(`Invalid band tier: ${hours}h. Supported: 4, 8, 24.`);
   }
-  const total = tier.price;
+  let total = tier.price;
+  if (sweetSpot) {
+    // Validate the add-on tier matches the session length so a UI bug
+    // can't accidentally charge the wrong amount.
+    if (sweetSpot.kind === '8hr-addon' && hours === 8) {
+      total += 200000; // $2,000
+    } else if (sweetSpot.kind === '3day-addon' && hours === 24) {
+      total += 100000; // $1,000
+    }
+  }
   const deposit = Math.round(total * (PRICING.depositPercent / 100));
   return {
     hours,

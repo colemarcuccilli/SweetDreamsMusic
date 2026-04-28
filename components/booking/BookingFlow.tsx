@@ -5,11 +5,11 @@ import { Calendar, Clock, Home, User, Users, ChevronLeft, ChevronRight, AlertTri
 import { PRICING, ROOMS, ROOM_LABELS, ROOM_RATES, ROOM_RATES_SINGLE, SWEET_4, ENGINEERS, STUDIO_A_WEEKDAY_START, GUEST_FEE_PER_HOUR, FREE_GUESTS, MAX_GUESTS, BAND_PRICING, type Room } from '@/lib/constants';
 import { formatCents, cn, isSameDay, calculateSessionTotal, calculateBandSessionTotal, formatTime, getHourSurcharge, parseTimeSlot, decimalToTimeStr } from '@/lib/utils';
 
-// Self-serve band tiers. The 24h ("3 Days") tier is in BAND_PRICING but is
-// multi-day — it gets a contact CTA instead of a bookable button. Keeping
-// the allowed list derived from BAND_PRICING ensures pricing stays in sync
-// if we ever add a new self-serve tier.
-const BAND_DURATIONS: ReadonlyArray<4 | 8> = [4, 8] as const;
+// Self-serve band tiers. As of 2026-04-28 the 24h ("3 Days") tier is
+// self-serve bookable — checkout creates 3 linked bookings rows and the
+// team follows up by phone to finalize logistics. The 24h tier price is
+// for the WHOLE block; we charge it once via Stripe, not three times.
+const BAND_DURATIONS: ReadonlyArray<4 | 8 | 24> = [4, 8, 24] as const;
 
 function getDaysInMonth(year: number, month: number) {
   return new Date(year, month + 1, 0).getDate();
@@ -78,6 +78,24 @@ export default function BookingFlow({
   // Band sessions are Studio A only — the state is locked below, but we
   // still initialize to studio_a to keep the initial pricing calc correct.
   const [room, setRoom] = useState<Room>('studio_a');
+
+  // ── Band-only: Sweet Spot filming add-on ──────────────────────────
+  // Toggle is shown when the band picks the 8hr or 24hr tier. For 24hr
+  // (3-day block), the band ALSO picks which day (0|1|2) the +2hr filming
+  // hours land on. Pricing per Cole 2026-04-28: $2,000 atop 8hr, $1,000
+  // atop 3-day. Implementation lives on bookings.sweet_spot_addon JSONB
+  // (migration 042). Note that toggling this also extends the row's
+  // `duration` for the chosen day by 2 hrs of filming time after the
+  // metered band hours — engineer arrives, band records, then films.
+  const [sweetSpotAddon, setSweetSpotAddon] = useState(false);
+  const [sweetSpotFilmingDay, setSweetSpotFilmingDay] = useState<0 | 1 | 2>(0);
+  // Reset add-on state when the band switches to a tier that doesn't
+  // support it (4hr) — otherwise stale state would leak into pricing.
+  useEffect(() => {
+    if (isBandMode && duration !== 8 && duration !== 24) {
+      setSweetSpotAddon(false);
+    }
+  }, [isBandMode, duration]);
   const [engineer, setEngineer] = useState<string>('any');
   const [customerName, setCustomerName] = useState(userName);
   const [customerEmail] = useState(userEmail);
@@ -106,8 +124,17 @@ export default function BookingFlow({
   // per-hour preview UI just collapses). This keeps the downstream JSX
   // from needing to know which mode it's in — it just reads pricing.*.
   const pricing = useMemo(() => {
-    if (isBandMode && (duration === 4 || duration === 8)) {
-      const bp = calculateBandSessionTotal(duration);
+    if (isBandMode && (duration === 4 || duration === 8 || duration === 24)) {
+      // Sweet Spot only attaches to 8hr / 24hr tiers; 4hr ignores the
+      // add-on state. The helper validates this internally too.
+      const addon = sweetSpotAddon
+        ? duration === 8
+          ? { kind: '8hr-addon' as const }
+          : duration === 24
+            ? { kind: '3day-addon' as const, filmingDayIndex: sweetSpotFilmingDay }
+            : null
+        : null;
+      const bp = calculateBandSessionTotal(duration, addon);
       return {
         subtotal: bp.subtotal,
         hourBreakdown: [] as ReturnType<typeof calculateSessionTotal>['hourBreakdown'],
@@ -121,7 +148,7 @@ export default function BookingFlow({
       };
     }
     return calculateSessionTotal(room, duration, startHour, isSameDayBooking, guestCount);
-  }, [isBandMode, room, duration, startHour, isSameDayBooking, guestCount]);
+  }, [isBandMode, room, duration, startHour, isSameDayBooking, guestCount, sweetSpotAddon, sweetSpotFilmingDay]);
 
   // Fetch month-level availability for heat map coloring
   useEffect(() => {
@@ -265,6 +292,14 @@ export default function BookingFlow({
           // bandId is the only signal that this is a band booking. The
           // server re-verifies permission before trusting it.
           bandId: band?.id,
+          // Sweet Spot filming add-on. Only meaningful when band mode +
+          // 8hr or 24hr tier. Server re-validates the kind matches the
+          // session length so a tampered POST can't get the wrong price.
+          sweetSpotAddon: isBandMode && sweetSpotAddon && (duration === 8 || duration === 24)
+            ? duration === 8
+              ? { kind: '8hr-addon' as const }
+              : { kind: '3day-addon' as const, filmingDayIndex: sweetSpotFilmingDay }
+            : null,
         }),
       });
 
@@ -614,10 +649,13 @@ export default function BookingFlow({
             )}
           </h3>
           <div className="flex flex-wrap gap-2">
-            {/* Band mode: only 4h / 8h tiers. Solo: 1-maxHours. */}
+            {/* Band mode: 4 / 8 / 24 (3-day) tiers. The 24h tier renders as
+                "3 Days" with a slightly different label so the user knows
+                their pick is Day 1 of three. Solo path: 1..maxHours. */}
             {isBandMode
               ? BAND_DURATIONS.map((h) => {
                   const tier = BAND_PRICING.find((t) => t.hours === h);
+                  const headline = h === 24 ? '3 Days' : `${h} hours`;
                   return (
                     <button
                       key={h}
@@ -627,7 +665,7 @@ export default function BookingFlow({
                         duration === h ? 'bg-black text-white border-black' : 'border-black/20 hover:border-black'
                       )}
                     >
-                      <p className="text-lg font-bold">{h} hours</p>
+                      <p className="text-lg font-bold">{headline}</p>
                       <p className={cn('text-xs mt-0.5', duration === h ? 'text-white/80' : 'text-black/60')}>
                         {formatCents(tier?.price || 0)} · {tier?.note}
                       </p>
@@ -675,27 +713,96 @@ export default function BookingFlow({
             </div>
           )}
 
-          {/* Band-mode only: surface the 24h ("3 Days") tier via contact CTA.
-              Multi-day scheduling needs admin coordination, so we don't try
-              to fake it as a single 24h block in the self-serve flow. */}
-          {isBandMode && (
-            <div className="mt-4 border-2 border-black/20 p-4 flex items-start gap-3">
-              <Calendar className="w-5 h-5 text-black/60 flex-shrink-0 mt-0.5" />
+          {/* Band-mode 3-day notice: when the 24hr tier is selected, the
+              picked date acts as Day 1 — the studio is reserved for the
+              following two days at the same time slot. We follow up by
+              phone after deposit clears to lock the rest of the logistics
+              (engineer per day, gear, breaks). The conflict check on the
+              date picker validates all 3 days are free at the chosen time. */}
+          {isBandMode && duration === 24 && (
+            <div className="mt-4 border-2 border-accent bg-accent/10 p-4 flex items-start gap-3">
+              <Calendar className="w-5 h-5 text-black flex-shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="font-mono text-sm font-bold uppercase tracking-wider mb-1">
-                  Need more time? Ask about 3 Days (24h)
+                  3-day block — your pick is Day 1
                 </p>
-                <p className="font-mono text-xs text-black/60 mb-3">
-                  Our 3-day package ($1,800) runs across multiple sessions —
-                  we coordinate scheduling directly so you get the same engineer each day.
+                <p className="font-mono text-xs text-black/70">
+                  We&apos;ll reserve the same time on the next two consecutive days.
+                  Once your deposit clears, our team will <strong>call you to confirm</strong> day-by-day
+                  details — engineer per day, gear logistics, breaks. The free 1-hour
+                  setup runs before Day 1 only.
                 </p>
-                <a
-                  href="mailto:hello@sweetdreamsmusic.com?subject=Band%203-Day%20Booking%20Inquiry"
-                  className="inline-block border-2 border-black font-mono text-xs font-bold uppercase tracking-wider px-4 py-2 hover:bg-black hover:text-white transition-colors"
-                >
-                  Contact to book 3 days
-                </a>
               </div>
+            </div>
+          )}
+
+          {/* Sweet Spot filming add-on. Only shown when an 8hr or 24hr tier
+              is picked. For 24hr, an additional day picker appears so the
+              band can choose which of the 3 days the +2hr filming hours
+              are appended to (filming runs at the END of that day's
+              session). */}
+          {isBandMode && (duration === 8 || duration === 24) && (
+            <div className={cn(
+              'mt-4 border-2 p-4 transition-colors',
+              sweetSpotAddon ? 'border-accent bg-accent/10' : 'border-black/20',
+            )}>
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  id="sweet-spot-addon"
+                  checked={sweetSpotAddon}
+                  onChange={(e) => setSweetSpotAddon(e.target.checked)}
+                  className="mt-1 w-4 h-4 cursor-pointer"
+                />
+                <label htmlFor="sweet-spot-addon" className="flex-1 cursor-pointer">
+                  <p className="font-mono text-sm font-bold uppercase tracking-wider mb-1">
+                    Add Sweet Spot filming &nbsp;
+                    <span className="text-accent">
+                      {duration === 8
+                        ? '+ $2,000'
+                        : '+ $1,000'}
+                    </span>
+                  </p>
+                  <p className="font-mono text-xs text-black/70">
+                    Multicam live-band video at the end of your session — we add
+                    <strong> 2 hours of filming time</strong>{' '}
+                    {duration === 8 ? 'after your 8hr block.' : 'after one of your 8hr session days.'}{' '}
+                    Two songs mixed, short-form clips, featured on Sweet Dreams YouTube.
+                    {duration === 24 && ' Pick the day below.'}
+                  </p>
+                </label>
+              </div>
+
+              {/* Day picker — only when 24hr Sweet Spot is enabled */}
+              {sweetSpotAddon && duration === 24 && (
+                <div className="mt-4 pt-4 border-t border-accent/30">
+                  <p className="font-mono text-[11px] uppercase tracking-wider font-bold text-black/60 mb-2">
+                    Which day for the filming?
+                  </p>
+                  <div className="flex gap-2">
+                    {([0, 1, 2] as const).map((idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setSweetSpotFilmingDay(idx)}
+                        className={cn(
+                          'flex-1 px-3 py-2 font-mono text-xs font-bold uppercase tracking-wider border-2 transition-colors',
+                          sweetSpotFilmingDay === idx
+                            ? 'bg-black text-white border-black'
+                            : 'border-black/20 hover:border-black bg-white',
+                        )}
+                      >
+                        Day {idx + 1}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="font-mono text-[11px] text-black/50 mt-2">
+                    Filming hours run at the END of Day {sweetSpotFilmingDay + 1}, after the
+                    band session wraps. Day {sweetSpotFilmingDay + 1} reserves a 10-hour slot
+                    instead of 8.
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>

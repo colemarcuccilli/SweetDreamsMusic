@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import { stripe } from '@/lib/stripe';
 import { createServiceClient } from '@/lib/supabase/server';
 import {
@@ -68,45 +69,188 @@ export async function POST(request: NextRequest) {
         // The only row-level difference is `band_id`; everything else
         // (emails, engineer notifications, XP) flows the same way because
         // the paying customer is still the booker, not the band.
+        //
+        // Special cases (band-only, both gated on meta.type === 'band_booking_deposit'):
+        //   1) 24hr (3-day) block — fans out to 3 booking rows linked by
+        //      a shared booking_group_id. Day 1 carries setup_minutes_before;
+        //      days 2-3 don't.
+        //   2) Sweet Spot filming add-on — extends the relevant day's
+        //      duration by 2 hours and stamps sweet_spot_addon JSONB on
+        //      that row. For 8hr the addon lives on the single row; for
+        //      24hr it lives on the picked filming-day row.
         const startDateTime = `${meta.session_date}T${meta.start_time}:00`;
         const endDateTime = `${meta.session_date}T${meta.end_time}:00`;
+        const baseDurationHours = parseInt(meta.duration_hours);
+        const isBandBooking = meta.type === 'band_booking_deposit';
+        const is3DayBlock = isBandBooking && baseDurationHours === 24;
+
+        // Parse Sweet Spot add-on metadata (JSON-stringified by /create).
+        // Shape after parse: { kind: '8hr-addon' } or { kind: '3day-addon', filmingDayIndex: 0|1|2 }.
+        let sweetSpotAddon:
+          | { kind: '8hr-addon'; price_cents: number; extra_filming_hours: number }
+          | { kind: '3day-addon'; filmingDayIndex: 0 | 1 | 2; price_cents: number; extra_filming_hours: number }
+          | null = null;
+        if (meta.sweet_spot_addon) {
+          try {
+            const parsed = JSON.parse(meta.sweet_spot_addon);
+            if (parsed?.kind === '8hr-addon') {
+              sweetSpotAddon = { kind: '8hr-addon', price_cents: 200000, extra_filming_hours: 2 };
+            } else if (parsed?.kind === '3day-addon' && [0, 1, 2].includes(parsed.filmingDayIndex)) {
+              sweetSpotAddon = {
+                kind: '3day-addon',
+                filmingDayIndex: parsed.filmingDayIndex,
+                price_cents: 100000,
+                extra_filming_hours: 2,
+              };
+            }
+          } catch {
+            console.warn('[webhook] sweet_spot_addon parse failed — proceeding without addon');
+          }
+        }
 
         // Calculate dynamic priority window: until 12 hours before session (min 2 hours from now)
         const priorityExpiry = meta.engineer ? calculatePriorityExpiry(startDateTime) : null;
         const rescheduleDeadline = calculateRescheduleDeadline(startDateTime);
 
-        const { data: newBooking } = await supabase.from('bookings').insert({
-          customer_name: meta.customer_name,
-          customer_email: meta.customer_email,
-          customer_phone: meta.customer_phone || null,
-          start_time: startDateTime,
-          end_time: endDateTime,
-          duration: parseInt(meta.duration_hours),
-          room: meta.room,
-          engineer_name: null,
-          requested_engineer: meta.engineer || null,
-          total_amount: parseInt(meta.total_amount),
-          deposit_amount: parseInt(meta.deposit_amount),
-          remainder_amount: parseInt(meta.remainder_amount),
-          actual_deposit_paid: session.amount_total,
-          night_fees_amount: parseInt(meta.night_fees || '0'),
-          same_day_fee: meta.same_day === 'true',
-          same_day_fee_amount: parseInt(meta.same_day_fee || '0'),
-          guest_count: parseInt(meta.guest_count || '1'),
-          guest_fee_amount: parseInt(meta.guest_fee || '0'),
-          stripe_customer_id: session.customer as string,
-          stripe_checkout_session_id: session.id,
-          stripe_payment_intent_id: session.payment_intent as string,
-          status: 'confirmed',
-          priority_expires_at: priorityExpiry,
-          reschedule_deadline: rescheduleDeadline,
-          admin_notes: meta.notes || null,
-          band_id: meta.band_id || null,
-          // Free setup hour reservation (migration 041). Band 4/8hr sessions
-          // pad 60 minutes; everything else stays at 0. Sourced from
-          // /api/booking/create which decides this when stamping metadata.
-          setup_minutes_before: parseInt(meta.setup_minutes_before || '0', 10) || 0,
-        }).select().single();
+        // Branch on multi-day vs single-day. The multi-day path inserts 3
+        // rows + tracks the day-1 row as the canonical "newBooking" so the
+        // downstream notification + XP code paths continue to work.
+        let newBooking: { id: string } | null = null;
+
+        if (is3DayBlock) {
+          // 3-day band block: insert 3 rows linked by a shared group UUID.
+          // Day 1 has setup_minutes_before from metadata. Days 2-3 are 0.
+          // The Sweet Spot day (if any) gets duration extended by 2 hours
+          // AND the sweet_spot_addon JSONB.
+          const groupId = randomUUID();
+          // Stripe deposit covers all 3 days. We split the total/deposit/
+          // remainder evenly across the 3 rows so the per-row accounting
+          // keeps making sense to engineers and admins reading individual
+          // sessions. Round to integer cents; the deposit lands on day 1.
+          const totalCents = parseInt(meta.total_amount);
+          const depositCents = parseInt(meta.deposit_amount);
+          const remainderCents = parseInt(meta.remainder_amount);
+          const perDayTotal = Math.round(totalCents / 3);
+          const perDayRemainder = Math.round(remainderCents / 3);
+          const day1SetupMinutes = parseInt(meta.setup_minutes_before || '60', 10) || 60;
+
+          // Day 1 / Day 2 / Day 3 anchor dates. We compute by adding 24h to
+          // a Date built from the meta.session_date — UTC parsing keeps the
+          // local Fort Wayne time intact (the rest of the system uses the
+          // same convention).
+          const baseDate = new Date(`${meta.session_date}T${meta.start_time}:00Z`);
+
+          const insertedIds: string[] = [];
+          // Narrow the addon to its 3day-addon shape once, outside the
+          // loop, so TypeScript can prove `sweetSpotAddon.extra_filming_hours`
+          // is defined inside the truthy branch.
+          const filmingAddon =
+            sweetSpotAddon?.kind === '3day-addon' ? sweetSpotAddon : null;
+          for (let i = 0; i < 3; i++) {
+            const dayStart = new Date(baseDate.getTime() + i * 24 * 60 * 60 * 1000);
+            const isFilmingDay = !!filmingAddon && filmingAddon.filmingDayIndex === i;
+            const dayDuration = isFilmingDay ? 8 + filmingAddon.extra_filming_hours : 8;
+            const dayEnd = new Date(dayStart.getTime() + dayDuration * 60 * 60 * 1000);
+            const dayPriority = meta.engineer ? calculatePriorityExpiry(dayStart.toISOString()) : null;
+            const dayReschedule = calculateRescheduleDeadline(dayStart.toISOString());
+
+            const { data: row, error } = await supabase.from('bookings').insert({
+              customer_name: meta.customer_name,
+              customer_email: meta.customer_email,
+              customer_phone: meta.customer_phone || null,
+              start_time: dayStart.toISOString(),
+              end_time: dayEnd.toISOString(),
+              duration: dayDuration,
+              room: meta.room,
+              engineer_name: null,
+              requested_engineer: meta.engineer || null,
+              total_amount: perDayTotal,
+              deposit_amount: i === 0 ? depositCents : 0,
+              remainder_amount: i === 0
+                ? totalCents - depositCents - 2 * perDayTotal
+                : perDayRemainder,
+              actual_deposit_paid: i === 0 ? session.amount_total : 0,
+              night_fees_amount: 0,
+              same_day_fee: false,
+              same_day_fee_amount: 0,
+              guest_count: 1,
+              guest_fee_amount: 0,
+              stripe_customer_id: session.customer as string,
+              stripe_checkout_session_id: session.id,
+              // Only day 1 carries the payment_intent — the deposit hit there.
+              stripe_payment_intent_id: i === 0 ? (session.payment_intent as string) : null,
+              status: 'confirmed',
+              priority_expires_at: dayPriority,
+              reschedule_deadline: dayReschedule,
+              admin_notes:
+                i === 0
+                  ? `${meta.notes || ''}\n\n3-day block — Day ${i + 1} of 3. Admin must call buyer to confirm logistics.`.trim()
+                  : `3-day block — Day ${i + 1} of 3.`,
+              band_id: meta.band_id || null,
+              setup_minutes_before: i === 0 ? day1SetupMinutes : 0,
+              booking_group_id: groupId,
+              sweet_spot_addon: isFilmingDay ? sweetSpotAddon : null,
+            }).select('id').single();
+
+            if (error) {
+              console.error(`[webhook] 3-day band row insert (day ${i + 1}) failed:`, error);
+            } else if (row) {
+              insertedIds.push(row.id);
+              if (i === 0) newBooking = row;
+            }
+          }
+
+          // Admin alert: 3-day blocks need a follow-up call. Send an email
+          // to SUPER_ADMINS so Cole/Jay see it land. Reuse the standard
+          // admin booking alert helper but with a callout in the customer
+          // notes already baked into the day-1 row.
+          console.log(
+            `[webhook] 3-day band block inserted: groupId=${groupId} rowCount=${insertedIds.length} band=${meta.band_id || 'none'}`,
+          );
+        } else {
+          // Single-day path. Add Sweet Spot extension if 8hr add-on present.
+          const filmingExtraHours =
+            sweetSpotAddon?.kind === '8hr-addon' ? sweetSpotAddon.extra_filming_hours : 0;
+          const finalDuration = baseDurationHours + filmingExtraHours;
+          const finalEndTime =
+            filmingExtraHours > 0
+              ? new Date(
+                  new Date(startDateTime).getTime() + finalDuration * 60 * 60 * 1000,
+                ).toISOString()
+              : endDateTime;
+
+          const { data: row } = await supabase.from('bookings').insert({
+            customer_name: meta.customer_name,
+            customer_email: meta.customer_email,
+            customer_phone: meta.customer_phone || null,
+            start_time: startDateTime,
+            end_time: finalEndTime,
+            duration: finalDuration,
+            room: meta.room,
+            engineer_name: null,
+            requested_engineer: meta.engineer || null,
+            total_amount: parseInt(meta.total_amount),
+            deposit_amount: parseInt(meta.deposit_amount),
+            remainder_amount: parseInt(meta.remainder_amount),
+            actual_deposit_paid: session.amount_total,
+            night_fees_amount: parseInt(meta.night_fees || '0'),
+            same_day_fee: meta.same_day === 'true',
+            same_day_fee_amount: parseInt(meta.same_day_fee || '0'),
+            guest_count: parseInt(meta.guest_count || '1'),
+            guest_fee_amount: parseInt(meta.guest_fee || '0'),
+            stripe_customer_id: session.customer as string,
+            stripe_checkout_session_id: session.id,
+            stripe_payment_intent_id: session.payment_intent as string,
+            status: 'confirmed',
+            priority_expires_at: priorityExpiry,
+            reschedule_deadline: rescheduleDeadline,
+            admin_notes: meta.notes || null,
+            band_id: meta.band_id || null,
+            setup_minutes_before: parseInt(meta.setup_minutes_before || '0', 10) || 0,
+            sweet_spot_addon: sweetSpotAddon,
+          }).select('id').single();
+          newBooking = row;
+        }
 
         // Send emails — use Fort Wayne timezone since Vercel runs UTC
         const startDate = new Date(startDateTime);

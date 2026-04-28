@@ -10,9 +10,28 @@ import { getMembership } from '@/lib/bands-server';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { date, startTime, duration, room, engineer, customerName, customerEmail: bodyCustomerEmail, customerPhone, guestCount: rawGuestCount, notes, bandId } = body;
+    const { date, startTime, duration, room, engineer, customerName, customerEmail: bodyCustomerEmail, customerPhone, guestCount: rawGuestCount, notes, bandId, sweetSpotAddon: rawSweetSpotAddon } = body;
     const guestCount = Math.min(Math.max(1, Number(rawGuestCount) || 1), MAX_GUESTS);
     const isBandBooking = typeof bandId === 'string' && bandId.length > 0;
+
+    // Sweet Spot filming add-on validation. Only meaningful for band bookings
+    // on the 8hr or 24hr (3-day) tier. Server re-validates the kind matches
+    // the duration so a tampered POST can't smuggle the cheaper $1k tier
+    // onto a single 8hr session, etc.
+    let sweetSpotAddon: { kind: '8hr-addon' } | { kind: '3day-addon'; filmingDayIndex: 0 | 1 | 2 } | null = null;
+    if (isBandBooking && rawSweetSpotAddon && typeof rawSweetSpotAddon === 'object') {
+      const dur = Number(duration);
+      if (rawSweetSpotAddon.kind === '8hr-addon' && dur === 8) {
+        sweetSpotAddon = { kind: '8hr-addon' };
+      } else if (rawSweetSpotAddon.kind === '3day-addon' && dur === 24) {
+        const idx = rawSweetSpotAddon.filmingDayIndex;
+        if (idx === 0 || idx === 1 || idx === 2) {
+          sweetSpotAddon = { kind: '3day-addon', filmingDayIndex: idx };
+        }
+      }
+      // Silently drop invalid combos — don't error, just charge the base
+      // band session price. UI shouldn't allow this state.
+    }
 
     if (!date || !startTime || !duration || !room || !customerName || !bodyCustomerEmail) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -68,9 +87,11 @@ export async function POST(request: NextRequest) {
       if (room !== 'studio_a') {
         return NextResponse.json({ error: 'Band sessions are Studio A only' }, { status: 400 });
       }
-      // Self-serve band tiers: 4h or 8h. 24h ("3 Days") is handled via contact, not this endpoint.
+      // Self-serve band tiers: 4h, 8h, or 24h (3-day block). The 24h tier
+      // checks out the same Stripe deposit but the webhook fans out to 3
+      // booking rows linked by booking_group_id.
       if (!isSelfServeBandHours(Number(duration))) {
-        return NextResponse.json({ error: 'Band sessions must be 4 or 8 hours. Contact us for multi-day bookings.' }, { status: 400 });
+        return NextResponse.json({ error: 'Band sessions must be 4, 8, or 24 hours.' }, { status: 400 });
       }
     } else {
       // Solo flow — unchanged bounds.
@@ -147,7 +168,7 @@ export async function POST(request: NextRequest) {
     // (no night / same-day / guest surcharges stack); solo sessions keep the
     // full per-hour surcharge matrix.
     const pricing = isBandBooking
-      ? calculateBandSessionTotal(Number(duration) as 4 | 8)
+      ? calculateBandSessionTotal(Number(duration) as 4 | 8 | 24, sweetSpotAddon)
       : calculateSessionTotal(room as Room, duration, startHour, sameDayBooking, guestCount);
 
     const endDec = (startHour + duration) % 24;
@@ -178,10 +199,18 @@ export async function POST(request: NextRequest) {
     // customer's receipt and Stripe dashboard read naturally. The webhook
     // doesn't read `product_data.name`; it's pure UX.
     const lineItemName = isBandBooking && band
-      ? `Band Session Deposit — ${band.display_name}`
+      ? `Band Session Deposit — ${band.display_name}${sweetSpotAddon ? ' + Sweet Spot' : ''}`
       : `Recording Session Deposit — ${roomLabel}`;
+    // Description tells the customer what they're paying for in plain
+    // language. 24hr (3-day) reads as "3-day block starting Day 1 ${date}";
+    // Sweet Spot add-on adds " + Sweet Spot filming" so the receipt is
+    // explicit about the extra deliverable.
     const lineItemDescription = isBandBooking
-      ? `${duration}hr band session on ${date} at ${startTime} (50% deposit)`
+      ? `${
+          Number(duration) === 24
+            ? `3-day band block (8hr/day) starting ${date}`
+            : `${duration}hr band session on ${date} at ${startTime}`
+        }${sweetSpotAddon ? ' + Sweet Spot filming' : ''} (50% deposit)`
       : `${duration}hr session on ${date} at ${startTime} (50% deposit)`;
 
     const session = await stripe.checkout.sessions.create({
@@ -232,11 +261,15 @@ export async function POST(request: NextRequest) {
         same_day_fee: String(pricing.sameDayFee),
         guest_count: String(guestCount),
         guest_fee: String(pricing.guestFee),
-        // Free setup hour reservation for band 4hr / 8hr sessions only.
-        // Solo sessions get 0 (default behavior). The 24hr 3-day band block
-        // is admin-only and not routed through this endpoint, so we don't
-        // worry about its day-1-only padding rule here.
+        // Free setup hour reservation. Band 4hr/8hr sessions all pad 60min
+        // before. Band 24hr (3-day): the webhook applies setup to the day-1
+        // row only, but the deposit-time metadata still records 60 to flag
+        // the intent. Solo sessions get 0.
         setup_minutes_before: isBandBooking ? '60' : '0',
+        // Sweet Spot filming add-on metadata. JSON-stringified for Stripe's
+        // 500-char-per-field limit (the object is small — kind + optional
+        // day index). Webhook re-parses and writes to bookings.sweet_spot_addon.
+        sweet_spot_addon: sweetSpotAddon ? JSON.stringify(sweetSpotAddon) : '',
       },
     });
 
