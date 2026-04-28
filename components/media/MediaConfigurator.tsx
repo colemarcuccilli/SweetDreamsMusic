@@ -96,34 +96,26 @@ export default function MediaConfigurator({ offering }: { offering: MediaOfferin
 
   const canAdvance = !currentSlot || hasDecided(currentSlot);
 
-  async function submit() {
+  function submit() {
+    // Round 3b: instead of going straight to checkout, hand off to the
+    // project-details page. We stash the configurator snapshot in
+    // sessionStorage under a slug-keyed key — the details form picks it
+    // up and includes it in the eventual checkout POST. Keeping the
+    // payload off the URL keeps the address bar clean and side-steps the
+    // size cap on Stripe metadata for partially-encoded JSON.
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch('/api/media/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug: offering.slug, configured_components: config }),
-      });
-      if (res.status === 401) {
-        window.location.href = `/login?redirect=/dashboard/media/${offering.slug}/configure`;
-        return;
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.setItem(
+          `media-config:${offering.slug}`,
+          JSON.stringify(config),
+        );
       }
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || 'Failed to start checkout. Try again.');
-        setSubmitting(false);
-        return;
-      }
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        setError('Checkout URL missing — please try again.');
-        setSubmitting(false);
-      }
+      router.push(`/dashboard/media/${offering.slug}/details`);
     } catch (err) {
-      console.error('[media-configurator] submit error:', err);
-      setError('Network error — try again.');
+      console.error('[media-configurator] handoff error:', err);
+      setError('Could not save your selections — try again.');
       setSubmitting(false);
     }
   }
@@ -234,7 +226,7 @@ export default function MediaConfigurator({ offering }: { offering: MediaOfferin
               onClick={submit}
               className="bg-accent text-black font-mono text-xs font-bold uppercase tracking-wider px-6 py-3 hover:bg-accent/90 transition-colors inline-flex items-center gap-2 disabled:opacity-50"
             >
-              {submitting ? 'Starting checkout…' : `Confirm & Pay ${fmt(previewPrice ?? offering.price_cents ?? 0)}`}
+              {submitting ? 'Saving…' : `Continue · ${fmt(previewPrice ?? offering.price_cents ?? 0)}`}
               {!submitting && <ArrowRight className="w-3 h-3" />}
             </button>
           )}

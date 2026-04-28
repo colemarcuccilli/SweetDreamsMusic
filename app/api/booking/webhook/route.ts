@@ -860,6 +860,23 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // Round 3b: project details from the questionnaire step. Same
+        // tolerant parse pattern as configured_components — fall back to
+        // null if the buyer skipped the step (legacy callers + direct
+        // API hits) or the JSON didn't round-trip cleanly.
+        let projectDetails: unknown = null;
+        if (meta.project_details) {
+          try {
+            const parsed = JSON.parse(meta.project_details);
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+              projectDetails = parsed;
+            }
+          } catch {
+            console.warn('[webhook] media_purchase project_details parse failed — storing raw');
+            projectDetails = { raw: meta.project_details };
+          }
+        }
+
         // 1. Create the media_bookings row. Status = 'deposited' even
         //    though it's full payment — that's our "paid, in production
         //    queue, awaiting scheduling" state. Final scheduling moves
@@ -872,6 +889,7 @@ export async function POST(request: NextRequest) {
             band_id: bandId,
             status: 'deposited',
             configured_components: configuredComponents,
+            project_details: projectDetails,
             final_price_cents: amountPaid,
             deposit_cents: amountPaid,
             stripe_payment_intent_id: session.payment_intent as string,

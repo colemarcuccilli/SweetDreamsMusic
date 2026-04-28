@@ -45,15 +45,26 @@ export async function POST(request: NextRequest) {
   // ── Parse + validate input ──────────────────────────────────────────
   let slug: string | undefined;
   let rawConfig: unknown;
+  let rawProjectDetails: unknown;
   try {
     const body = await request.json();
     slug = body.slug;
     rawConfig = body.configured_components;
+    rawProjectDetails = body.project_details;
   } catch {
     return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
   }
   if (!slug || typeof slug !== 'string') {
     return NextResponse.json({ error: 'slug required' }, { status: 400 });
+  }
+
+  // Project details — accepted as a plain object. We don't enforce a strict
+  // shape here (the form does that client-side); the webhook stores it
+  // verbatim into media_bookings.project_details JSONB. NULL is fine for
+  // legacy / direct API consumers that skip the new step.
+  let projectDetails: Record<string, unknown> | null = null;
+  if (rawProjectDetails && typeof rawProjectDetails === 'object' && !Array.isArray(rawProjectDetails)) {
+    projectDetails = rawProjectDetails as Record<string, unknown>;
   }
 
   // ── Look up offering ────────────────────────────────────────────────
@@ -213,6 +224,14 @@ export async function POST(request: NextRequest) {
         // schema to translate slot keys into labels.
         configuration_summary:
           decisionLines.length > 0 ? decisionLines.join(' · ').slice(0, 500) : '',
+        // Project details from the questionnaire step (Round 3b). Sliced
+        // to fit Stripe's 500-char per-field metadata limit. The webhook
+        // re-parses and stamps it into media_bookings.project_details.
+        // Empty string when the buyer skipped the questionnaire (e.g.,
+        // legacy direct API calls without the new step).
+        project_details: projectDetails
+          ? JSON.stringify(projectDetails).slice(0, 500)
+          : '',
       },
     });
 

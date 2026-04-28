@@ -27,7 +27,6 @@ import {
 } from '@/lib/media';
 import { isOfferingConfigurable } from '@/lib/media-config';
 import DashboardNav from '@/components/layout/DashboardNav';
-import MediaBuyButton from '@/components/media/MediaBuyButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -203,7 +202,8 @@ export default async function OfferingDetailPage({
               <p className="font-mono text-body-sm text-white/70 max-w-2xl mb-6">
                 This package has options. Walk through each piece, pick your
                 production tier or drop items you don&apos;t need, and the price
-                updates as you go. You only pay for what you keep.
+                updates as you go. You only pay for what you keep. After you
+                build it, we&apos;ll ask for project details before checkout.
                 {offering.studio_hours_included > 0 && (
                   <>
                     {' '}Studio recording hours land in your prepaid balance the
@@ -216,34 +216,33 @@ export default async function OfferingDetailPage({
                 className="bg-accent text-black font-mono text-base font-bold tracking-wider uppercase px-8 py-4 hover:bg-accent/90 transition-colors no-underline inline-flex items-center gap-2"
               >
                 <Settings2 className="w-4 h-4" />
-                Configure &amp; Buy
+                Start configuring
                 <ArrowRight className="w-4 h-4" />
               </Link>
-              <p className="font-mono text-xs text-white/50 mt-4">
-                Or grab the package as-priced — no configuration needed.
-              </p>
-              <div className="mt-2">
-                <MediaBuyButton slug={offering.slug} title={`${offering.title} (default)`} />
-              </div>
             </>
           ) : isBuyable ? (
             <>
               <h2 className="text-heading-lg mb-3">READY TO BOOK?</h2>
               <p className="font-mono text-body-sm text-white/70 max-w-2xl mb-6">
-                Pay in full now via Stripe. You&apos;ll receive a confirmation email with the order
-                details, and{' '}
+                We&apos;ll grab project details next, then send you to Stripe to complete payment.
                 {offering.studio_hours_included > 0 && (
                   <>
-                    your prepaid balance is loaded with{' '}
+                    {' '}Your prepaid balance loads with{' '}
                     <span className="text-accent font-semibold">
                       {offering.studio_hours_included} hours
                     </span>{' '}
-                    of studio time.{' '}
+                    of studio time the moment payment clears.{' '}
                   </>
                 )}
                 Production scheduling happens after purchase — we reach out within 1 business day.
               </p>
-              <MediaBuyButton slug={offering.slug} title={offering.title} />
+              <Link
+                href={`/dashboard/media/${offering.slug}/details`}
+                className="bg-accent text-black font-mono text-base font-bold tracking-wider uppercase px-8 py-4 hover:bg-accent/90 transition-colors no-underline inline-flex items-center gap-2"
+              >
+                Continue to project details
+                <ArrowRight className="w-4 h-4" />
+              </Link>
             </>
           ) : (
             <>
