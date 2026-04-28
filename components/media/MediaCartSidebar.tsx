@@ -7,12 +7,19 @@
 //   • Mobile   — fixed bottom bar with item count + open-drawer button;
 //                tapping opens an overlay drawer with the full cart
 //
-// Posts to /api/media/checkout with the full cart array on submit. The
-// API recomputes prices server-side (never trusts client computedPrice)
+// Round 6 additions:
+//   - 50% DEPOSIT framing on the totals. Stripe charges half; remainder
+//     billed by admin after they call the buyer to plan.
+//   - Phone-at-checkout. If the buyer's profile already has a phone, we
+//     pre-fill it (read-only summary). Otherwise an input gates the
+//     Checkout button — the API requires phone for follow-up call.
+//
+// Posts to /api/media/checkout with the cart array + phone. API
+// recomputes prices server-side (never trusts client computedPrice)
 // and returns the Stripe URL we redirect to.
 
 import { useState } from 'react';
-import { ShoppingCart, X, Trash2, ArrowRight } from 'lucide-react';
+import { ShoppingCart, X, Trash2, ArrowRight, Phone } from 'lucide-react';
 import { useMediaCart } from './MediaCartContext';
 import { toCheckoutPayload, type MediaCartItem } from '@/lib/media-cart';
 
@@ -22,21 +29,42 @@ function fmt(cents: number): string {
   }).format(cents / 100);
 }
 
-export default function MediaCartSidebar() {
+export default function MediaCartSidebar({
+  profilePhone,
+}: {
+  profilePhone?: string | null;
+}) {
   const cart = useMediaCart();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  // Phone state. Pre-fill from the profile when present so returning
+  // buyers don't see the prompt; empty triggers the input UI.
+  const [phone, setPhone] = useState(profilePhone ?? '');
+
+  // Phone validation is intentionally permissive — we just require enough
+  // digits to look like a real number. The team calls these manually so
+  // a strict regex would just frustrate buyers entering "+1 (260) ..."
+  // formats.
+  const phoneClean = phone.replace(/\D/g, '');
+  const phoneOk = phoneClean.length >= 7;
 
   async function checkout() {
     if (cart.items.length === 0) return;
+    if (!phoneOk) {
+      setError('Phone number required so we can call to plan.');
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
       const res = await fetch('/api/media/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cart: toCheckoutPayload(cart.items) }),
+        body: JSON.stringify({
+          cart: toCheckoutPayload(cart.items),
+          phone: phone.trim(),
+        }),
       });
       if (res.status === 401) {
         window.location.href = '/login?redirect=/dashboard/media';
@@ -75,6 +103,10 @@ export default function MediaCartSidebar() {
           onCheckout={checkout}
           submitting={submitting}
           error={error}
+          phone={phone}
+          onPhoneChange={setPhone}
+          phoneOk={phoneOk}
+          phoneFromProfile={!!profilePhone}
         />
       </aside>
 
@@ -116,6 +148,10 @@ export default function MediaCartSidebar() {
                 onCheckout={checkout}
                 submitting={submitting}
                 error={error}
+                phone={phone}
+                onPhoneChange={setPhone}
+                phoneOk={phoneOk}
+                phoneFromProfile={!!profilePhone}
                 noBorder
               />
             </div>
@@ -136,6 +172,10 @@ function CartContents({
   onCheckout,
   submitting,
   error,
+  phone,
+  onPhoneChange,
+  phoneOk,
+  phoneFromProfile,
   noBorder,
 }: {
   items: MediaCartItem[];
@@ -144,8 +184,17 @@ function CartContents({
   onCheckout: () => void;
   submitting: boolean;
   error: string | null;
+  phone: string;
+  onPhoneChange: (v: string) => void;
+  phoneOk: boolean;
+  phoneFromProfile: boolean;
   noBorder?: boolean;
 }) {
+  // Round 6: 50% deposit charged at checkout. Always rounded down so we
+  // never accidentally over-charge the cents — full balance is the
+  // remaining amount.
+  const depositCents = Math.floor(totalCents / 2);
+  const remainderCents = totalCents - depositCents;
   return (
     <div>
       {!noBorder && (
@@ -172,12 +221,28 @@ function CartContents({
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
             </div>
-            <p className="font-mono text-xs text-black/60 mb-1.5">
-              {it.projectDetails.artist_name} · {it.projectDetails.songs}
+            {/* Quick recap line: prefer the songs breakdown if present
+                (richer signal), fall back to the legacy `songs` string,
+                then to the project name, else "No project info yet". */}
+            <p className="font-mono text-xs text-black/60 mb-1.5 line-clamp-1">
+              {(() => {
+                const sb = it.projectDetails.songs_breakdown ?? [];
+                if (sb.length > 0) {
+                  return sb
+                    .map((s) => s.title.trim())
+                    .filter((t) => t.length > 0)
+                    .join(', ') || 'Songs not yet specified';
+                }
+                if (it.projectDetails.songs) return it.projectDetails.songs;
+                if (it.projectDetails.project_name) return it.projectDetails.project_name;
+                return <span className="text-black/35">No project info yet</span>;
+              })()}
             </p>
-            <p className="font-mono text-xs text-black/50 italic line-clamp-1 mb-2">
-              {it.projectDetails.vibe}
-            </p>
+            {it.projectDetails.vibe && (
+              <p className="font-mono text-xs text-black/50 italic line-clamp-1 mb-2">
+                {it.projectDetails.vibe}
+              </p>
+            )}
             <p className="font-mono text-sm font-bold text-accent">
               {fmt(it.computedPriceCents)}
             </p>
@@ -185,24 +250,69 @@ function CartContents({
         ))}
       </ul>
       <div className="p-4 border-t border-black/10 bg-black/[0.02] space-y-3">
-        <div className="flex items-baseline justify-between">
-          <span className="font-mono text-xs uppercase tracking-wider text-black/60">
-            Total
-          </span>
-          <span className="text-2xl font-bold tracking-tight">
-            {fmt(totalCents)}
-          </span>
+        {/* Order summary — order total broken into deposit (charged now)
+            + remainder (billed by admin after the planning call). */}
+        <div className="space-y-1.5">
+          <div className="flex items-baseline justify-between">
+            <span className="font-mono text-[11px] uppercase tracking-wider text-black/55">
+              Order total
+            </span>
+            <span className="font-mono text-sm font-bold">{fmt(totalCents)}</span>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <span className="font-mono text-[11px] uppercase tracking-wider text-black/55">
+              Remainder (billed later)
+            </span>
+            <span className="font-mono text-xs text-black/55">
+              {fmt(remainderCents)}
+            </span>
+          </div>
+          <div className="flex items-baseline justify-between pt-2 border-t border-black/10">
+            <span className="font-mono text-xs uppercase tracking-wider font-bold">
+              Charged today (50%)
+            </span>
+            <span className="text-xl font-bold tracking-tight">
+              {fmt(depositCents)}
+            </span>
+          </div>
         </div>
+
+        {/* Phone capture — required if not on profile, editable either
+            way so a buyer can override. */}
+        <div className="pt-2">
+          <label className="block">
+            <span className="block font-mono text-[10px] uppercase tracking-wider text-black/55 mb-1 inline-flex items-center gap-1">
+              <Phone className="w-3 h-3" />
+              Phone for follow-up call
+              {phoneFromProfile && (
+                <span className="text-black/35">· from profile</span>
+              )}
+            </span>
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => onPhoneChange(e.target.value)}
+              placeholder="(260) 555-0123"
+              className={`w-full bg-white border-2 px-2.5 py-1.5 text-sm focus:border-black outline-none ${
+                phoneOk ? 'border-black/15' : 'border-yellow-400'
+              }`}
+            />
+          </label>
+          <p className="font-mono text-[10px] text-black/45 mt-1">
+            We&apos;ll call to plan dates, scope, and the remaining balance.
+          </p>
+        </div>
+
         {error && (
           <p className="font-mono text-[11px] text-red-700">{error}</p>
         )}
         <button
           type="button"
           onClick={onCheckout}
-          disabled={submitting || items.length === 0}
-          className="w-full bg-black text-white font-mono text-xs font-bold uppercase tracking-wider px-4 py-3 hover:bg-accent hover:text-black transition-colors inline-flex items-center justify-center gap-2 disabled:opacity-50"
+          disabled={submitting || items.length === 0 || !phoneOk}
+          className="w-full bg-black text-white font-mono text-xs font-bold uppercase tracking-wider px-4 py-3 hover:bg-accent hover:text-black transition-colors inline-flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {submitting ? 'Starting checkout…' : 'Checkout'}
+          {submitting ? 'Starting checkout…' : `Checkout · ${fmt(depositCents)}`}
           {!submitting && <ArrowRight className="w-3 h-3" />}
         </button>
       </div>

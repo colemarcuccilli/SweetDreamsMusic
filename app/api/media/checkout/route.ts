@@ -22,7 +22,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { stripe } from '@/lib/stripe';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { getOfferingBySlug } from '@/lib/media-server';
 import { getUserBands } from '@/lib/bands-server';
 import {
@@ -40,6 +40,13 @@ import {
 } from '@/lib/media-config';
 import { SITE_URL } from '@/lib/constants';
 import type Stripe from 'stripe';
+
+// Round 6: charge 50% deposit on every media checkout. Cole's call —
+// admin reaches out to plan after payment, then bills the remaining
+// half once the project is scoped. Defined as a constant here so the
+// webhook + any future "charge remainder" admin endpoint can read the
+// same source of truth.
+const MEDIA_DEPOSIT_FRACTION = 0.5;
 
 // Chunk a long string into Stripe-metadata-sized pieces. Stripe's per-field
 // limit is 500 chars; we leave a small margin for safety.
@@ -107,6 +114,20 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
+
+  // Phone capture (Round 6). Required for multi-item cart checkouts so
+  // admin can call to plan dates + bill the remainder. Legacy single-
+  // item callers without phone are tolerated (the buyer's order page
+  // shows "no phone on file" and admin can chase by email).
+  const rawPhone = typeof body.phone === 'string' ? body.phone.trim() : '';
+  const phoneClean = rawPhone.replace(/\D/g, '');
+  if (rawCart && phoneClean.length < 7) {
+    return NextResponse.json(
+      { error: 'Phone number required to check out — admin needs to call to plan.' },
+      { status: 400 },
+    );
+  }
+  const customerPhone = rawPhone || null;
 
   // ── Visibility + band attribution shared by all items ───────────────
   const bandMemberships = await getUserBands(user.id);
@@ -229,7 +250,11 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // ── Build Stripe line items ─────────────────────────────────────────
+  // ── Build Stripe line items at 50% deposit ─────────────────────────
+  // Charge half of each line's full price now. Round each line down so
+  // the integer-cents Stripe demands always sums to <= 50% — no risk of
+  // accidentally over-charging. The remainder per line is computed in
+  // the webhook from the snapshot's full price minus what was charged.
   const stripeLineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = lines.map(
     (line) => {
       const baseDescription =
@@ -238,15 +263,16 @@ export async function POST(request: NextRequest) {
         line.decisionLines.length > 0
           ? `${baseDescription}\n\nYour build: ${line.decisionLines.join(' · ')}`
           : baseDescription;
+      const depositCents = Math.floor(line.computedPriceCents * MEDIA_DEPOSIT_FRACTION);
       return {
         price_data: {
           currency: 'usd',
           product_data: {
-            name: line.offering.title,
-            description: description.slice(0, 500),
+            name: `${line.offering.title} — Deposit`,
+            description: `${description}\n\n50% deposit. Remainder billed once we've planned dates with you.`.slice(0, 500),
             tax_code: 'txcd_20030000',
           },
-          unit_amount: line.computedPriceCents,
+          unit_amount: depositCents,
         },
         quantity: 1,
       };
@@ -291,6 +317,45 @@ export async function POST(request: NextRequest) {
     cartMeta[`cart_part_${i}`] = chunk;
   });
 
+  // Round 6: persist phone to profile if the buyer typed one (or
+  // overwrote a stale one). Service role write — RLS would block the
+  // user-context client from updating `profiles.phone` on their own row
+  // depending on policy. Best-effort; if it fails, log + continue. The
+  // phone still flows through metadata → media_bookings.customer_phone
+  // either way, so the team gets it on the order even if profile-save
+  // didn't stick.
+  if (customerPhone) {
+    try {
+      const service = createServiceClient();
+      await service.from('profiles').update({ phone: customerPhone }).eq('user_id', user.id);
+    } catch (e) {
+      console.warn('[media] checkout: profile phone update failed', e);
+    }
+  }
+
+  // Pre-rendered cart summary for the admin alert email. Each line gets
+  // a one-liner so the team can scan the order at a glance without
+  // parsing the JSON cart snapshot themselves.
+  const cartSummaryLines = lines.map((line) => {
+    const cfg = line.decisionLines.length > 0
+      ? ` (${line.decisionLines.join(' · ')})`
+      : '';
+    const songs = (() => {
+      const pd = line.project_details as
+        | { songs_breakdown?: Array<{ title: string; notes?: string | null }>; songs?: string }
+        | undefined;
+      if (pd?.songs_breakdown && Array.isArray(pd.songs_breakdown) && pd.songs_breakdown.length > 0) {
+        return pd.songs_breakdown
+          .map((s) => `${s.title}${s.notes ? ` (${s.notes})` : ''}`)
+          .filter((s) => s.trim().length > 0)
+          .join(', ');
+      }
+      return pd?.songs?.trim() || '';
+    })();
+    const songsSuffix = songs ? ` — songs: ${songs}` : '';
+    return `${line.offering.title} — ${(line.computedPriceCents / 100).toFixed(2)}${cfg}${songsSuffix}`;
+  });
+
   try {
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -316,11 +381,18 @@ export async function POST(request: NextRequest) {
         buyer_id: user.id,
         buyer_email: user.email,
         buyer_name: buyerName,
+        // Phone for follow-up call (Round 6). Empty string if missing —
+        // webhook treats falsy as null when writing to the row.
+        customer_phone: customerPhone ?? '',
         band_id: bandIdForCredits ?? '',
         // Number of cart parts so the webhook knows how many `cart_part_N`
         // chunks to read. 0 means single-item legacy mode.
         cart_count: String(lines.length),
         cart_parts: String(cartChunks.length),
+        // Pre-rendered admin summary, joined on ` || ` to survive Stripe
+        // metadata field's 500-char per-field limit (each line gets a
+        // dedicated cart_summary_N field if there are many).
+        cart_summary: cartSummaryLines.join(' || ').slice(0, 500),
         ...cartMeta,
       },
     });

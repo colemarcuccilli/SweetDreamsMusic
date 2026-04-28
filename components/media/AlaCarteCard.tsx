@@ -43,7 +43,6 @@ export default function AlaCarteCard({
   const isBuyable = !isInquireOnly && !isPriceRange;
 
   function addToCart() {
-    if (!isProjectDetailsValid(details)) return;
     cart.addItem({
       id: typeof crypto !== 'undefined' && 'randomUUID' in crypto
         ? crypto.randomUUID()
@@ -103,19 +102,22 @@ export default function AlaCarteCard({
             <p className="font-mono text-xs text-black/65">{offering.public_blurb}</p>
           )}
 
-          {/* Buyable: project details + add to cart */}
+          {/* Buyable: project details (all optional) + add to cart */}
           {isBuyable && (
             <>
               <MediaInlineProjectDetails value={details} onChange={setDetails} />
+              <p className="font-mono text-[11px] text-black/55">
+                <strong className="text-black">50% deposit</strong> charged at checkout.
+                We&apos;ll call to plan the rest.
+              </p>
               <button
                 type="button"
                 onClick={addToCart}
-                disabled={!isProjectDetailsValid(details)}
                 className={`w-full font-mono text-xs font-bold uppercase tracking-wider px-4 py-2.5 inline-flex items-center justify-center gap-2 transition-colors ${
                   justAdded
                     ? 'bg-green-600 text-white'
                     : 'bg-accent text-black hover:bg-accent/90'
-                } disabled:opacity-50 disabled:cursor-not-allowed`}
+                }`}
               >
                 {justAdded ? (
                   <>
@@ -128,11 +130,6 @@ export default function AlaCarteCard({
                   </>
                 )}
               </button>
-              {!isProjectDetailsValid(details) && !justAdded && (
-                <p className="font-mono text-[11px] text-black/45 text-center">
-                  Fill artist · songs · vibe to enable add-to-cart.
-                </p>
-              )}
             </>
           )}
 
@@ -149,8 +146,4 @@ export default function AlaCarteCard({
       )}
     </li>
   );
-}
-
-function isProjectDetailsValid(d: MediaProjectDetails): boolean {
-  return d.artist_name.trim().length >= 2 && d.songs.trim().length >= 2 && d.vibe.trim().length >= 2;
 }

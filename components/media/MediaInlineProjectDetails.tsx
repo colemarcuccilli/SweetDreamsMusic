@@ -3,76 +3,187 @@
 // components/media/MediaInlineProjectDetails.tsx
 //
 // Inline project-details form used inside PackageCard + AlaCarteCard.
-// Single source of truth for the questionnaire shape — both card kinds
-// import this so the field copy + validation stay aligned.
+// Round 6 reshape:
 //
-// Stateless: parent owns the value + change handler. This makes it
-// trivial to reset (parent clears state on add-to-cart) and to read
-// for validation (parent decides when "Add" is enabled).
+//   - No artist name. We know who the buyer is from their session;
+//     the webhook stamps profile.display_name onto media_bookings
+//     server-side.
+//   - All fields are optional. Buyer can add to cart with everything
+//     blank — admin reaches out by phone to plan anyway.
+//   - "Songs" toggle expands a multi-row input where buyers can list
+//     each song with an optional per-song note (e.g. "use this for the
+//     cover art", "shorts will pull from the chorus here").
+//   - Slot-aware extras: when the parent passes `slotKeys` we render
+//     dedicated mini-fields for the package's actual slots — "Cover
+//     art name" only appears for offerings that include cover art,
+//     "Songs for shorts" only for offerings with shorts. This keeps
+//     non-package items (à la carte) clean.
+//
+// Stateless: parent owns the value + change handler.
 
-import type { MediaProjectDetails } from '@/lib/media-cart';
+import { Plus, Trash2 } from 'lucide-react';
+import type { MediaProjectDetails, MediaProjectSong } from '@/lib/media-cart';
 
 export default function MediaInlineProjectDetails({
   value,
   onChange,
+  slotKeys,
+  showSongsByDefault = false,
 }: {
   value: MediaProjectDetails;
   onChange: (v: MediaProjectDetails) => void;
+  /** Slot keys present on the parent offering. Drives which extra
+   *  mini-fields appear (cover_art / shorts / etc). Pass an empty array
+   *  for à la carte items. */
+  slotKeys?: string[];
+  /** Whether the songs panel starts expanded. Packages → true; à la
+   *  carte → false (tighter UI for single-item adds). */
+  showSongsByDefault?: boolean;
 }) {
   const set = <K extends keyof MediaProjectDetails>(k: K, v: MediaProjectDetails[K]) =>
     onChange({ ...value, [k]: v });
 
+  const songs = value.songs_breakdown ?? [];
+
+  function addSong() {
+    set('songs_breakdown', [...songs, { title: '', notes: '' }]);
+  }
+  function updateSong(idx: number, field: keyof MediaProjectSong, val: string) {
+    const next = songs.map((s, i) => (i === idx ? { ...s, [field]: val } : s));
+    set('songs_breakdown', next);
+  }
+  function removeSong(idx: number) {
+    set('songs_breakdown', songs.filter((_, i) => i !== idx));
+  }
+
+  // Slot-aware extra-field flags. Each slot key maps to a relevant
+  // dedicated micro-input so the buyer can drop a quick name without
+  // hunting through a giant notes box.
+  const hasCoverArt = !!slotKeys?.some((k) => k === 'cover_art' || k === 'main_cover' || k === 'single_covers');
+  const hasShorts = !!slotKeys?.some((k) => k === 'shorts' || k === 'shorts_per_song');
+
+  // Songs panel — auto-open when packages explicitly want it OR when
+  // there's already at least one row (which can happen on edit / round
+  // trip from sessionStorage).
+  const songsOpen = showSongsByDefault || songs.length > 0;
+
   return (
     <div className="space-y-3">
       <p className="font-mono text-[11px] uppercase tracking-wider font-bold text-black/60">
-        Project details for this piece
+        Project details (optional)
       </p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Field label="Project name (optional)">
-          <input
-            type="text"
-            value={value.project_name ?? ''}
-            onChange={(e) => set('project_name', e.target.value)}
-            placeholder='"My EP", "Summer Single"...'
-            className={inputCls}
-          />
-        </Field>
-        <Field label="Artist name *">
-          <input
-            type="text"
-            value={value.artist_name}
-            onChange={(e) => set('artist_name', e.target.value)}
-            placeholder="Name on credits"
-            className={inputCls}
-            minLength={2}
-          />
-        </Field>
-      </div>
-
-      <Field label="Songs *">
+      <Field label="Project name">
         <input
           type="text"
-          value={value.songs}
-          onChange={(e) => set('songs', e.target.value)}
-          placeholder="Title(s) or short description"
+          value={value.project_name ?? ''}
+          onChange={(e) => set('project_name', e.target.value)}
+          placeholder='"My EP", "Summer Single"...'
           className={inputCls}
-          minLength={2}
         />
       </Field>
 
-      <Field label="Vibe / mood *">
+      {/* SONGS PANEL */}
+      <div className="border border-black/10 bg-black/[0.02] p-3 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <p className="font-mono text-[11px] uppercase tracking-wider font-bold text-black/70">
+            Songs in this plan
+          </p>
+          {!songsOpen && (
+            <button
+              type="button"
+              onClick={addSong}
+              className="font-mono text-[11px] text-accent hover:underline inline-flex items-center gap-1"
+            >
+              <Plus className="w-3 h-3" /> Add songs
+            </button>
+          )}
+        </div>
+        {songsOpen && (
+          <>
+            {songs.length === 0 && (
+              <p className="font-mono text-[11px] text-black/45">
+                Add each song you want covered. Per-song notes are optional —
+                great for &quot;use this for the cover art&quot; or &quot;shorts will pull
+                from this song&quot;.
+              </p>
+            )}
+            <ul className="space-y-2">
+              {songs.map((song, idx) => (
+                <li key={idx} className="flex items-start gap-2">
+                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      value={song.title}
+                      onChange={(e) => updateSong(idx, 'title', e.target.value)}
+                      placeholder={`Song ${idx + 1} title`}
+                      className={inputCls}
+                    />
+                    <input
+                      type="text"
+                      value={song.notes ?? ''}
+                      onChange={(e) => updateSong(idx, 'notes', e.target.value)}
+                      placeholder="Notes (optional)"
+                      className={inputCls}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeSong(idx)}
+                    className="text-black/40 hover:text-red-700 mt-2 shrink-0"
+                    aria-label={`Remove song ${idx + 1}`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <button
+              type="button"
+              onClick={addSong}
+              className="font-mono text-[11px] text-accent hover:underline inline-flex items-center gap-1"
+            >
+              <Plus className="w-3 h-3" /> Add another song
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* SLOT-AWARE EXTRAS — only render fields relevant to the offering */}
+      {hasCoverArt && (
+        <Field label="Cover art name">
+          <input
+            type="text"
+            value={value.cover_art_name ?? ''}
+            onChange={(e) => set('cover_art_name', e.target.value)}
+            placeholder="What's the release named?"
+            className={inputCls}
+          />
+        </Field>
+      )}
+      {hasShorts && (
+        <Field label="Songs to use for shorts">
+          <input
+            type="text"
+            value={value.shorts_song_targets ?? ''}
+            onChange={(e) => set('shorts_song_targets', e.target.value)}
+            placeholder="Song titles or 'all of them'"
+            className={inputCls}
+          />
+        </Field>
+      )}
+
+      <Field label="Vibe / mood">
         <input
           type="text"
-          value={value.vibe}
+          value={value.vibe ?? ''}
           onChange={(e) => set('vibe', e.target.value)}
           placeholder='"Dark + atmospheric", "warm acoustic"...'
           className={inputCls}
-          minLength={2}
         />
       </Field>
 
-      <Field label="References (optional)">
+      <Field label="References">
         <input
           type="text"
           value={value.references ?? ''}
@@ -83,7 +194,7 @@ export default function MediaInlineProjectDetails({
       </Field>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Field label="Target release (optional)">
+        <Field label="Target release">
           <input
             type="date"
             value={value.release_date ?? ''}
@@ -91,7 +202,7 @@ export default function MediaInlineProjectDetails({
             className={inputCls}
           />
         </Field>
-        <Field label="Notes (optional)">
+        <Field label="Notes">
           <input
             type="text"
             value={value.notes ?? ''}

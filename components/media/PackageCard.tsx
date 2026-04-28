@@ -94,7 +94,6 @@ export default function PackageCard({
   }
 
   function addToCart() {
-    if (!isProjectDetailsValid(details)) return;
     cart.addItem({
       id: typeof crypto !== 'undefined' && 'randomUUID' in crypto
         ? crypto.randomUUID()
@@ -117,7 +116,10 @@ export default function PackageCard({
   }
 
   const isInquireOnly = offering.price_cents == null;
-  const buttonDisabled = !isProjectDetailsValid(details) || isInquireOnly;
+  // Round 6: validation no longer blocks add-to-cart on missing project
+  // details — every field is optional. Only the offering's buyability
+  // (fixed price, not inquire-only) matters for the button state.
+  const buttonDisabled = isInquireOnly;
 
   return (
     <li
@@ -254,10 +256,25 @@ export default function PackageCard({
             </div>
           )}
 
-          {/* Project details form */}
-          <MediaInlineProjectDetails value={details} onChange={setDetails} />
+          {/* Project details form. We pass the offering's slot keys so
+              the form can render slot-aware mini-fields (cover art name
+              when there's a cover_art slot, songs-for-shorts when there's
+              a shorts slot, etc). showSongsByDefault=true because packages
+              are the case where the buyer most likely wants to itemize. */}
+          <MediaInlineProjectDetails
+            value={details}
+            onChange={setDetails}
+            slotKeys={(offering.components?.slots ?? []).map((s) => s.key)}
+            showSongsByDefault
+          />
 
-          {/* Add to cart */}
+          {/* Deposit reminder before checkout — they're paying half now,
+              we'll bill the rest after we've planned the project. */}
+          <p className="font-mono text-[11px] text-black/55">
+            <strong className="text-black">50% deposit</strong> charged at checkout.
+            Remaining balance billed once we&apos;ve scoped your shoot dates with you.
+          </p>
+
           <button
             type="button"
             onClick={addToCart}
@@ -279,19 +296,10 @@ export default function PackageCard({
               </>
             )}
           </button>
-          {!isProjectDetailsValid(details) && !justAdded && (
-            <p className="font-mono text-[11px] text-black/45 text-center">
-              Fill artist · songs · vibe to enable add-to-cart.
-            </p>
-          )}
         </div>
       )}
     </li>
   );
-}
-
-function isProjectDetailsValid(d: MediaProjectDetails): boolean {
-  return d.artist_name.trim().length >= 2 && d.songs.trim().length >= 2 && d.vibe.trim().length >= 2;
 }
 
 // ──────────────────────────────────────────────────────────────────────

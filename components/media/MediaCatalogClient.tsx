@@ -23,9 +23,15 @@ import MediaCartSidebar from './MediaCartSidebar';
 export default function MediaCatalogClient({
   packages,
   services,
+  profilePhone,
 }: {
   packages: MediaOffering[];
   services: MediaOffering[];
+  /** Phone on the buyer's profile, if set. If null/empty, the cart's
+   *  Checkout button surfaces a phone input the buyer must fill before
+   *  Stripe can be hit. We persist it to the profile after checkout so
+   *  the prompt only fires once per account. */
+  profilePhone?: string | null;
 }) {
   // Single-expansion model: one card at a time. Closing a card by
   // clicking its header just sets `expandedId` to null.
@@ -99,7 +105,7 @@ export default function MediaCatalogClient({
         )}
       </div>
 
-      <MediaCartSidebar />
+      <MediaCartSidebar profilePhone={profilePhone} />
     </MediaCartProvider>
   );
 }

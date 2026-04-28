@@ -52,18 +52,22 @@ export default async function DashboardMediaPage() {
     bandCount: bandMemberships.length,
   });
 
-  // Parallel fetch — catalog, credit balance, and order count are
-  // independent. Order count drives the "Your orders" entry point in
-  // the hero — if zero we still show the link, but with hint copy.
-  const [allOfferings, balance, orders] = await Promise.all([
+  // Parallel fetch — catalog, credit balance, order count, and the
+  // profile phone (Round 6). Order count drives the "Your orders" entry
+  // point in the hero. Phone pre-fills the cart's checkout input.
+  const supabase = await import('@/lib/supabase/server').then((m) => m.createClient());
+  const supabaseClient = await supabase;
+  const [allOfferings, balance, orders, { data: profileRow }] = await Promise.all([
     getActiveOfferings(),
     getStudioCreditBalanceForUser(user.id),
     getMediaBookingsForOwner({
       userId: user.id,
       bandIds: bandMemberships.map((m) => m.band_id),
     }),
+    supabaseClient.from('profiles').select('phone').eq('user_id', user.id).maybeSingle(),
   ]);
   const orderCount = orders.length;
+  const profilePhone = (profileRow as { phone: string | null } | null)?.phone ?? null;
 
   const visible = allOfferings.filter((o) => isOfferingVisibleTo(o, viewer));
   const { packages, services } = groupOfferings(visible);
@@ -165,7 +169,11 @@ export default async function DashboardMediaPage() {
           same minus the configurator. The persistent cart sidebar /
           mobile bottom bar handles checkout for everything in one go. */}
       {(packages.length > 0 || services.length > 0) && (
-        <MediaCatalogClient packages={packages} services={services} />
+        <MediaCatalogClient
+          packages={packages}
+          services={services}
+          profilePhone={profilePhone}
+        />
       )}
 
       {packages.length === 0 && services.length === 0 && (

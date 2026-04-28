@@ -23,17 +23,45 @@ import type { ConfiguredComponents } from './media-config';
 // ============================================================
 
 /**
+ * Per-song row in the optional songs breakdown. Buyers toggle on the
+ * "Add songs" panel and list each track they want covered with an
+ * optional note (e.g. "this is the cover-art name", "shorts will use
+ * this song's chorus", etc).
+ */
+export interface MediaProjectSong {
+  title: string;
+  notes?: string | null;
+}
+
+/**
  * The questionnaire shape collected on each cart item. Mirrors the
- * media_bookings.project_details JSONB that the webhook writes. Only
- * artist_name / songs / vibe are required; everything else is optional.
+ * media_bookings.project_details JSONB the webhook writes.
+ *
+ * Round 6 (2026-04-28): all fields are optional. Artist name is no
+ * longer collected here at all — we already know who the buyer is from
+ * their session and write the profile name into the booking server-side.
+ * Validation at the cart sidebar is now: phone (from profile or
+ * freshly entered) — that's the only true required field, since the
+ * team will reach out by phone to plan the rest.
  */
 export interface MediaProjectDetails {
+  /** Optional title the buyer wants on the project. */
   project_name?: string | null;
-  artist_name: string;
-  songs: string;
-  vibe: string;
+  /** Optional one-line summary of songs (kept for back-compat with old bookings). */
+  songs?: string | null;
+  /** Optional structured per-song breakdown — preferred over songs string. */
+  songs_breakdown?: MediaProjectSong[];
+  /** Optional cover art name (relevant when the offering has cover art). */
+  cover_art_name?: string | null;
+  /** Optional songs the shorts will use (relevant when offering has shorts). */
+  shorts_song_targets?: string | null;
+  /** Optional vibe / mood description. */
+  vibe?: string | null;
+  /** Optional reference links / artist names. */
   references?: string | null;
+  /** Optional ISO date for target release. */
   release_date?: string | null;
+  /** Optional catch-all. */
   notes?: string | null;
 }
 
@@ -99,22 +127,21 @@ export function toCheckoutPayload(items: MediaCartItem[]): MediaCheckoutCartItem
 // ============================================================
 
 /**
- * Minimum-fields check for project details. The form should validate the
- * same rule but we keep it here too so a manually-constructed cart item
- * (e.g., from a future quick-add-to-cart helper) can't sneak in empty.
+ * Round 6: project details are entirely optional. This helper still
+ * exists for symmetry with future stricter offerings (e.g. an offering
+ * that wants a target release date set) — for now it always returns
+ * true. The cart's checkout button validates phone-presence separately.
  */
-export function isProjectDetailsComplete(d: MediaProjectDetails): boolean {
-  return (
-    typeof d.artist_name === 'string' && d.artist_name.trim().length >= 2 &&
-    typeof d.songs === 'string' && d.songs.trim().length >= 2 &&
-    typeof d.vibe === 'string' && d.vibe.trim().length >= 2
-  );
+export function isProjectDetailsComplete(_d: MediaProjectDetails): boolean {
+  return true;
 }
 
 export const EMPTY_PROJECT_DETAILS: MediaProjectDetails = {
   project_name: '',
-  artist_name: '',
   songs: '',
+  songs_breakdown: [],
+  cover_art_name: '',
+  shorts_song_targets: '',
   vibe: '',
   references: '',
   release_date: '',

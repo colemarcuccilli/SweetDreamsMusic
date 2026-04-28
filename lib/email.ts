@@ -1359,11 +1359,18 @@ export async function sendMediaPurchaseAdminAlert(details: {
   studioHoursIncluded: number;
   bandAttached: boolean;
   configurationLines: string[];
+  /** Round 6 additions — drive the "follow up by phone" call to action. */
+  customerPhone?: string | null;
+  fullPriceTotal?: number;
+  depositPaid?: number;
+  cartItemCount?: number;
 }) {
   try {
     const buildSection = details.configurationLines.length > 0
       ? `
-        <p style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:0.05em;margin:24px 0 8px">Their build</p>
+        <p style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:0.05em;margin:24px 0 8px">${
+          (details.cartItemCount ?? 1) > 1 ? 'Cart contents' : 'Their build'
+        }</p>
         <div style="background:#111;padding:16px;margin:0 0 16px;border-left:3px solid #F4C430">
           <ul style="color:#ccc;font-size:14px;line-height:1.8;padding-left:20px;margin:0">
             ${details.configurationLines.map((line) => `<li>${line}</li>`).join('')}
@@ -1372,19 +1379,51 @@ export async function sendMediaPurchaseAdminAlert(details: {
       `
       : '';
 
+    // Round 6: header callout for the follow-up call. Phone is THE
+    // critical detail for admin — surface it loud + linked.
+    const phone = details.customerPhone?.trim();
+    const phoneCallout = phone
+      ? `
+        <div style="background:#F4C430;color:#000;padding:14px 18px;margin:0 0 20px;border-radius:2px">
+          <p style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;margin:0 0 6px;font-weight:700">📞 Call to plan</p>
+          <p style="font-size:18px;margin:0;font-weight:700"><a href="tel:${phone.replace(/[^+\d]/g, '')}" style="color:#000;text-decoration:none">${phone}</a></p>
+        </div>
+      `
+      : `
+        <div style="background:#660000;color:#fff;padding:14px 18px;margin:0 0 20px;border-radius:2px">
+          <p style="font-size:12px;margin:0;font-weight:700">⚠ No phone on file — reach out by email</p>
+        </div>
+      `;
+
+    // Deposit / remainder breakdown when we know both numbers.
+    const depositRow = details.fullPriceTotal != null && details.depositPaid != null
+      ? detail(
+          'Deposit / Total',
+          `${formatMoney(details.depositPaid)} of ${formatMoney(details.fullPriceTotal)} — remainder ${formatMoney(
+            details.fullPriceTotal - details.depositPaid,
+          )}`,
+        )
+      : detail('Amount', formatMoney(details.amountPaid));
+
+    const subject = `${(details.cartItemCount ?? 1) > 1 ? 'Cart' : 'Media Sale'} — ${
+      details.offeringTitle
+    } — Deposit ${formatMoney(details.amountPaid)}`;
+
     await resend.emails.send({
       from: FROM,
       to: ['jayvalleo@sweetdreams.us', 'cole@sweetdreams.us'],
       replyTo: details.buyerEmail,
-      subject: `Media Sale — ${details.offeringTitle} — ${formatMoney(details.amountPaid)}`,
+      subject,
       html: wrap(
-        h1('MEDIA SALE') +
+        h1((details.cartItemCount ?? 1) > 1 ? 'MEDIA CART SALE' : 'MEDIA SALE') +
+        phoneCallout +
         p(`<strong style="color:#F4C430">${details.buyerName}</strong> just bought <strong>${details.offeringTitle}</strong>.`) +
         detailTable(
           detail('Buyer', details.buyerName) +
           detail('Email', details.buyerEmail) +
-          detail('Offering', details.offeringTitle) +
-          detail('Amount', formatMoney(details.amountPaid)) +
+          (phone ? detail('Phone', phone) : '') +
+          detail('Order', details.offeringTitle) +
+          depositRow +
           (details.studioHoursIncluded > 0
             ? detail('Studio Hours', `${details.studioHoursIncluded} hr${details.studioHoursIncluded === 1 ? '' : 's'} (${details.bandAttached ? 'band balance' : 'personal balance'})`)
             : detail('Studio Hours', 'none')) +

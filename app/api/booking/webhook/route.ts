@@ -911,12 +911,18 @@ export async function POST(request: NextRequest) {
         let primaryBookingId: string | null = null;
         let totalStudioHours = 0;
 
+        // Round 6: Stripe now charges 50% deposit. Per-line full price
+        // sits in the cart snapshot; per-line deposit is half (rounded
+        // down to integer cents for Stripe). final_paid_at stays null
+        // until admin marks the remainder paid via the future
+        // /api/admin/media/bookings/[id] PATCH (same path that already
+        // handles status flips + deliverables).
+        const customerPhone = meta.customer_phone || null;
+
         for (let idx = 0; idx < cart.length; idx++) {
           const item = cart[idx];
-          // Status = 'deposited' (paid in full, awaiting scheduling).
-          // Per-item price_cents from the snapshot — server-side
-          // computeConfiguredPriceCents was the source of truth at
-          // checkout creation, so this number matches Stripe.
+          const fullPrice = Number(item.price_cents) || 0;
+          const lineDeposit = Math.floor(fullPrice * 0.5);
           const { data: row, error: bookingErr } = await supabase
             .from('media_bookings')
             .insert({
@@ -926,15 +932,20 @@ export async function POST(request: NextRequest) {
               status: 'deposited',
               configured_components: item.configured_components,
               project_details: item.project_details,
-              final_price_cents: item.price_cents,
-              deposit_cents: item.price_cents,
+              // Full sticker price stored as final_price_cents; what was
+              // actually charged today is deposit_cents. Remainder lives
+              // in the gap (final - deposit) and gets billed later.
+              final_price_cents: fullPrice,
+              deposit_cents: lineDeposit,
+              customer_phone: customerPhone,
               // Only the first row carries the Stripe payment intent / session
               // since they all share the same checkout session. Putting them
               // on every row would make the data redundant.
               stripe_payment_intent_id: idx === 0 ? (session.payment_intent as string) : null,
               stripe_session_id: session.id,
               deposit_paid_at: new Date().toISOString(),
-              final_paid_at: new Date().toISOString(),
+              // final_paid_at stays NULL until admin charges the remainder.
+              final_paid_at: null,
             })
             .select('id')
             .single();
@@ -1004,13 +1015,21 @@ export async function POST(request: NextRequest) {
         //    a Resend outage can never block the booking write or fail
         //    the webhook back to Stripe.
         //
-        //    The configuration summary is whatever the checkout API stashed
-        //    in `configuration_summary` metadata — already pre-rendered as
-        //    "Cover art — included · 3 shorts — premium · ...", joined on
-        //    ` · `. We split here so each line renders as its own bullet.
-        const configurationLines = meta.configuration_summary
-          ? meta.configuration_summary.split(' · ').filter(Boolean)
-          : [];
+        //    Round 6: cart-aware summary. For multi-item carts the
+        //    summary lines come from cart_summary metadata (joined on
+        //    ' || '); for legacy single-item flow we fall back to the
+        //    older configuration_summary on ` · `. Phone shown to admin
+        //    so they know how to reach the buyer.
+        const configurationLines = meta.cart_summary
+          ? meta.cart_summary.split(' || ').filter(Boolean)
+          : meta.configuration_summary
+            ? meta.configuration_summary.split(' · ').filter(Boolean)
+            : [];
+        const totalSticker = cart.reduce((sum, item) => sum + (Number(item.price_cents) || 0), 0);
+        const totalDeposit = cart.reduce(
+          (sum, item) => sum + Math.floor((Number(item.price_cents) || 0) * 0.5),
+          0,
+        );
         if (buyerEmail) {
           try {
             await sendMediaPurchaseConfirmation(buyerEmail, {
@@ -1030,11 +1049,19 @@ export async function POST(request: NextRequest) {
           await sendMediaPurchaseAdminAlert({
             buyerName,
             buyerEmail: buyerEmail || 'unknown',
-            offeringTitle,
+            offeringTitle: cart.length > 1
+              ? `${cart.length} media items (${cart.map((c) => c.offering_title).join(', ')})`
+              : offeringTitle,
             amountPaid,
             studioHoursIncluded: studioHours,
             bandAttached: !!bandId,
             configurationLines,
+            // Round 6: pass remainder + phone so the admin email shows
+            // exactly what the team needs to plan the follow-up call.
+            customerPhone: customerPhone,
+            fullPriceTotal: totalSticker,
+            depositPaid: totalDeposit,
+            cartItemCount: cart.length,
           });
         } catch (e) {
           console.error('[webhook] media admin alert error:', e);
