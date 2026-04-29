@@ -31,8 +31,10 @@ function fmt(cents: number): string {
 
 export default function MediaCartSidebar({
   profilePhone,
+  isAdmin,
 }: {
   profilePhone?: string | null;
+  isAdmin?: boolean;
 }) {
   const cart = useMediaCart();
   const [submitting, setSubmitting] = useState(false);
@@ -41,6 +43,9 @@ export default function MediaCartSidebar({
   // Phone state. Pre-fill from the profile when present so returning
   // buyers don't see the prompt; empty triggers the input UI.
   const [phone, setPhone] = useState(profilePhone ?? '');
+  // Admin-only: skip Stripe and write rows with is_test=true. Lets us
+  // test the full flow without polluting accounting.
+  const [testMode, setTestMode] = useState(false);
 
   // Phone validation is intentionally permissive — we just require enough
   // digits to look like a real number. The team calls these manually so
@@ -51,19 +56,25 @@ export default function MediaCartSidebar({
 
   async function checkout() {
     if (cart.items.length === 0) return;
-    if (!phoneOk) {
+    // Test mode skips phone validation — admin is just simulating.
+    if (!testMode && !phoneOk) {
       setError('Phone number required so we can call to plan.');
       return;
     }
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch('/api/media/checkout', {
+      // Test-mode admins go to the bypass endpoint that writes rows
+      // with is_test=true; everyone else hits Stripe.
+      const endpoint = testMode
+        ? '/api/admin/media/test-checkout'
+        : '/api/media/checkout';
+      const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           cart: toCheckoutPayload(cart.items),
-          phone: phone.trim(),
+          phone: phone.trim() || null,
         }),
       });
       if (res.status === 401) {
@@ -76,8 +87,12 @@ export default function MediaCartSidebar({
         setSubmitting(false);
         return;
       }
+      // Test mode returns { ok, success_url } — same redirect pattern,
+      // no Stripe URL.
       if (data.url) {
         window.location.href = data.url;
+      } else if (data.success_url) {
+        window.location.href = data.success_url;
       } else {
         setError('Checkout URL missing — please try again.');
         setSubmitting(false);
@@ -107,6 +122,9 @@ export default function MediaCartSidebar({
           onPhoneChange={setPhone}
           phoneOk={phoneOk}
           phoneFromProfile={!!profilePhone}
+          isAdmin={isAdmin}
+          testMode={testMode}
+          onTestModeChange={setTestMode}
         />
       </aside>
 
@@ -152,6 +170,9 @@ export default function MediaCartSidebar({
                 onPhoneChange={setPhone}
                 phoneOk={phoneOk}
                 phoneFromProfile={!!profilePhone}
+                isAdmin={isAdmin}
+                testMode={testMode}
+                onTestModeChange={setTestMode}
                 noBorder
               />
             </div>
@@ -176,6 +197,9 @@ function CartContents({
   onPhoneChange,
   phoneOk,
   phoneFromProfile,
+  isAdmin,
+  testMode,
+  onTestModeChange,
   noBorder,
 }: {
   items: MediaCartItem[];
@@ -188,6 +212,9 @@ function CartContents({
   onPhoneChange: (v: string) => void;
   phoneOk: boolean;
   phoneFromProfile: boolean;
+  isAdmin?: boolean;
+  testMode?: boolean;
+  onTestModeChange?: (v: boolean) => void;
   noBorder?: boolean;
 }) {
   // Round 6: 50% deposit charged at checkout. Always rounded down so we
@@ -303,16 +330,43 @@ function CartContents({
           </p>
         </div>
 
+        {/* Admin-only: test-mode toggle. When on, the Checkout button
+            calls /api/admin/media/test-checkout instead of Stripe and
+            writes rows with is_test=true so accounting stays clean. */}
+        {isAdmin && (
+          <label className="flex items-start gap-2 px-3 py-2 bg-black/[0.04] border border-dashed border-black/30 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!testMode}
+              onChange={(e) => onTestModeChange?.(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span className="font-mono text-[10px] text-black/70 leading-tight">
+              <strong>ADMIN · Test mode</strong> — skip Stripe, mark{' '}
+              <code className="text-[10px]">is_test=true</code>, excluded from
+              accounting. Use to QA the cart flow without real charges.
+            </span>
+          </label>
+        )}
+
         {error && (
           <p className="font-mono text-[11px] text-red-700">{error}</p>
         )}
         <button
           type="button"
           onClick={onCheckout}
-          disabled={submitting || items.length === 0 || !phoneOk}
-          className="w-full bg-black text-white font-mono text-xs font-bold uppercase tracking-wider px-4 py-3 hover:bg-accent hover:text-black transition-colors inline-flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={submitting || items.length === 0 || (!testMode && !phoneOk)}
+          className={`w-full font-mono text-xs font-bold uppercase tracking-wider px-4 py-3 transition-colors inline-flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed ${
+            testMode
+              ? 'bg-purple-700 text-white hover:bg-purple-800'
+              : 'bg-black text-white hover:bg-accent hover:text-black'
+          }`}
         >
-          {submitting ? 'Starting checkout…' : `Checkout · ${fmt(depositCents)}`}
+          {submitting
+            ? 'Processing…'
+            : testMode
+            ? `[TEST] Simulate · ${fmt(depositCents)}`
+            : `Checkout · ${fmt(depositCents)}`}
           {!submitting && <ArrowRight className="w-3 h-3" />}
         </button>
       </div>

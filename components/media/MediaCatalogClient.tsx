@@ -24,6 +24,7 @@ export default function MediaCatalogClient({
   packages,
   services,
   profilePhone,
+  isAdmin,
 }: {
   packages: MediaOffering[];
   services: MediaOffering[];
@@ -32,6 +33,11 @@ export default function MediaCatalogClient({
    *  Stripe can be hit. We persist it to the profile after checkout so
    *  the prompt only fires once per account. */
   profilePhone?: string | null;
+  /** When true, the cart sidebar shows a "Test mode (skip Stripe)" toggle.
+   *  Test purchases write rows with is_test=true so they're excluded
+   *  from accounting, and the Stripe call is replaced with a direct
+   *  insert via /api/admin/media/test-checkout. */
+  isAdmin?: boolean;
 }) {
   // Single-expansion model: one card at a time. Closing a card by
   // clicking its header just sets `expandedId` to null.
@@ -105,7 +111,7 @@ export default function MediaCatalogClient({
         )}
       </div>
 
-      <MediaCartSidebar profilePhone={profilePhone} />
+      <MediaCartSidebar profilePhone={profilePhone} isAdmin={isAdmin} />
     </MediaCartProvider>
   );
 }

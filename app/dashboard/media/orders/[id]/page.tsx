@@ -64,12 +64,26 @@ export default async function OrderDetailPage({
       project_name?: string | null;
       artist_name?: string | null;
       songs?: string | null;
+      songs_breakdown?: Array<{ title: string; notes?: string | null }>;
+      cover_art_name?: string | null;
+      shorts_song_targets?: string | null;
       references?: string | null;
       vibe?: string | null;
       release_date?: string | null;
       notes?: string | null;
     } | null;
     final_price_cents: number;
+    deposit_cents: number | null;
+    actual_deposit_paid: number | null;
+    final_paid_at: string | null;
+    is_test: boolean | null;
+    component_status: Record<string, {
+      completed?: boolean;
+      completed_at?: string | null;
+      drive_url?: string | null;
+      notified_at?: string | null;
+      completed_by?: string | null;
+    }> | null;
     created_at: string;
     notes_to_us: string | null;
     deliverables: { items?: Array<{ label: string; url: string; kind?: string; added_at?: string }> } | null;
@@ -154,6 +168,11 @@ export default async function OrderDetailPage({
           </Link>
           <p className="font-mono text-accent text-xs font-semibold tracking-[0.3em] uppercase mb-2">
             Order · Status: {booking.status}
+            {booking.is_test && (
+              <span className="ml-2 px-2 py-0.5 bg-purple-700 text-white text-[10px] font-bold tracking-wider">
+                TEST
+              </span>
+            )}
           </p>
           <h1 className="text-heading-xl mb-2">{offering.title}</h1>
           <p className="font-mono text-sm text-white/60">
@@ -170,6 +189,27 @@ export default async function OrderDetailPage({
 
       <section className="bg-white text-black py-12">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
+
+          {/* Balance owed — Round 7. Shows what's been collected, what's
+              still owed, and whether the order is fully paid. The team
+              calls to plan + bills the remainder, so the buyer needs to
+              see the gap clearly. */}
+          {booking.final_price_cents > 0 && (
+            <BalancePanel
+              total={booking.final_price_cents}
+              depositPaid={booking.actual_deposit_paid ?? booking.deposit_cents ?? 0}
+              fullyPaidAt={booking.final_paid_at}
+              isTest={!!booking.is_test}
+            />
+          )}
+
+          {/* Production status — Round 7. Per-component progress: cover
+              art done, shorts pending, etc. Renders only when the
+              offering has slots and we have status data. */}
+          <ProductionStatusPanel
+            offeringSlots={(offering.components as { slots?: Array<{ key: string; label: string; kind?: string }> } | null)?.slots ?? []}
+            status={booking.component_status ?? {}}
+          />
 
           {/* What you bought */}
           {(manifestLines.length > 0 || offering.studio_hours_included > 0) && (
@@ -441,6 +481,181 @@ function ProjectDetailRow({
       >
         {value}
       </p>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Round 7: Balance panel. Shows total + deposit paid + remainder owed
+// at the top of the order page. When fully paid, collapses into a
+// quiet "Paid in full" badge. Test orders get a clear marker so
+// buyers can't be confused about whether they actually owe money.
+// ──────────────────────────────────────────────────────────────────────
+function BalancePanel({
+  total,
+  depositPaid,
+  fullyPaidAt,
+  isTest,
+}: {
+  total: number;
+  depositPaid: number;
+  fullyPaidAt: string | null;
+  isTest: boolean;
+}) {
+  const remainder = Math.max(0, total - depositPaid);
+  const isFullyPaid = !!fullyPaidAt || remainder === 0;
+
+  if (isTest) {
+    return (
+      <div className="border-2 border-purple-300 bg-purple-50 p-5">
+        <p className="font-mono text-[11px] uppercase tracking-wider font-bold text-purple-900 mb-1">
+          Test order
+        </p>
+        <p className="font-mono text-sm text-purple-900/80">
+          This order was created in test mode. <strong>No payment was actually processed</strong> —
+          it&apos;s here for QA purposes only and is excluded from accounting.
+        </p>
+      </div>
+    );
+  }
+
+  if (isFullyPaid) {
+    return (
+      <div className="border-2 border-green-300 bg-green-50 p-5 flex items-center gap-3">
+        <span className="font-mono text-[11px] uppercase tracking-wider font-bold text-green-900 px-2 py-0.5 bg-green-200">
+          Paid in full
+        </span>
+        <p className="font-mono text-sm text-green-900/80">
+          Total {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(total / 100)} settled.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-2 border-accent bg-accent/10 p-5">
+      <p className="font-mono text-[11px] uppercase tracking-wider font-bold text-black/70 mb-3">
+        Balance
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 text-sm">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">
+            Total
+          </p>
+          <p className="font-mono text-lg font-bold">
+            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(total / 100)}
+          </p>
+        </div>
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">
+            Paid (deposit)
+          </p>
+          <p className="font-mono text-lg font-bold text-black/70">
+            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(depositPaid / 100)}
+          </p>
+        </div>
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">
+            Still owed
+          </p>
+          <p className="font-mono text-lg font-bold text-black">
+            {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(remainder / 100)}
+          </p>
+        </div>
+      </div>
+      <p className="font-mono text-[11px] text-black/55 mt-3">
+        We&apos;ll bill the remainder once we&apos;ve scoped the project with you on a call.
+      </p>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Round 7: Production status panel. Renders one row per slot in the
+// offering's components, showing whether each piece is in-progress or
+// completed. When admin attaches a Drive link to a completed slot, the
+// row shows a download CTA. Empty when the offering has no slots
+// (à la carte standalones).
+// ──────────────────────────────────────────────────────────────────────
+function ProductionStatusPanel({
+  offeringSlots,
+  status,
+}: {
+  offeringSlots: Array<{ key: string; label: string; kind?: string }>;
+  status: Record<string, {
+    completed?: boolean;
+    completed_at?: string | null;
+    drive_url?: string | null;
+    notified_at?: string | null;
+    completed_by?: string | null;
+  }>;
+}) {
+  if (!offeringSlots.length) return null;
+
+  // Don't render the panel if literally nothing has happened yet — the
+  // buyer's order is too fresh. We show the panel as soon as the first
+  // status update lands (admin marked anything).
+  const hasAnyActivity = offeringSlots.some((slot) => {
+    const s = status[slot.key];
+    return !!s && (s.completed || s.drive_url);
+  });
+
+  return (
+    <div>
+      <p className="font-mono text-[11px] uppercase tracking-wider text-black/50 mb-3">
+        Production status
+      </p>
+      <div className="border-2 border-black/10">
+        {!hasAnyActivity && (
+          <p className="font-mono text-xs text-black/55 p-5">
+            We haven&apos;t started yet — once we&apos;ve scoped the project, each piece will show
+            up here with a status (in progress / completed) and a download link when it&apos;s ready.
+          </p>
+        )}
+        {hasAnyActivity && (
+          <ul className="divide-y divide-black/10">
+            {offeringSlots.map((slot) => {
+              const s = status[slot.key] ?? {};
+              const isComplete = !!s.completed;
+              return (
+                <li key={slot.key} className="px-4 py-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-bold text-sm">{slot.label}</p>
+                    {isComplete && s.completed_at && (
+                      <p className="font-mono text-[11px] text-black/55">
+                        Completed {new Date(s.completed_at).toLocaleDateString('en-US', {
+                          month: 'short', day: 'numeric',
+                        })}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span
+                      className={`font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 ${
+                        isComplete
+                          ? 'bg-green-100 text-green-900'
+                          : 'bg-black/10 text-black/60'
+                      }`}
+                    >
+                      {isComplete ? 'Completed' : 'In progress'}
+                    </span>
+                    {isComplete && s.drive_url && (
+                      <a
+                        href={s.drive_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-mono text-[11px] uppercase tracking-wider text-accent hover:underline"
+                      >
+                        Download
+                      </a>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

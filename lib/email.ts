@@ -1676,6 +1676,72 @@ export async function sendMediaDeliverablesReady(to: string, details: {
 }
 
 /**
+ * Media payment link — sent when admin charges a media remainder via
+ * the link method (saved card unavailable / admin chose to email
+ * instead). Mirrors `sendPaymentLink` for studio sessions but
+ * routes to the media order page on completion.
+ */
+export async function sendMediaPaymentLink(to: string, details: {
+  buyerName: string;
+  amount: number;
+  paymentUrl: string;
+  bookingId: string;
+}) {
+  try {
+    await resend.emails.send({
+      from: FROM,
+      to,
+      subject: 'Complete Your Media Order Balance — Sweet Dreams Music',
+      html: wrap(
+        h1('Remaining Balance') +
+        p(`Hey ${details.buyerName}, your media order is ready for the next step.`) +
+        p('Please pay the remaining balance below to keep production moving.') +
+        detailTable(
+          detail('Amount Due', formatMoney(details.amount)) +
+          detail('Order', `#${details.bookingId.slice(0, 8)}`)
+        ) +
+        btn('PAY NOW', details.paymentUrl) +
+        p('<span style="color:#666;font-size:11px">This is a secure payment link powered by Stripe. If you have any questions, reply to this email.</span>')
+      ),
+    });
+  } catch (e) { console.error('Email error (media payment link):', e); }
+}
+
+/**
+ * Media component ready — sent when admin marks a single piece of a
+ * media order as completed AND attaches a Google Drive link. Sent ONCE
+ * per piece (the API tracks notified_at to prevent re-sends).
+ *
+ * Subject line includes the component name so the buyer can quickly
+ * spot which piece dropped — useful for multi-component packages
+ * where 4-5 emails arrive over the production timeline.
+ */
+export async function sendMediaComponentReady(to: string, details: {
+  buyerName: string;
+  offeringTitle: string;
+  componentLabel: string;
+  driveUrl: string;
+  bookingId: string;
+}) {
+  try {
+    await resend.emails.send({
+      from: FROM,
+      to,
+      subject: `${details.componentLabel} is ready — ${details.offeringTitle}`,
+      html: wrap(
+        h1('YOUR FILES ARE READY') +
+        p(`Hey ${details.buyerName}, the <strong style="color:#F4C430">${details.componentLabel}</strong> piece of your <strong>${details.offeringTitle}</strong> just landed.`) +
+        p('Tap below to download from Google Drive — videos and high-res files are big, so we host the assets directly on Drive instead of email.') +
+        btn('DOWNLOAD FROM DRIVE', details.driveUrl) +
+        p('<span style="color:#666;font-size:11px">If the link doesn\'t work, paste this URL into your browser:</span>') +
+        `<p style="font-size:11px;color:#888;word-break:break-all;margin:0 0 16px">${details.driveUrl}</p>` +
+        p(`Other pieces in your order are still in production — you'll get an email like this for each one as it's done. <a href="${SITE_URL}/dashboard/media/orders/${details.bookingId}" style="color:#F4C430">Track everything in your dashboard</a>.`)
+      ),
+    });
+  } catch (e) { console.error('Email error (media component ready):', e); }
+}
+
+/**
  * Media inquiry email — sent when a user submits the inquiry form on a
  * range-priced or band-by-request offering. Routes to the same inbox as
  * media purchase alerts (Cole + Jay) so leads get the same eyeballs.
@@ -1683,12 +1749,24 @@ export async function sendMediaDeliverablesReady(to: string, details: {
 export async function sendMediaInquiry(details: {
   inquirerName: string;
   inquirerEmail: string;
+  inquirerPhone?: string | null;
   offeringTitle: string;
   offeringSlug: string;
   bandName: string | null;
   message: string;
 }) {
   try {
+    const phone = details.inquirerPhone?.trim();
+    // Same hot-CTA banner as the purchase admin alert: phone is the
+    // primary follow-up channel for inquiries, surface it loud.
+    const phoneCallout = phone
+      ? `
+        <div style="background:#F4C430;color:#000;padding:14px 18px;margin:0 0 20px">
+          <p style="font-size:11px;text-transform:uppercase;letter-spacing:0.1em;margin:0 0 6px;font-weight:700">📞 Call to plan</p>
+          <p style="font-size:18px;margin:0;font-weight:700"><a href="tel:${phone.replace(/[^+\d]/g, '')}" style="color:#000;text-decoration:none">${phone}</a></p>
+        </div>
+      `
+      : '';
     await resend.emails.send({
       from: FROM,
       to: ['jayvalleo@sweetdreams.us', 'cole@sweetdreams.us'],
@@ -1696,10 +1774,12 @@ export async function sendMediaInquiry(details: {
       subject: `Media Inquiry — ${details.offeringTitle}${details.bandName ? ` (${details.bandName})` : ''}`,
       html: wrap(
         h1('MEDIA INQUIRY') +
+        phoneCallout +
         p(`<strong style="color:#F4C430">${details.inquirerName}</strong> wants to talk about <strong>${details.offeringTitle}</strong>.`) +
         detailTable(
           detail('Inquirer', details.inquirerName) +
           detail('Email', details.inquirerEmail) +
+          (phone ? detail('Phone', phone) : '') +
           (details.bandName ? detail('Band', details.bandName) : '') +
           detail('Offering', details.offeringTitle) +
           detail('Slug', details.offeringSlug)

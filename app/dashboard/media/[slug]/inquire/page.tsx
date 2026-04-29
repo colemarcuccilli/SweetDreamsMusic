@@ -80,6 +80,18 @@ export default async function InquirePage({
     name: m.band.display_name,
   }));
 
+  // Round 7: phone is now required on inquiries. Pre-fill from profile
+  // so returning buyers don't re-enter. The form persists what they
+  // type back to profile.phone via the inquiry API.
+  const { createClient } = await import('@/lib/supabase/server');
+  const supabase = await createClient();
+  const { data: profileRow } = await supabase
+    .from('profiles')
+    .select('phone')
+    .eq('user_id', user.id)
+    .maybeSingle();
+  const profilePhone = (profileRow as { phone: string | null } | null)?.phone ?? null;
+
   return (
     <>
       <DashboardNav
@@ -112,6 +124,7 @@ export default async function InquirePage({
             offeringTitle={offering.title}
             defaultName={user.profile?.display_name ?? ''}
             defaultEmail={user.email}
+            defaultPhone={profilePhone}
             candidateBands={candidateBands}
           />
         </div>

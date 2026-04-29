@@ -35,12 +35,14 @@ export async function POST(request: NextRequest) {
   // ── Parse + validate input ──────────────────────────────────────────
   let slug: string | undefined;
   let name = '';
+  let phone = '';
   let message = '';
   let bandId: string | null = null;
   try {
     const body = await request.json();
     slug = body.slug;
     name = (body.name || '').toString().trim();
+    phone = (body.phone || '').toString().trim();
     message = (body.message || '').toString().trim();
     bandId = body.band_id || null;
   } catch {
@@ -51,6 +53,13 @@ export async function POST(request: NextRequest) {
   }
   if (name.length < 2) {
     return NextResponse.json({ error: 'name required' }, { status: 400 });
+  }
+  // Phone is now required — admin calls these inquiries to plan.
+  // Same permissive digit count as the cart sidebar (phones come in
+  // many formats; we just need enough to dial).
+  const phoneClean = phone.replace(/\D/g, '');
+  if (phoneClean.length < 7) {
+    return NextResponse.json({ error: 'Phone number required' }, { status: 400 });
   }
   if (message.length < 10) {
     return NextResponse.json({ error: 'message too short' }, { status: 400 });
@@ -113,10 +122,22 @@ export async function POST(request: NextRequest) {
       // the NOT NULL constraint on final_price_cents and the admin UI
       // can fill in a real number when they convert this to deposited.
       final_price_cents: 0,
+      customer_phone: phone,
       notes_to_us: `${name}\n\n${message}`,
     })
     .select('id')
     .single();
+
+  // Persist the phone to profile so the buyer doesn't re-enter on
+  // future inquiries. Best-effort — log + continue if this fails.
+  try {
+    await service
+      .from('profiles')
+      .update({ phone })
+      .eq('user_id', user.id);
+  } catch (e) {
+    console.warn('[media/inquiry] profile phone update failed', e);
+  }
 
   if (insertErr) {
     console.error('[media] inquiry insert failed:', insertErr);
@@ -131,6 +152,7 @@ export async function POST(request: NextRequest) {
     await sendMediaInquiry({
       inquirerName: name,
       inquirerEmail: user.email,
+      inquirerPhone: phone,
       offeringTitle: offering.title,
       offeringSlug: offering.slug,
       bandName: attributedBand?.name ?? null,

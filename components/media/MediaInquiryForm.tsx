@@ -26,15 +26,21 @@ export default function MediaInquiryForm({
   offeringTitle,
   defaultName,
   defaultEmail,
+  defaultPhone,
   candidateBands,
 }: {
   slug: string;
   offeringTitle: string;
   defaultName: string;
   defaultEmail: string;
+  /** Pre-fill from profile.phone if present so returning buyers don't
+   *  re-enter. The team CALLS these inquiries — phone is the highest-
+   *  value field on the form. */
+  defaultPhone?: string | null;
   candidateBands: CandidateBand[];
 }) {
   const [name, setName] = useState(defaultName);
+  const [phone, setPhone] = useState(defaultPhone ?? '');
   const [bandId, setBandId] = useState<string>(
     candidateBands.length === 1 ? candidateBands[0]!.id : '',
   );
@@ -43,9 +49,18 @@ export default function MediaInquiryForm({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
+  // Permissive phone check — admin will dial it manually so we just
+  // need enough digits to look real. Same rule as the cart sidebar.
+  const phoneClean = phone.replace(/\D/g, '');
+  const phoneOk = phoneClean.length >= 7;
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (!phoneOk) {
+      setError('Phone number required so we can call to plan.');
+      return;
+    }
     if (message.trim().length < 10) {
       setError('Tell us a bit more about your project — at least a sentence or two.');
       return;
@@ -58,6 +73,7 @@ export default function MediaInquiryForm({
         body: JSON.stringify({
           slug,
           name: name.trim(),
+          phone: phone.trim(),
           message: message.trim(),
           band_id: bandId || null,
         }),
@@ -128,6 +144,26 @@ export default function MediaInquiryForm({
         />
         <p className="font-mono text-[11px] text-black/40 mt-1.5">
           We reply to your account email. Update it in settings if you want a different inbox.
+        </p>
+      </div>
+
+      <div>
+        <label className="block font-mono text-[11px] uppercase tracking-wider font-bold text-black/60 mb-1.5">
+          Phone number *
+        </label>
+        <input
+          type="tel"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          required
+          placeholder="(260) 555-0123"
+          className={`w-full bg-white border-2 px-4 py-3 text-base focus:border-black outline-none ${
+            phoneOk ? 'border-black/15' : 'border-yellow-400'
+          }`}
+        />
+        <p className="font-mono text-[11px] text-black/40 mt-1.5">
+          We&apos;ll call you to plan dates, scope, and final pricing. Saved to your
+          profile so you only enter it once.
         </p>
       </div>
 

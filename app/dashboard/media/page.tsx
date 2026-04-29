@@ -173,6 +173,7 @@ export default async function DashboardMediaPage() {
           packages={packages}
           services={services}
           profilePhone={profilePhone}
+          isAdmin={user.role === 'admin'}
         />
       )}
 
