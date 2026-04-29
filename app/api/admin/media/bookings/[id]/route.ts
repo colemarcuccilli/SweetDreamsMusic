@@ -1,8 +1,10 @@
 // app/api/admin/media/bookings/[id]/route.ts
 //
-// Admin updates to a single media booking. PATCH handles two things:
+// Admin updates to a single media booking. PATCH handles three things:
 //   1. status transitions (deposited → scheduled → in_production → delivered)
 //   2. deliverables JSONB updates (admin paste video URLs, file links, etc)
+//   3. final_price_cents adjustments (scope creep — admin bumps the total
+//      mid-project; the Charge remainder modal collects the new delta)
 //
 // Why combined: admin typically marks a booking 'delivered' AT the same
 // moment they paste the final deliverables. One PATCH = one round-trip.
@@ -66,7 +68,25 @@ export async function PATCH(
     }
   }
 
-  if (Object.keys(update).length === 0) {
+  // final_price_cents — non-negative integer. Floor enforcement (can't go
+  // below already-paid) happens after we read the row so we have the
+  // authoritative paid figure to compare against.
+  let priceAdjustment: { newCents: number } | null = null;
+  if ('final_price_cents' in body) {
+    if (
+      typeof body.final_price_cents !== 'number' ||
+      !Number.isInteger(body.final_price_cents) ||
+      body.final_price_cents < 0
+    ) {
+      return NextResponse.json(
+        { error: 'final_price_cents must be a non-negative integer' },
+        { status: 400 },
+      );
+    }
+    priceAdjustment = { newCents: body.final_price_cents };
+  }
+
+  if (Object.keys(update).length === 0 && !priceAdjustment) {
     return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
   }
 
@@ -76,9 +96,32 @@ export async function PATCH(
   // transitions for the buyer-notification email. Single row read; cheap.
   const { data: prevRow } = await service
     .from('media_bookings')
-    .select('deliverables, user_id, offering_id')
+    .select('deliverables, user_id, offering_id, final_price_cents, deposit_cents, actual_deposit_paid, final_paid_at')
     .eq('id', id)
     .maybeSingle();
+
+  if (priceAdjustment) {
+    const prev = prevRow as
+      | {
+          final_price_cents: number;
+          deposit_cents: number | null;
+          actual_deposit_paid: number | null;
+          final_paid_at: string | null;
+        }
+      | null;
+    const paid = prev?.actual_deposit_paid ?? prev?.deposit_cents ?? 0;
+    if (priceAdjustment.newCents < paid) {
+      return NextResponse.json(
+        { error: `New total can't be less than already-paid (${paid} cents)` },
+        { status: 400 },
+      );
+    }
+    update.final_price_cents = priceAdjustment.newCents;
+    // If admin bumps total to match paid, the row becomes fully paid.
+    if (priceAdjustment.newCents === paid && !prev?.final_paid_at && paid > 0) {
+      update.final_paid_at = new Date().toISOString();
+    }
+  }
 
   const { data, error } = await service
     .from('media_bookings')
@@ -90,6 +133,23 @@ export async function PATCH(
   if (error) {
     console.error('[admin/media/bookings] PATCH error:', error);
     return NextResponse.json({ error: 'Could not update booking' }, { status: 400 });
+  }
+
+  // Audit any price adjustment so accounting can reconstruct the deltas.
+  if (priceAdjustment && prevRow) {
+    const prev = prevRow as { final_price_cents: number };
+    if (prev.final_price_cents !== priceAdjustment.newCents) {
+      await service.from('media_booking_audit_log').insert({
+        booking_id: id,
+        action: 'total_adjusted',
+        performed_by: user.email,
+        details: {
+          previous_total: prev.final_price_cents,
+          new_total: priceAdjustment.newCents,
+          delta: priceAdjustment.newCents - prev.final_price_cents,
+        },
+      });
+    }
   }
 
   // Phase E follow-up: first-deliverable notification.

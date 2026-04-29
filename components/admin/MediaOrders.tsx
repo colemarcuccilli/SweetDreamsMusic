@@ -29,6 +29,12 @@ import {
   Trash2,
   Link as LinkIcon,
   AlertCircle,
+  CreditCard,
+  Banknote,
+  DollarSign,
+  PackageCheck,
+  Phone,
+  TestTube2,
 } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
 import {
@@ -37,6 +43,16 @@ import {
   SESSION_KIND_LABELS,
 } from '@/lib/media-scheduling';
 
+// Per-slot completion record we read from media_bookings.component_status.
+// Matches the shape the component-complete API writes.
+interface SlotStatus {
+  completed?: boolean;
+  completed_at?: string | null;
+  completed_by?: string | null;
+  drive_url?: string | null;
+  notified_at?: string | null;
+}
+
 interface BookingRow {
   id: string;
   offering_id: string;
@@ -44,16 +60,31 @@ interface BookingRow {
   band_id: string | null;
   status: string;
   configured_components: unknown | null;
+  project_details: unknown | null;
   final_price_cents: number;
+  deposit_cents: number | null;
+  actual_deposit_paid: number | null;
+  final_paid_at: string | null;
+  deposit_paid_at: string | null;
+  stripe_payment_intent_id: string | null;
+  stripe_session_id: string | null;
   deliverables: { items?: DeliverableItem[] } | null;
+  component_status: Record<string, SlotStatus> | null;
   notes_to_us: string | null;
+  customer_phone: string | null;
+  is_test: boolean | null;
+  created_by: string | null;
   created_at: string;
+  updated_at?: string;
 }
 
 interface OfferingRow {
   id: string;
   title: string;
   slug: string;
+  components: {
+    slots?: Array<{ key: string; label: string; kind?: string }>;
+  } | null;
 }
 
 interface ProfileRow {
@@ -61,6 +92,7 @@ interface ProfileRow {
   display_name: string | null;
   full_name: string | null;
   email: string | null;
+  phone: string | null;
 }
 
 interface BandRow {
@@ -92,6 +124,7 @@ export default function MediaOrders() {
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [showManualModal, setShowManualModal] = useState(false);
 
   async function refresh() {
     setLoading(true);
@@ -133,19 +166,40 @@ export default function MediaOrders() {
             Sessions, deliverables, and order-level admin. Edits land instantly.
           </p>
         </div>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="font-mono text-xs uppercase tracking-wider px-3 py-2 border border-black/15 bg-white"
-        >
-          <option value="all">All statuses</option>
-          {STATUS_OPTIONS.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowManualModal(true)}
+            className="font-mono text-xs uppercase tracking-wider px-3 py-2 bg-black text-white hover:bg-accent hover:text-black inline-flex items-center gap-1.5"
+            title="Create a media booking manually (cash collected, or send a payment link)"
+          >
+            <Plus className="w-3 h-3" />
+            New booking
+          </button>
+          <select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            className="font-mono text-xs uppercase tracking-wider px-3 py-2 border border-black/15 bg-white"
+          >
+            <option value="all">All statuses</option>
+            {STATUS_OPTIONS.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
+
+      {showManualModal && (
+        <ManualBookingModal
+          onClose={() => setShowManualModal(false)}
+          onSuccess={() => {
+            setShowManualModal(false);
+            refresh();
+          }}
+        />
+      )}
 
       {loading ? (
         <p className="font-mono text-sm text-black/50">Loading…</p>
@@ -195,18 +249,31 @@ export default function MediaOrders() {
                       </p>
                     </div>
                   </div>
-                  <span
-                    className={`font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 shrink-0 ${
-                      statusBadgeCls(b.status)
-                    }`}
-                  >
-                    {b.status}
-                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {b.is_test && (
+                      <span
+                        className="font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 bg-purple-100 text-purple-900 inline-flex items-center gap-1"
+                        title="Test booking — no Stripe charge ran"
+                      >
+                        <TestTube2 className="w-3 h-3" />
+                        test
+                      </span>
+                    )}
+                    <span
+                      className={`font-mono text-[10px] uppercase tracking-wider px-2 py-0.5 ${
+                        statusBadgeCls(b.status)
+                      }`}
+                    >
+                      {b.status}
+                    </span>
+                  </div>
                 </button>
 
                 {isExpanded && (
                   <BookingPanel
                     booking={b}
+                    offering={offering}
+                    buyer={buyer}
                     onChange={refresh}
                   />
                 )}
@@ -244,9 +311,13 @@ function statusBadgeCls(status: string): string {
 
 function BookingPanel({
   booking,
+  offering,
+  buyer,
   onChange,
 }: {
   booking: BookingRow;
+  offering: OfferingRow | undefined;
+  buyer: ProfileRow | undefined;
   onChange: () => void;
 }) {
   const [sessions, setSessions] = useState<MediaSessionBooking[]>([]);
@@ -263,6 +334,11 @@ function BookingPanel({
   const [newLabel, setNewLabel] = useState('');
   const [newUrl, setNewUrl] = useState('');
   const [newKind, setNewKind] = useState<DeliverableItem['kind']>('video');
+
+  // Modals: only one open at a time. Set the active modal by key.
+  const [activeModal, setActiveModal] = useState<
+    null | 'chargeRemainder' | 'recordPayment' | 'adjustPrice'
+  >(null);
 
   async function loadSessions() {
     setLoadingSessions(true);
@@ -381,8 +457,116 @@ function BookingPanel({
     saveDeliverables(next);
   }
 
+  // Money math — derive the same way the buyer-facing page does so the two
+  // views can never drift. `actual_deposit_paid` is the authoritative
+  // "money received" figure; `deposit_cents` is the original target amount
+  // (before admin record-payment / charge-remainder mutations land).
+  const total = booking.final_price_cents ?? 0;
+  const paid = booking.actual_deposit_paid ?? 0;
+  const remainder = Math.max(0, total - paid);
+  const fullyPaid = !!booking.final_paid_at || (total > 0 && remainder === 0);
+
+  // Fast contact line for admin in case they need to call/text the buyer.
+  const buyerEmail = buyer?.email ?? null;
+  const buyerPhone = booking.customer_phone || buyer?.phone || null;
+
+  // Component slots come from the offering schema; per-slot completion
+  // is stored as JSONB on the booking. Merge them at render time so the
+  // UI always reflects the latest API shape — no derived state.
+  const slots = offering?.components?.slots ?? [];
+  const slotStatusMap = (booking.component_status ?? {}) as Record<string, SlotStatus>;
+
   return (
     <div className="border-t border-black/10 p-5 bg-black/[0.02] space-y-5">
+      {/* Header: buyer contact + payment summary */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="md:col-span-1">
+          <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">Buyer</p>
+          <p className="text-sm font-bold">{buyer?.full_name || buyer?.display_name || '—'}</p>
+          {buyerEmail && (
+            <a href={`mailto:${buyerEmail}`} className="block font-mono text-[11px] text-black/60 hover:text-accent truncate">
+              {buyerEmail}
+            </a>
+          )}
+          {buyerPhone && (
+            <a href={`tel:${buyerPhone}`} className="block font-mono text-[11px] text-black/60 hover:text-accent inline-flex items-center gap-1">
+              <Phone className="w-3 h-3" />
+              {buyerPhone}
+            </a>
+          )}
+          {booking.created_by && (
+            <p className="font-mono text-[10px] text-black/40 mt-1">created by {booking.created_by}</p>
+          )}
+        </div>
+        <div className="md:col-span-2 grid grid-cols-3 gap-3">
+          <div className="bg-white border border-black/10 p-3">
+            <p className="font-mono text-[10px] uppercase tracking-wider text-black/50">Total</p>
+            <p className="text-lg font-bold tabular-nums">{formatCents(total)}</p>
+          </div>
+          <div className="bg-white border border-black/10 p-3">
+            <p className="font-mono text-[10px] uppercase tracking-wider text-black/50">Paid</p>
+            <p className="text-lg font-bold tabular-nums text-green-700">{formatCents(paid)}</p>
+            {booking.deposit_paid_at && (
+              <p className="font-mono text-[9px] text-black/40">
+                deposit {new Date(booking.deposit_paid_at).toLocaleDateString()}
+              </p>
+            )}
+          </div>
+          <div className={`border p-3 ${remainder > 0 ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'}`}>
+            <p className="font-mono text-[10px] uppercase tracking-wider text-black/50">Owed</p>
+            <p className={`text-lg font-bold tabular-nums ${remainder > 0 ? 'text-amber-900' : 'text-green-700'}`}>
+              {formatCents(remainder)}
+            </p>
+            {fullyPaid && (
+              <p className="font-mono text-[9px] text-green-700 uppercase tracking-wider">paid in full</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Action row: charge / record / adjust */}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setActiveModal('chargeRemainder')}
+          disabled={booking.is_test === true || fullyPaid}
+          className="font-mono text-xs px-3 py-1.5 bg-black text-white hover:bg-accent hover:text-black disabled:opacity-30 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+          title={
+            booking.is_test
+              ? 'Test bookings cannot run real charges'
+              : fullyPaid
+              ? 'Already paid in full'
+              : 'Charge the saved card or send a payment link'
+          }
+        >
+          <CreditCard className="w-3 h-3" />
+          Charge remainder
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveModal('recordPayment')}
+          disabled={booking.is_test === true}
+          className="font-mono text-xs px-3 py-1.5 border border-black/30 hover:bg-black hover:text-white disabled:opacity-30 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+          title={booking.is_test ? 'Test bookings cannot record real payments' : 'Record cash, Venmo, check, or other'}
+        >
+          <Banknote className="w-3 h-3" />
+          Record payment
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveModal('adjustPrice')}
+          className="font-mono text-xs px-3 py-1.5 border border-black/15 text-black/60 hover:bg-black/5 inline-flex items-center gap-1.5"
+        >
+          <DollarSign className="w-3 h-3" />
+          Adjust price
+        </button>
+        {booking.is_test && (
+          <span className="font-mono text-[10px] text-purple-700 uppercase tracking-wider ml-auto">
+            test booking — money actions disabled
+          </span>
+        )}
+      </div>
+
       {/* Status switcher */}
       <div className="flex items-center gap-3">
         <p className="font-mono text-[11px] uppercase tracking-wider font-bold text-black/60">
@@ -409,6 +593,27 @@ function BookingPanel({
           {savingStatus ? 'Saving…' : 'Save'}
         </button>
       </div>
+
+      {/* Per-component completion checkboxes */}
+      {slots.length > 0 && (
+        <div>
+          <p className="font-mono text-[11px] uppercase tracking-wider font-bold text-black/60 mb-2 inline-flex items-center gap-1.5">
+            <PackageCheck className="w-3 h-3" />
+            Components ({slots.filter((s) => slotStatusMap[s.key]?.completed).length}/{slots.length} done)
+          </p>
+          <ul className="space-y-2">
+            {slots.map((slot) => (
+              <ComponentSlotRow
+                key={slot.key}
+                bookingId={booking.id}
+                slot={slot}
+                state={slotStatusMap[slot.key] ?? {}}
+                onChange={onChange}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Sessions */}
       <div>
@@ -522,7 +727,984 @@ function BookingPanel({
           {error}
         </div>
       )}
+
+      {/* Modals */}
+      {activeModal === 'chargeRemainder' && (
+        <ChargeRemainderModal
+          bookingId={booking.id}
+          remainder={remainder}
+          total={total}
+          onClose={() => setActiveModal(null)}
+          onSuccess={() => {
+            setActiveModal(null);
+            onChange();
+          }}
+        />
+      )}
+      {activeModal === 'recordPayment' && (
+        <RecordPaymentModal
+          bookingId={booking.id}
+          remainder={remainder}
+          onClose={() => setActiveModal(null)}
+          onSuccess={() => {
+            setActiveModal(null);
+            onChange();
+          }}
+        />
+      )}
+      {activeModal === 'adjustPrice' && (
+        <AdjustPriceModal
+          bookingId={booking.id}
+          currentTotal={total}
+          paidSoFar={paid}
+          onClose={() => setActiveModal(null)}
+          onSuccess={() => {
+            setActiveModal(null);
+            onChange();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+// ============================================================
+// Per-slot component completion row
+// ============================================================
+//
+// Renders a checkbox + Drive URL field per offering slot. On flip-to-done
+// with a Drive URL present, the API emails the buyer "your X is ready".
+// The first POST locks `notified_at`; subsequent re-clicks are no-ops on
+// the email side. Admin can edit a Drive URL after the fact (the API
+// re-saves it but won't re-send the email — the API stamps notified_at
+// the first time only).
+
+function ComponentSlotRow({
+  bookingId,
+  slot,
+  state,
+  onChange,
+}: {
+  bookingId: string;
+  slot: { key: string; label: string; kind?: string };
+  state: SlotStatus;
+  onChange: () => void;
+}) {
+  const [completed, setCompleted] = useState(!!state.completed);
+  const [driveUrl, setDriveUrl] = useState(state.drive_url ?? '');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
+
+  // Resync local state if parent refresh swapped in newer data.
+  useEffect(() => {
+    setCompleted(!!state.completed);
+    setDriveUrl(state.drive_url ?? '');
+    setDirty(false);
+  }, [state.completed, state.drive_url]);
+
+  async function save(opts?: { silent?: boolean }) {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/admin/media/bookings/${bookingId}/component-complete`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            slot_key: slot.key,
+            completed,
+            drive_url: driveUrl.trim() || undefined,
+            notify_buyer: !opts?.silent,
+          }),
+        },
+      );
+      if (!res.ok) {
+        const data = await res.json();
+        setError(data.error || 'Could not save');
+        return;
+      }
+      setDirty(false);
+      onChange();
+    } catch (e) {
+      console.error('[component-slot] save error:', e);
+      setError('Network error');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <li className="px-3 py-2 bg-white border border-black/10">
+      <div className="flex items-center gap-3">
+        <label className="flex items-center gap-2 shrink-0 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={completed}
+            onChange={(e) => {
+              setCompleted(e.target.checked);
+              setDirty(true);
+            }}
+            className="w-4 h-4"
+          />
+          <span className="text-sm font-bold">{slot.label}</span>
+          {slot.kind && (
+            <span className="font-mono text-[10px] uppercase tracking-wider text-black/40">
+              {slot.kind}
+            </span>
+          )}
+        </label>
+        <input
+          type="url"
+          value={driveUrl}
+          onChange={(e) => {
+            setDriveUrl(e.target.value);
+            setDirty(true);
+          }}
+          placeholder="Google Drive URL (optional)"
+          className="flex-1 px-2 py-1 border border-black/15 bg-white text-sm"
+        />
+        <button
+          type="button"
+          onClick={() => save()}
+          disabled={submitting || !dirty}
+          className="font-mono text-xs px-3 py-1 bg-black text-white hover:bg-accent hover:text-black disabled:opacity-30 inline-flex items-center gap-1 shrink-0"
+          title={
+            completed && driveUrl.trim() && !state.notified_at
+              ? 'Saves + emails buyer "your X is ready"'
+              : 'Save changes'
+          }
+        >
+          <Save className="w-3 h-3" />
+          {submitting ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+      <div className="flex items-center gap-3 mt-1">
+        {state.completed && state.completed_at && (
+          <span className="font-mono text-[10px] text-green-700 uppercase tracking-wider">
+            ✓ {new Date(state.completed_at).toLocaleDateString()}
+            {state.completed_by && ` by ${state.completed_by}`}
+          </span>
+        )}
+        {state.notified_at && (
+          <span className="font-mono text-[10px] text-blue-700">
+            buyer emailed {new Date(state.notified_at).toLocaleDateString()}
+          </span>
+        )}
+        {state.drive_url && (
+          <a
+            href={state.drive_url}
+            target="_blank"
+            rel="noreferrer"
+            className="font-mono text-[10px] text-black/60 hover:text-accent inline-flex items-center gap-1"
+          >
+            <LinkIcon className="w-2.5 h-2.5" />
+            saved link
+          </a>
+        )}
+        {error && <span className="font-mono text-[10px] text-red-700">{error}</span>}
+      </div>
+    </li>
+  );
+}
+
+// ============================================================
+// Modals: charge remainder / record payment / adjust price
+// ============================================================
+//
+// Pattern: each modal is a simple controlled overlay. Click the backdrop
+// or hit Cancel to close. They post to the dedicated API routes and call
+// onSuccess() which the parent uses to refresh + close.
+
+function ModalShell({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white border-2 border-black w-full max-w-md p-5 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="font-bold text-base mb-4">{title}</h3>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function ChargeRemainderModal({
+  bookingId,
+  remainder,
+  total,
+  onClose,
+  onSuccess,
+}: {
+  bookingId: string;
+  remainder: number;
+  total: number;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [method, setMethod] = useState<'auto' | 'card' | 'link'>('auto');
+  const [amountDollars, setAmountDollars] = useState((remainder / 100).toFixed(2));
+  const [adjustTotal, setAdjustTotal] = useState(false);
+  const [newTotalDollars, setNewTotalDollars] = useState((total / 100).toFixed(2));
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+
+  async function submit() {
+    const cents = Math.round((Number(amountDollars) || 0) * 100);
+    if (cents <= 0) {
+      setError('Amount must be > 0');
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const body: Record<string, unknown> = { amount: cents };
+      if (method !== 'auto') body.method = method;
+      if (adjustTotal) {
+        const newCents = Math.round((Number(newTotalDollars) || 0) * 100);
+        if (newCents < 0) {
+          setError('Total must be ≥ 0');
+          setSubmitting(false);
+          return;
+        }
+        body.changeTotalTo = newCents;
+      }
+      const res = await fetch(`/api/admin/media/bookings/${bookingId}/charge-remainder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Could not charge remainder');
+        setSubmitting(false);
+        return;
+      }
+      // For 'link', show the URL so admin can copy it. For 'card', success
+      // is enough — the auditor entry on the booking proves it.
+      if (data.method === 'link' && data.paymentUrl) {
+        setResult(`Payment link sent. URL: ${data.paymentUrl}`);
+      } else {
+        onSuccess();
+      }
+    } catch (e) {
+      console.error('[charge-remainder modal] error:', e);
+      setError('Network error');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <ModalShell title="Charge remainder" onClose={onClose}>
+      {result ? (
+        <div className="space-y-3">
+          <p className="text-sm">{result}</p>
+          <button
+            type="button"
+            onClick={onSuccess}
+            className="font-mono text-xs px-3 py-1.5 bg-black text-white"
+          >
+            Done
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">
+              Method
+            </p>
+            <div className="flex gap-2">
+              {(['auto', 'card', 'link'] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMethod(m)}
+                  className={`font-mono text-xs px-3 py-1.5 border ${
+                    method === m
+                      ? 'bg-black text-white border-black'
+                      : 'border-black/20 hover:bg-black/5'
+                  }`}
+                >
+                  {m === 'auto' ? 'Auto-pick' : m === 'card' ? 'Saved card' : 'Email link'}
+                </button>
+              ))}
+            </div>
+            <p className="font-mono text-[10px] text-black/50 mt-1">
+              {method === 'auto'
+                ? 'Card if a card is saved, otherwise emails a payment link.'
+                : method === 'card'
+                ? 'Off-session charge against the saved Stripe card.'
+                : 'Generates a Stripe payment link and emails the buyer.'}
+            </p>
+          </div>
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">
+              Amount ($)
+            </p>
+            <input
+              type="number"
+              min={0.01}
+              step="0.01"
+              value={amountDollars}
+              onChange={(e) => setAmountDollars(e.target.value)}
+              className="w-full px-3 py-1.5 border border-black/20 bg-white text-sm"
+            />
+            <p className="font-mono text-[10px] text-black/50 mt-1">
+              Outstanding: {formatCents(remainder)}
+            </p>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={adjustTotal}
+              onChange={(e) => setAdjustTotal(e.target.checked)}
+              className="w-4 h-4"
+            />
+            <span>Also adjust the project total</span>
+          </label>
+          {adjustTotal && (
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">
+                New total ($)
+              </p>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                value={newTotalDollars}
+                onChange={(e) => setNewTotalDollars(e.target.value)}
+                className="w-full px-3 py-1.5 border border-black/20 bg-white text-sm"
+              />
+            </div>
+          )}
+          {error && (
+            <p className="font-mono text-xs text-red-700 inline-flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" /> {error}
+            </p>
+          )}
+          <div className="flex items-center gap-2 pt-2">
+            <button
+              type="button"
+              onClick={submit}
+              disabled={submitting}
+              className="font-mono text-xs px-4 py-2 bg-black text-white hover:bg-accent hover:text-black disabled:opacity-30"
+            >
+              {submitting ? 'Charging…' : 'Charge'}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="font-mono text-xs px-3 py-2 text-black/50 hover:text-black"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </ModalShell>
+  );
+}
+
+function RecordPaymentModal({
+  bookingId,
+  remainder,
+  onClose,
+  onSuccess,
+}: {
+  bookingId: string;
+  remainder: number;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [method, setMethod] = useState<'cash' | 'venmo' | 'check' | 'other'>('cash');
+  const [amountDollars, setAmountDollars] = useState((remainder / 100).toFixed(2));
+  const [collectedBy, setCollectedBy] = useState('');
+  const [note, setNote] = useState('');
+  const [addToTotal, setAddToTotal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    const cents = Math.round((Number(amountDollars) || 0) * 100);
+    if (cents <= 0) {
+      setError('Amount must be > 0');
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/media/bookings/${bookingId}/record-payment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: cents,
+          method,
+          collected_by: collectedBy.trim() || undefined,
+          note: note.trim() || undefined,
+          addToTotal,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Could not record payment');
+        setSubmitting(false);
+        return;
+      }
+      onSuccess();
+    } catch (e) {
+      console.error('[record-payment modal] error:', e);
+      setError('Network error');
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <ModalShell title="Record payment" onClose={onClose}>
+      <div className="space-y-3">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">
+            Method
+          </p>
+          <div className="flex gap-2 flex-wrap">
+            {(['cash', 'venmo', 'check', 'other'] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMethod(m)}
+                className={`font-mono text-xs px-3 py-1.5 border ${
+                  method === m
+                    ? 'bg-black text-white border-black'
+                    : 'border-black/20 hover:bg-black/5'
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">
+            Amount ($)
+          </p>
+          <input
+            type="number"
+            min={0.01}
+            step="0.01"
+            value={amountDollars}
+            onChange={(e) => setAmountDollars(e.target.value)}
+            className="w-full px-3 py-1.5 border border-black/20 bg-white text-sm"
+          />
+          <p className="font-mono text-[10px] text-black/50 mt-1">
+            Outstanding: {formatCents(remainder)}
+          </p>
+        </div>
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">
+            Who collected (optional — defaults to you)
+          </p>
+          <input
+            type="text"
+            value={collectedBy}
+            onChange={(e) => setCollectedBy(e.target.value)}
+            placeholder="Cole, Jay, an engineer name…"
+            className="w-full px-3 py-1.5 border border-black/20 bg-white text-sm"
+          />
+        </div>
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">
+            Note (optional)
+          </p>
+          <input
+            type="text"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Got cash on shoot day"
+            className="w-full px-3 py-1.5 border border-black/20 bg-white text-sm"
+          />
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={addToTotal}
+            onChange={(e) => setAddToTotal(e.target.checked)}
+            className="w-4 h-4"
+          />
+          <span>Also bump project total by this amount (scope creep)</span>
+        </label>
+        {method === 'cash' && (
+          <p className="font-mono text-[10px] text-amber-800 bg-amber-50 border border-amber-200 px-2 py-1.5">
+            Cash gets logged in the cash ledger as &quot;owed to business&quot; until deposited.
+          </p>
+        )}
+        {error && (
+          <p className="font-mono text-xs text-red-700 inline-flex items-center gap-1">
+            <AlertCircle className="w-3 h-3" /> {error}
+          </p>
+        )}
+        <div className="flex items-center gap-2 pt-2">
+          <button
+            type="button"
+            onClick={submit}
+            disabled={submitting}
+            className="font-mono text-xs px-4 py-2 bg-black text-white hover:bg-accent hover:text-black disabled:opacity-30"
+          >
+            {submitting ? 'Recording…' : 'Record'}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="font-mono text-xs px-3 py-2 text-black/50 hover:text-black"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
+
+function AdjustPriceModal({
+  bookingId,
+  currentTotal,
+  paidSoFar,
+  onClose,
+  onSuccess,
+}: {
+  bookingId: string;
+  currentTotal: number;
+  paidSoFar: number;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [newTotalDollars, setNewTotalDollars] = useState((currentTotal / 100).toFixed(2));
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    const cents = Math.round((Number(newTotalDollars) || 0) * 100);
+    if (cents < 0 || !Number.isInteger(cents)) {
+      setError('Total must be ≥ 0');
+      return;
+    }
+    if (cents < paidSoFar) {
+      setError(`Total can't be less than already-paid (${formatCents(paidSoFar)})`);
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      // We piggy-back on the charge-remainder endpoint with amount=0 (the
+      // server short-circuits when remainder hits 0 after adjustment) OR
+      // the PATCH endpoint. Use PATCH — it's the simplest path that won't
+      // try to charge anything.
+      const res = await fetch(`/api/admin/media/bookings/${bookingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ final_price_cents: cents }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Could not adjust price');
+        setSubmitting(false);
+        return;
+      }
+      onSuccess();
+    } catch (e) {
+      console.error('[adjust-price modal] error:', e);
+      setError('Network error');
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <ModalShell title="Adjust project total" onClose={onClose}>
+      <div className="space-y-3">
+        <p className="text-sm">
+          Current total: <span className="font-bold">{formatCents(currentTotal)}</span>
+          <br />
+          Already paid: <span className="font-bold text-green-700">{formatCents(paidSoFar)}</span>
+        </p>
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">
+            New total ($)
+          </p>
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            value={newTotalDollars}
+            onChange={(e) => setNewTotalDollars(e.target.value)}
+            className="w-full px-3 py-1.5 border border-black/20 bg-white text-sm"
+          />
+        </div>
+        <p className="font-mono text-[10px] text-black/50">
+          This only changes the dollar amount — no charges or refunds run. Use Charge remainder
+          afterward if you want to collect the difference.
+        </p>
+        {error && (
+          <p className="font-mono text-xs text-red-700 inline-flex items-center gap-1">
+            <AlertCircle className="w-3 h-3" /> {error}
+          </p>
+        )}
+        <div className="flex items-center gap-2 pt-2">
+          <button
+            type="button"
+            onClick={submit}
+            disabled={submitting}
+            className="font-mono text-xs px-4 py-2 bg-black text-white hover:bg-accent hover:text-black disabled:opacity-30"
+          >
+            {submitting ? 'Saving…' : 'Save'}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="font-mono text-xs px-3 py-2 text-black/50 hover:text-black"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
+
+// ============================================================
+// Manual booking creation modal
+// ============================================================
+//
+// Two-mode form mirroring /api/booking/invite (studio):
+//   • Offline (cash/venmo/check/other): records the booking as fully
+//     paid. Cash gets a ledger entry. Audit log captures it.
+//   • Link: creates a Stripe Payment Link and emails it to the buyer.
+//     Webhook handles completion via metadata.booking_id.
+//
+// We fetch the customer library + offering catalog when the modal opens
+// (not on parent mount) so the data is always fresh — admin may have
+// just created a buyer profile and we don't want stale options.
+
+interface CustomerOption {
+  user_id: string;
+  display_name: string | null;
+  email: string | null;
+}
+interface OfferingOption {
+  id: string;
+  title: string;
+  slug: string;
+  price_cents: number | null;
+  active: boolean;
+}
+
+function ManualBookingModal({
+  onClose,
+  onSuccess,
+}: {
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [customers, setCustomers] = useState<CustomerOption[]>([]);
+  const [offeringOpts, setOfferingOpts] = useState<OfferingOption[]>([]);
+  const [loadingOptions, setLoadingOptions] = useState(true);
+
+  // Form state
+  const [userId, setUserId] = useState('');
+  const [offeringId, setOfferingId] = useState('');
+  const [priceDollars, setPriceDollars] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<
+    'cash' | 'venmo' | 'check' | 'other' | 'link'
+  >('cash');
+  const [collectedBy, setCollectedBy] = useState('');
+  const [note, setNote] = useState('');
+  const [phone, setPhone] = useState('');
+  const [customerSearch, setCustomerSearch] = useState('');
+
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [clientsRes, offeringsRes] = await Promise.all([
+          fetch('/api/admin/library/clients?detailed=false', { cache: 'no-store' }),
+          fetch('/api/admin/media/offerings', { cache: 'no-store' }),
+        ]);
+        const clientsData = await clientsRes.json();
+        const offeringsData = await offeringsRes.json();
+        if (cancelled) return;
+        const clients = (clientsData.clients || clientsData.profiles || []) as Array<{
+          user_id: string;
+          display_name: string | null;
+          email: string | null;
+        }>;
+        setCustomers(
+          clients
+            .filter((c) => c.user_id)
+            .sort((a, b) =>
+              (a.display_name || a.email || '').localeCompare(b.display_name || b.email || ''),
+            ),
+        );
+        setOfferingOpts(
+          (offeringsData.offerings || []).filter((o: { active?: boolean }) => o.active !== false),
+        );
+      } catch (e) {
+        console.error('[manual-booking modal] load options error:', e);
+        if (!cancelled) setError('Could not load customers or offerings.');
+      } finally {
+        if (!cancelled) setLoadingOptions(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Auto-fill price when offering changes
+  useEffect(() => {
+    if (!offeringId) return;
+    const o = offeringOpts.find((x) => x.id === offeringId);
+    if (o?.price_cents != null) {
+      setPriceDollars((o.price_cents / 100).toFixed(2));
+    }
+  }, [offeringId, offeringOpts]);
+
+  const filteredCustomers = customers.filter((c) => {
+    if (!customerSearch.trim()) return true;
+    const needle = customerSearch.trim().toLowerCase();
+    return (
+      (c.display_name || '').toLowerCase().includes(needle) ||
+      (c.email || '').toLowerCase().includes(needle)
+    );
+  });
+
+  async function submit() {
+    setError(null);
+    if (!userId) return setError('Pick a customer.');
+    if (!offeringId) return setError('Pick an offering.');
+    const cents = Math.round((Number(priceDollars) || 0) * 100);
+    if (!Number.isInteger(cents) || cents < 0) return setError('Price must be a non-negative integer.');
+
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/admin/media/bookings/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: userId,
+          offering_id: offeringId,
+          final_price_cents: cents,
+          paymentMethod,
+          collected_by: collectedBy.trim() || undefined,
+          note: note.trim() || undefined,
+          customer_phone: phone.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Could not create booking');
+        setSubmitting(false);
+        return;
+      }
+      if (data.mode === 'link' && data.paymentUrl) {
+        setResult(`Booking created. Payment link sent to buyer: ${data.paymentUrl}`);
+      } else {
+        onSuccess();
+      }
+    } catch (e) {
+      console.error('[manual-booking modal] submit error:', e);
+      setError('Network error');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <ModalShell title="New manual media booking" onClose={onClose}>
+      {result ? (
+        <div className="space-y-3">
+          <p className="text-sm">{result}</p>
+          <button
+            type="button"
+            onClick={onSuccess}
+            className="font-mono text-xs px-3 py-1.5 bg-black text-white"
+          >
+            Done
+          </button>
+        </div>
+      ) : loadingOptions ? (
+        <p className="font-mono text-sm text-black/50">Loading customers + offerings…</p>
+      ) : (
+        <div className="space-y-3">
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">
+              Customer
+            </p>
+            <input
+              type="text"
+              value={customerSearch}
+              onChange={(e) => setCustomerSearch(e.target.value)}
+              placeholder="Search by name or email…"
+              className="w-full px-3 py-1.5 border border-black/20 bg-white text-sm mb-1"
+            />
+            <select
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+              className="w-full px-3 py-1.5 border border-black/20 bg-white text-sm font-mono"
+            >
+              <option value="">— Pick a customer —</option>
+              {filteredCustomers.map((c) => (
+                <option key={c.user_id} value={c.user_id}>
+                  {c.display_name || '(no name)'} · {c.email || '(no email)'}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">
+              Offering
+            </p>
+            <select
+              value={offeringId}
+              onChange={(e) => setOfferingId(e.target.value)}
+              className="w-full px-3 py-1.5 border border-black/20 bg-white text-sm font-mono"
+            >
+              <option value="">— Pick an offering —</option>
+              {offeringOpts.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.title} {o.price_cents != null ? `· ${formatCents(o.price_cents)}` : '· (inquiry)'}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">
+              Price ($)
+            </p>
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={priceDollars}
+              onChange={(e) => setPriceDollars(e.target.value)}
+              className="w-full px-3 py-1.5 border border-black/20 bg-white text-sm"
+            />
+            <p className="font-mono text-[10px] text-black/50 mt-1">
+              Defaults to the offering&apos;s catalog price; override for custom quotes.
+            </p>
+          </div>
+
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">
+              Payment method
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(['cash', 'venmo', 'check', 'other', 'link'] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setPaymentMethod(m)}
+                  className={`font-mono text-xs px-3 py-1.5 border ${
+                    paymentMethod === m
+                      ? 'bg-black text-white border-black'
+                      : 'border-black/20 hover:bg-black/5'
+                  }`}
+                >
+                  {m === 'link' ? 'Email link' : m}
+                </button>
+              ))}
+            </div>
+            <p className="font-mono text-[10px] text-black/50 mt-1">
+              {paymentMethod === 'link'
+                ? 'Creates a Stripe Payment Link, emails buyer, marks booking as inquiry until paid.'
+                : 'Marks booking fully paid; cash flows through the cash ledger.'}
+            </p>
+          </div>
+
+          {paymentMethod !== 'link' && (
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">
+                Who collected (optional)
+              </p>
+              <input
+                type="text"
+                value={collectedBy}
+                onChange={(e) => setCollectedBy(e.target.value)}
+                placeholder="Cole, Jay, an engineer…"
+                className="w-full px-3 py-1.5 border border-black/20 bg-white text-sm"
+              />
+            </div>
+          )}
+
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">
+              Note (optional)
+            </p>
+            <input
+              type="text"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="What was this for?"
+              className="w-full px-3 py-1.5 border border-black/20 bg-white text-sm"
+            />
+          </div>
+
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">
+              Customer phone (optional)
+            </p>
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="555-555-5555"
+              className="w-full px-3 py-1.5 border border-black/20 bg-white text-sm"
+            />
+          </div>
+
+          {error && (
+            <p className="font-mono text-xs text-red-700 inline-flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" /> {error}
+            </p>
+          )}
+
+          <div className="flex items-center gap-2 pt-2">
+            <button
+              type="button"
+              onClick={submit}
+              disabled={submitting}
+              className="font-mono text-xs px-4 py-2 bg-black text-white hover:bg-accent hover:text-black disabled:opacity-30"
+            >
+              {submitting ? 'Creating…' : paymentMethod === 'link' ? 'Create + email link' : 'Create booking'}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="font-mono text-xs px-3 py-2 text-black/50 hover:text-black"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </ModalShell>
   );
 }
 

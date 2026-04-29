@@ -75,6 +75,44 @@ export async function GET(request: NextRequest) {
 
   const { data: mediaSessions } = await mediaSessionsQuery;
 
+  // Round 7b: media_bookings (the package-level orders). Distinct from
+  // media_sales (legacy line items) and media_session_bookings (per-shoot
+  // payouts). Returned as its own array because the accounting semantics
+  // are package-level: deposits paid, remainder owed, fully-paid stamp.
+  // is_test rows are excluded — they're QA bookings with no real money.
+  let mediaBookingsQuery = supabase
+    .from('media_bookings')
+    .select(`
+      id, offering_id, user_id, status,
+      final_price_cents, deposit_cents, actual_deposit_paid,
+      deposit_paid_at, final_paid_at,
+      created_by, created_at
+    `)
+    .eq('is_test', false)
+    .not('status', 'eq', 'cancelled')
+    .order('created_at', { ascending: false });
+
+  if (from) mediaBookingsQuery = mediaBookingsQuery.gte('created_at', from);
+  if (to) mediaBookingsQuery = mediaBookingsQuery.lte('created_at', `${to}T23:59:59`);
+
+  const { data: mediaBookings } = await mediaBookingsQuery;
+
+  // Hydrate offering titles in one batch — avoids N+1 client-side joins
+  // and lets the Accounting page render a "what was sold" column.
+  const mediaOfferingIds = Array.from(
+    new Set((mediaBookings || []).map((b: { offering_id: string }) => b.offering_id)),
+  );
+  const mediaOfferingMap: Record<string, string> = {};
+  if (mediaOfferingIds.length > 0) {
+    const { data: offerings } = await supabase
+      .from('media_offerings')
+      .select('id, title')
+      .in('id', mediaOfferingIds);
+    for (const o of (offerings || []) as Array<{ id: string; title: string }>) {
+      mediaOfferingMap[o.id] = o.title;
+    }
+  }
+
   // Resolve engineer_id → display_name so the payroll calculator can
   // merge these into the same per-engineer buckets it uses for
   // bookings.engineer_name and media_sales.filmed_by/edited_by.
@@ -104,6 +142,8 @@ export async function GET(request: NextRequest) {
     beatPurchases: beatPurchases || [],
     mediaSales: mediaSales || [],
     mediaSessions: mediaSessions || [],
+    mediaBookings: mediaBookings || [],
+    mediaOfferingMap,
     engineerNameMap,
   });
 }

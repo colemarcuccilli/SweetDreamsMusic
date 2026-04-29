@@ -126,6 +126,24 @@ export default function Accounting() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [beatPurchases, setBeatPurchases] = useState<BeatPurchase[]>([]);
   const [mediaSales, setMediaSales] = useState<{ id: string; description: string; amount: number; sale_type: string; sold_by: string | null; filmed_by: string | null; edited_by: string | null; client_name: string | null; notes: string | null; created_at: string }[]>([]);
+  // Round 7b: media_bookings (Hub package orders) — distinct from media_sales
+  // (legacy line items). Date-filtered just like other Accounting data.
+  const [mediaBookings, setMediaBookings] = useState<
+    Array<{
+      id: string;
+      offering_id: string;
+      user_id: string;
+      status: string;
+      final_price_cents: number;
+      deposit_cents: number | null;
+      actual_deposit_paid: number | null;
+      deposit_paid_at: string | null;
+      final_paid_at: string | null;
+      created_by: string | null;
+      created_at: string;
+    }>
+  >([]);
+  const [mediaOfferingMap, setMediaOfferingMap] = useState<Record<string, string>>({});
   const [cancelledBookings, setCancelledBookings] = useState<{ id: string; customer_name: string; start_time: string; total_amount: number; deposit_amount: number; actual_deposit_paid: number | null }[]>([]);
   const [cashLedger, setCashLedger] = useState<{ id: string; engineer_name: string; amount: number; client_name: string; note: string | null; status: string; created_at: string; booking_id: string | null; deposit_event_id?: string | null; deposited_at?: string | null; collection_event_id?: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -237,6 +255,8 @@ export default function Accounting() {
     setBeatPurchases(data.beatPurchases || []);
     setMediaSales(data.mediaSales || []);
     setCancelledBookings(data.cancelledBookings || []);
+    setMediaBookings(data.mediaBookings || []);
+    setMediaOfferingMap(data.mediaOfferingMap || {});
     setLoading(false);
   }
 
@@ -500,6 +520,51 @@ export default function Accounting() {
       byType, personPayouts: Object.entries(personPayouts).sort((a, b) => b[1].totalPay - a[1].totalPay),
     };
   }, [mediaSales]);
+
+  // Round 7b: Media Bookings (Hub package orders) stats. Distinct from
+  // mediaStats above which crunches the legacy line-item table.
+  //
+  // Definitions:
+  //   - revenue: sum of final_price_cents (what the buyer is on the hook for)
+  //   - collected: sum of actual_deposit_paid (real money in the door)
+  //   - outstanding: sum of (final_price_cents - actual_deposit_paid) where
+  //     not yet final_paid_at — the receivables balance
+  //
+  // is_test rows are already excluded server-side; cancelled rows too.
+  const mediaBookingStats = useMemo(() => {
+    const total = mediaBookings.length;
+    let revenue = 0;
+    let collected = 0;
+    let outstanding = 0;
+    let depositsCount = 0;
+    let fullyPaidCount = 0;
+    const byOffering: Record<string, { count: number; revenue: number; collected: number }> = {};
+    const byStatus: Record<string, number> = {};
+
+    for (const b of mediaBookings) {
+      const price = b.final_price_cents ?? 0;
+      const paid = b.actual_deposit_paid ?? 0;
+      revenue += price;
+      collected += paid;
+      const owed = Math.max(0, price - paid);
+      if (!b.final_paid_at) outstanding += owed;
+      if (b.deposit_paid_at) depositsCount += 1;
+      if (b.final_paid_at) fullyPaidCount += 1;
+      const offeringTitle = mediaOfferingMap[b.offering_id] || 'Unknown offering';
+      if (!byOffering[offeringTitle]) byOffering[offeringTitle] = { count: 0, revenue: 0, collected: 0 };
+      byOffering[offeringTitle].count++;
+      byOffering[offeringTitle].revenue += price;
+      byOffering[offeringTitle].collected += paid;
+      byStatus[b.status] = (byStatus[b.status] || 0) + 1;
+    }
+    const businessCut = Math.round(revenue * MEDIA_BUSINESS_CUT);
+    return {
+      total, revenue, collected, outstanding, depositsCount, fullyPaidCount,
+      businessCut,
+      byOffering: Object.entries(byOffering).sort((a, b) => b[1].revenue - a[1].revenue),
+      byStatus,
+    };
+  }, [mediaBookings, mediaOfferingMap]);
 
   // ===== Helper: compute per-person earnings from a set of bookings/media/beats =====
   type PersonEarnings = {
@@ -909,6 +974,15 @@ export default function Accounting() {
                 <StatCard icon={Calendar} label="Session Revenue" value={formatCents(sessionStats.totalBooked)} />
                 <StatCard icon={Music} label="Beat Sales" value={formatCents(beatStats.totalRevenue)} />
                 <StatCard icon={TrendingUp} label="Media Sales" value={formatCents(mediaStats.totalRevenue)} />
+              </div>
+
+              {/* Round 7b: Hub Orders revenue split — booked vs. collected vs. owed.
+                  Shown as its own row so it doesn't muddy the legacy line-item math. */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <StatCard icon={TrendingUp} label="Hub Orders — Booked" value={formatCents(mediaBookingStats.revenue)} />
+                <StatCard icon={DollarSign} label="Hub Orders — Collected" value={formatCents(mediaBookingStats.collected)} />
+                <StatCard icon={DollarSign} label="Hub Orders — Outstanding" value={formatCents(mediaBookingStats.outstanding)} />
+                <StatCard icon={Users} label="Hub Order Count" value={String(mediaBookingStats.total)} />
               </div>
 
               {/* Business Profit */}
@@ -2057,6 +2131,116 @@ export default function Accounting() {
           {/* ========= MEDIA SALES DETAIL ========= */}
           {view === 'media' && (
             <div className="space-y-6">
+              {/* ─── Round 7b: Media Bookings (Hub orders) panel ─── */}
+              {/* Listed first because going forward all new media revenue
+                  routes through this table; the legacy media_sales section
+                  below is for line-item entries from session invites. */}
+              <div className="border-2 border-accent/40 p-4 bg-accent/5">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-mono text-sm font-bold uppercase tracking-wider">
+                    Media Bookings (Hub orders)
+                  </h3>
+                  <span className="font-mono text-[10px] text-black/50 uppercase tracking-wider">
+                    excludes test bookings
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                  <MiniStat label="Booked Revenue" value={formatCents(mediaBookingStats.revenue)} />
+                  <MiniStat label="Money Collected" value={formatCents(mediaBookingStats.collected)} />
+                  <MiniStat label="Outstanding" value={formatCents(mediaBookingStats.outstanding)} />
+                  <MiniStat label="Orders" value={String(mediaBookingStats.total)} />
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                  <MiniStat label="Deposits Paid" value={String(mediaBookingStats.depositsCount)} />
+                  <MiniStat label="Fully Paid" value={String(mediaBookingStats.fullyPaidCount)} />
+                  <MiniStat
+                    label={`Business Cut (${Math.round(MEDIA_BUSINESS_CUT * 100)}%)`}
+                    value={formatCents(mediaBookingStats.businessCut)}
+                  />
+                </div>
+
+                {mediaBookingStats.byOffering.length > 0 && (
+                  <div className="mb-4">
+                    <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-2">
+                      By Offering
+                    </p>
+                    <div className="space-y-1">
+                      {mediaBookingStats.byOffering.map(([title, data]) => (
+                        <div
+                          key={title}
+                          className="flex items-center justify-between py-1.5 px-3 bg-white border border-black/10 font-mono text-xs"
+                        >
+                          <span className="font-bold truncate">{title}</span>
+                          <div className="flex items-center gap-4 shrink-0">
+                            <span className="text-black/60">{data.count}×</span>
+                            <span className="text-black/60">
+                              booked {formatCents(data.revenue)}
+                            </span>
+                            <span className="font-bold text-green-700">
+                              collected {formatCents(data.collected)}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {mediaBookings.length > 0 ? (
+                  <div className="space-y-1">
+                    <div className="hidden md:grid grid-cols-12 gap-2 font-mono text-[10px] text-black/60 uppercase tracking-wider py-2 px-3 border-b border-black/10">
+                      <div className="col-span-2">Date</div>
+                      <div className="col-span-3">Offering</div>
+                      <div className="col-span-2">Status</div>
+                      <div className="col-span-2 text-right">Total</div>
+                      <div className="col-span-2 text-right">Paid</div>
+                      <div className="col-span-1 text-right">Owed</div>
+                    </div>
+                    {mediaBookings.map((b) => {
+                      const owed = Math.max(0, (b.final_price_cents ?? 0) - (b.actual_deposit_paid ?? 0));
+                      const fullyPaid = !!b.final_paid_at;
+                      return (
+                        <div
+                          key={b.id}
+                          className="grid grid-cols-2 md:grid-cols-12 gap-2 font-mono text-xs py-3 px-3 border-b border-black/5 hover:bg-black/[0.02]"
+                        >
+                          <div className="col-span-2">
+                            {new Date(b.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: '2-digit' })}
+                          </div>
+                          <div className="col-span-3 font-semibold truncate">
+                            {mediaOfferingMap[b.offering_id] || '—'}
+                          </div>
+                          <div className="col-span-2">
+                            <span className="text-[10px] uppercase font-bold bg-black/5 px-1.5 py-0.5">
+                              {b.status}
+                            </span>
+                          </div>
+                          <div className="col-span-2 text-right font-bold">
+                            {formatCents(b.final_price_cents)}
+                          </div>
+                          <div className="col-span-2 text-right text-green-700">
+                            {formatCents(b.actual_deposit_paid ?? 0)}
+                          </div>
+                          <div className={`col-span-1 text-right font-bold ${fullyPaid ? 'text-green-700' : owed > 0 ? 'text-amber-700' : 'text-black/50'}`}>
+                            {fullyPaid ? '✓' : formatCents(owed)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="font-mono text-xs text-black/50 text-center py-6">
+                    No media Hub orders in this date range.
+                  </p>
+                )}
+              </div>
+
+              {/* ─── Legacy media_sales (per-line-item) ─── */}
+              <div className="border-t-2 border-black/10 pt-6">
+                <h3 className="font-mono text-sm font-bold uppercase tracking-wider mb-3">
+                  Legacy Media Sales (line items from session invites)
+                </h3>
+              </div>
               {/* Summary cards */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <MiniStat label="Total Media Revenue" value={formatCents(mediaStats.totalRevenue)} />

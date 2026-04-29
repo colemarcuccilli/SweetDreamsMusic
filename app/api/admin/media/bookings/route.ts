@@ -21,8 +21,12 @@ export async function GET() {
     .from('media_bookings')
     .select(`
       id, offering_id, user_id, band_id, status,
-      configured_components, final_price_cents,
-      stripe_payment_intent_id, deliverables, notes_to_us,
+      configured_components, project_details,
+      final_price_cents, deposit_cents, actual_deposit_paid,
+      final_paid_at, deposit_paid_at,
+      stripe_payment_intent_id, stripe_session_id,
+      deliverables, component_status, notes_to_us,
+      customer_phone, is_test, created_by,
       created_at, updated_at
     `)
     .order('created_at', { ascending: false })
@@ -47,19 +51,33 @@ export async function GET() {
   );
 
   const [offeringRes, profileRes, bandRes] = await Promise.all([
+    // Round 7b: pull `components` too — admin needs the slot list to
+    // render per-component completion checkboxes.
     offeringIds.length
-      ? service.from('media_offerings').select('id, title, slug').in('id', offeringIds)
+      ? service.from('media_offerings').select('id, title, slug, components, price_cents').in('id', offeringIds)
       : Promise.resolve({ data: [], error: null }),
     userIds.length
-      ? service.from('profiles').select('user_id, display_name, full_name, email').in('user_id', userIds)
+      ? service.from('profiles').select('user_id, display_name, full_name, email, phone').in('user_id', userIds)
       : Promise.resolve({ data: [], error: null }),
     bandIds.length
       ? service.from('bands').select('id, display_name').in('id', bandIds)
       : Promise.resolve({ data: [], error: null }),
   ]);
 
-  const offerings = (offeringRes.data || []) as Array<{ id: string; title: string; slug: string }>;
-  const profiles = (profileRes.data || []) as Array<{ user_id: string; display_name: string | null; full_name: string | null; email: string | null }>;
+  const offerings = (offeringRes.data || []) as Array<{
+    id: string;
+    title: string;
+    slug: string;
+    components: { slots?: Array<{ key: string; label: string; kind?: string }> } | null;
+    price_cents: number | null;
+  }>;
+  const profiles = (profileRes.data || []) as Array<{
+    user_id: string;
+    display_name: string | null;
+    full_name: string | null;
+    email: string | null;
+    phone: string | null;
+  }>;
   const bands = (bandRes.data || []) as Array<{ id: string; display_name: string }>;
 
   return NextResponse.json({ bookings: rows, offerings, profiles, bands });
