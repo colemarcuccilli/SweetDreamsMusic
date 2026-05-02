@@ -117,6 +117,54 @@ export const ENGINEERS = [
   { name: 'Jay Val Leo', displayName: 'Jay Val Leo', email: 'jayvalleo@sweetdreamsmusic.com', specialties: ['Recording', 'Mixing & Mastering', 'Production'], studios: ['studio_b'] as Room[] },
 ] as const;
 
+export type EngineerConfig = (typeof ENGINEERS)[number];
+
+/**
+ * Resolve an engineer roster entry from the user's auth email.
+ *
+ * Why email and not display_name: profile.display_name is user-editable
+ * and drifts (e.g. an engineer changes their preferred name after
+ * marriage, rebrand, or just personal preference). Email is the stable,
+ * us-owned identifier. Booking accept/claim flows MUST resolve
+ * identity from email so the system never refuses a legitimate engineer
+ * because their preferred name doesn't match the roster string.
+ *
+ * Case-insensitive on both sides — Supabase auth emails are lower-case
+ * but historical data in the roster is mixed-case.
+ */
+export function findEngineerByEmail(email: string | null | undefined): EngineerConfig | undefined {
+  if (!email) return undefined;
+  const lower = email.toLowerCase();
+  return ENGINEERS.find((e) => e.email.toLowerCase() === lower);
+}
+
+/**
+ * Test whether the engineer behind `email` is the same human the booking
+ * was requested for, given a `requested_engineer` string (which the
+ * customer picked from a canonical dropdown). Returns true when:
+ *   - The engineer is in the roster AND their canonical name OR
+ *     displayName matches the requested string, OR
+ *   - The engineer is NOT in the roster but their fallback identifier
+ *     (display_name or email) matches verbatim.
+ *
+ * Use this anywhere you compare a logged-in engineer to a booking's
+ * `requested_engineer` field so name drift can't reject legitimate
+ * accepts again.
+ */
+export function isSameEngineer(
+  email: string | null | undefined,
+  fallbackName: string | null | undefined,
+  requestedEngineer: string | null | undefined,
+): boolean {
+  if (!requestedEngineer) return false;
+  const cfg = findEngineerByEmail(email);
+  if (cfg) {
+    return cfg.name === requestedEngineer || cfg.displayName === requestedEngineer;
+  }
+  // Engineer is not in the static roster — fall back to verbatim string match.
+  return !!fallbackName && fallbackName === requestedEngineer;
+}
+
 // Super admins — full access to everything
 export const SUPER_ADMINS = [
   'cole@sweetdreams.us',

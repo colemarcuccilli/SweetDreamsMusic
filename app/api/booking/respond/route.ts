@@ -8,7 +8,7 @@ import {
   sendEngineerPassNotification,
   sendPriorityExpiredToClient,
 } from '@/lib/email';
-import { ENGINEERS, type Room } from '@/lib/constants';
+import { ENGINEERS, findEngineerByEmail, isSameEngineer, type Room } from '@/lib/constants';
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
@@ -34,10 +34,14 @@ export async function POST(request: NextRequest) {
     .eq('user_id', user.id)
     .single();
 
-  const engineerName = profile?.display_name || user.email || 'Engineer';
-  const engineerConfig = ENGINEERS.find(
-    (e) => e.name === engineerName || e.displayName === engineerName
-  );
+  // Resolve identity by EMAIL (stable, owned by us) — not by display_name
+  // (user-editable, drifts). When the engineer is in the roster, write
+  // their canonical roster `name` so accounting + payouts roll up against
+  // the same string used historically. Falls back to profile.display_name
+  // for engineers outside the roster.
+  const engineerConfig = findEngineerByEmail(user.email);
+  const engineerName =
+    engineerConfig?.name || profile?.display_name || user.email || 'Engineer';
 
   // Get the booking
   const serviceClient = createServiceClient();
@@ -55,11 +59,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Session already claimed' }, { status: 409 });
   }
 
-  // Check this engineer is the requested one (for priority window actions)
-  const isRequestedEngineer =
-    engineerName === booking.requested_engineer ||
-    engineerConfig?.name === booking.requested_engineer ||
-    engineerConfig?.displayName === booking.requested_engineer;
+  // Check this engineer is the requested one (for priority window actions).
+  // Goes through isSameEngineer so name drift in profile.display_name can't
+  // reject the legitimate requested engineer (e.g. Zion's profile drifted
+  // from "Zion" to "Zion Omari" — both are the same human).
+  const isRequestedEngineer = isSameEngineer(
+    user.email,
+    profile?.display_name,
+    booking.requested_engineer,
+  );
 
   // Format dates for emails
   const startDate = new Date(booking.start_time);

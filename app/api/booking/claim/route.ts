@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { verifyEngineerAccess } from '@/lib/admin-auth';
 import { sendEngineerAssigned, sendEngineerAssignedNonRequested, sendEngineerClaimConfirmation } from '@/lib/email';
-import { ENGINEERS, type Room } from '@/lib/constants';
+import { findEngineerByEmail, isSameEngineer, type Room } from '@/lib/constants';
 
 // Legacy claim endpoint — now wraps the same logic as /respond accept
 // Kept for backward compatibility
@@ -24,7 +24,12 @@ export async function POST(request: NextRequest) {
     .eq('user_id', user.id)
     .single();
 
-  const engineerName = profile?.display_name || user.email || 'Engineer';
+  // Resolve roster entry by email (stable). When found, write the
+  // canonical roster name so accounting/payouts match the historical
+  // string. See lib/constants.ts → findEngineerByEmail for rationale.
+  const engineerConfig = findEngineerByEmail(user.email);
+  const engineerName =
+    engineerConfig?.name || profile?.display_name || user.email || 'Engineer';
 
   // Check the booking
   const { data: booking } = await supabase
@@ -37,21 +42,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
   }
 
-  // Look up engineer config for studio + priority checks
-  const engineerConfig = ENGINEERS.find(
-    (e) => e.name === engineerName || e.displayName === engineerName
-  );
-
   // Check priority window
   if (booking.requested_engineer && booking.priority_expires_at) {
     const priorityExpiry = new Date(booking.priority_expires_at);
     const isInPriorityWindow = priorityExpiry > new Date();
 
     if (isInPriorityWindow) {
-      const isRequestedEngineer =
-        engineerName === booking.requested_engineer ||
-        engineerConfig?.name === booking.requested_engineer ||
-        engineerConfig?.displayName === booking.requested_engineer;
+      const isRequestedEngineer = isSameEngineer(
+        user.email,
+        profile?.display_name,
+        booking.requested_engineer,
+      );
 
       if (!isRequestedEngineer) {
         const expiryStr = priorityExpiry.toLocaleString('en-US', {
@@ -95,11 +96,13 @@ export async function POST(request: NextRequest) {
   const dateStr = startDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
   const timeStr = startDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
 
-  // Determine if this is a non-requested engineer claiming
-  const isRequestedEngineer =
-    engineerName === booking.requested_engineer ||
-    engineerConfig?.name === booking.requested_engineer ||
-    engineerConfig?.displayName === booking.requested_engineer;
+  // Determine if this is a non-requested engineer claiming.
+  // Same email-first resolution as the priority-window check above.
+  const isRequestedEngineer = isSameEngineer(
+    user.email,
+    profile?.display_name,
+    booking.requested_engineer,
+  );
 
   const isNonRequestedClaim = booking.requested_engineer && !isRequestedEngineer;
 
