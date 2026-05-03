@@ -1,17 +1,21 @@
 // app/api/admin/media/bookings/[id]/route.ts
 //
-// Admin updates to a single media booking. PATCH handles three things:
-//   1. status transitions (deposited → scheduled → in_production → delivered)
+// Admin updates to a single media booking. PATCH handles five things:
+//   1. status transitions (deposited → scheduled → in_production → delivered;
+//      use 'cancelled' to cancel a row — there's no hard delete because
+//      audit + Stripe refund flows need the row to stick around)
 //   2. deliverables JSONB updates (admin paste video URLs, file links, etc)
 //   3. final_price_cents adjustments (scope creep — admin bumps the total
 //      mid-project; the Charge remainder modal collects the new delta)
+//   4. project_details edits (the buyer's questionnaire — admin cleans up
+//      typos, refines song titles, fills in missing details after a phone
+//      call). Whole-object replace; small enough that a delta API isn't
+//      worth it.
+//   5. notes_to_us edits (admin shorthand notes from a planning call that
+//      the buyer didn't capture in the original questionnaire)
 //
 // Why combined: admin typically marks a booking 'delivered' AT the same
 // moment they paste the final deliverables. One PATCH = one round-trip.
-//
-// Status transition rules: we don't enforce a strict state machine here
-// (admin needs to recover from mistakes). We just whitelist the allowed
-// values and let admin land on any of them.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionUser } from '@/lib/auth';
@@ -68,6 +72,35 @@ export async function PATCH(
     }
   }
 
+  // project_details — buyer's questionnaire snapshot. Admin can edit
+  // after a planning call to clean up typos or fill in missing fields.
+  // Whole-object replace; small enough that a delta API isn't worth it.
+  if ('project_details' in body) {
+    if (body.project_details === null || (typeof body.project_details === 'object' && !Array.isArray(body.project_details))) {
+      update.project_details = body.project_details;
+    } else {
+      return NextResponse.json(
+        { error: 'project_details must be an object or null' },
+        { status: 400 },
+      );
+    }
+  }
+
+  // notes_to_us — short admin notes (free text). Empty string normalizes
+  // to null so accounting reports don't show empty stub rows.
+  if ('notes_to_us' in body) {
+    if (body.notes_to_us === null) {
+      update.notes_to_us = null;
+    } else if (typeof body.notes_to_us === 'string') {
+      update.notes_to_us = body.notes_to_us.trim() || null;
+    } else {
+      return NextResponse.json(
+        { error: 'notes_to_us must be a string or null' },
+        { status: 400 },
+      );
+    }
+  }
+
   // final_price_cents — non-negative integer. Floor enforcement (can't go
   // below already-paid) happens after we read the row so we have the
   // authoritative paid figure to compare against.
@@ -93,10 +126,11 @@ export async function PATCH(
   const service = createServiceClient();
 
   // Read the row before updating so we can detect "first deliverable"
-  // transitions for the buyer-notification email. Single row read; cheap.
+  // transitions for the buyer-notification email + emit audit-log
+  // entries for every state change. Single row read; cheap.
   const { data: prevRow } = await service
     .from('media_bookings')
-    .select('deliverables, user_id, offering_id, final_price_cents, deposit_cents, actual_deposit_paid, final_paid_at')
+    .select('status, deliverables, project_details, notes_to_us, user_id, offering_id, final_price_cents, deposit_cents, actual_deposit_paid, final_paid_at')
     .eq('id', id)
     .maybeSingle();
 
@@ -135,11 +169,36 @@ export async function PATCH(
     return NextResponse.json({ error: 'Could not update booking' }, { status: 400 });
   }
 
-  // Audit any price adjustment so accounting can reconstruct the deltas.
-  if (priceAdjustment && prevRow) {
-    const prev = prevRow as { final_price_cents: number };
-    if (prev.final_price_cents !== priceAdjustment.newCents) {
-      await service.from('media_booking_audit_log').insert({
+  // ── Audit log emission ────────────────────────────────────────────
+  // Every PATCH change earns a row so the history panel can reconstruct
+  // the booking's life. Some entries are higher-signal than others:
+  //   • status flips → action='status_changed'
+  //   • cancellation → action='order_cancelled' (separate verb so it
+  //     pops in the admin scan)
+  //   • price → action='total_adjusted' with deltas
+  //   • project_details / notes_to_us → action='details_edited'
+  //   • deliverables → action='deliverables_edited'
+  //
+  // Audit failures don't break the PATCH — they're logged and skipped
+  // so admin recovery from a transient DB issue doesn't double-fail.
+  const auditRows: Array<{
+    booking_id: string;
+    action: string;
+    performed_by: string;
+    details: Record<string, unknown>;
+  }> = [];
+
+  if (prevRow) {
+    const prev = prevRow as {
+      status: string;
+      final_price_cents: number;
+      deliverables: unknown;
+      project_details: unknown;
+      notes_to_us: string | null;
+    };
+
+    if (priceAdjustment && prev.final_price_cents !== priceAdjustment.newCents) {
+      auditRows.push({
         booking_id: id,
         action: 'total_adjusted',
         performed_by: user.email,
@@ -149,6 +208,53 @@ export async function PATCH(
           delta: priceAdjustment.newCents - prev.final_price_cents,
         },
       });
+    }
+
+    if ('status' in update && typeof update.status === 'string' && update.status !== prev.status) {
+      auditRows.push({
+        booking_id: id,
+        action: update.status === 'cancelled' ? 'order_cancelled' : 'status_changed',
+        performed_by: user.email,
+        details: {
+          previous_status: prev.status,
+          new_status: update.status,
+        },
+      });
+    }
+
+    if ('project_details' in update) {
+      auditRows.push({
+        booking_id: id,
+        action: 'details_edited',
+        performed_by: user.email,
+        details: { field: 'project_details' },
+      });
+    }
+
+    if ('notes_to_us' in update && update.notes_to_us !== prev.notes_to_us) {
+      auditRows.push({
+        booking_id: id,
+        action: 'details_edited',
+        performed_by: user.email,
+        details: { field: 'notes_to_us', new_value: update.notes_to_us },
+      });
+    }
+
+    if ('deliverables' in update) {
+      auditRows.push({
+        booking_id: id,
+        action: 'deliverables_edited',
+        performed_by: user.email,
+        details: {},
+      });
+    }
+  }
+
+  if (auditRows.length > 0) {
+    try {
+      await service.from('media_booking_audit_log').insert(auditRows);
+    } catch (e) {
+      console.error('[admin/media/bookings] audit log error:', e);
     }
   }
 

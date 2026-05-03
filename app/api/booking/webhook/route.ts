@@ -1070,6 +1070,116 @@ export async function POST(request: NextRequest) {
         console.log(
           `[webhook] media_purchase processed: offering=${offeringSlug} buyer=${buyerName} (${buyerEmail}) band=${bandId || 'none'} hours=${studioHours} amount=${amountPaid}`,
         );
+      } else if (meta.type === 'media_remainder' || meta.type === 'media_manual') {
+        // ── Media Hub: remainder OR manual-link payment ──────────────────
+        // Both types share the same completion semantics:
+        //   • Stripe Payment Link finishes → checkout.session.completed
+        //     fires → metadata.booking_id points us at the row.
+        //   • We add session.amount_total to actual_deposit_paid; if the
+        //     remainder hits 0, stamp final_paid_at + remainder_paid_at.
+        //   • Audit log captures the completion verb (link_completed_*)
+        //     so the admin history shows BOTH the link-sent + the eventual
+        //     payment-arrived events.
+        //
+        // Why one combined branch for both types:
+        //   • media_remainder = admin clicked "Charge remainder → Email link"
+        //                       OR "Resend link"
+        //   • media_manual    = admin created a manual booking with link
+        //                       payment method
+        //   The buyer's payment completion logic is identical — only the
+        //   audit verb differs so admin history reads cleanly.
+        //
+        // Idempotency: webhook events can fire twice. We check whether
+        // actual_deposit_paid already equals/exceeds the new total before
+        // applying — a re-fired event won't double-credit the row.
+        const bookingId = meta.booking_id;
+        const amountPaid = session.amount_total || 0;
+        const isResend = meta.resend === 'true';
+
+        if (!bookingId || amountPaid <= 0) {
+          console.error('[webhook] media_remainder/manual missing booking_id or amount', meta);
+        } else {
+          // Read the row so we can decide: full payment vs. partial.
+          const { data: rowBefore } = await supabase
+            .from('media_bookings')
+            .select('final_price_cents, deposit_cents, actual_deposit_paid, final_paid_at, user_id, offering_id, customer_phone')
+            .eq('id', bookingId)
+            .maybeSingle();
+
+          type MediaRow = {
+            final_price_cents: number;
+            deposit_cents: number | null;
+            actual_deposit_paid: number | null;
+            final_paid_at: string | null;
+            user_id: string;
+            offering_id: string;
+            customer_phone: string | null;
+          };
+          const row = rowBefore as MediaRow | null;
+
+          if (!row) {
+            console.error('[webhook] media_remainder/manual: booking not found', bookingId);
+          } else {
+            const previousPaid = row.actual_deposit_paid ?? 0;
+            const newPaid = Math.min(row.final_price_cents, previousPaid + amountPaid);
+            const newRemainder = Math.max(0, row.final_price_cents - newPaid);
+
+            const updates: Record<string, unknown> = {
+              actual_deposit_paid: newPaid,
+            };
+            // First time fully paid → stamp the timestamps. Idempotent
+            // because we only stamp when final_paid_at is currently null.
+            if (newRemainder === 0 && !row.final_paid_at) {
+              const nowIso = new Date().toISOString();
+              updates.final_paid_at = nowIso;
+              updates.remainder_paid_at = nowIso;
+              // Manual bookings created at status='inquiry' move to
+              // 'deposited' upon receipt of payment so they appear in
+              // the admin's working queue.
+              if (meta.type === 'media_manual') {
+                updates.status = 'deposited';
+                updates.deposit_paid_at = nowIso;
+                updates.deposit_cents = newPaid;
+                updates.stripe_session_id = session.id;
+                if (typeof session.payment_intent === 'string') {
+                  updates.stripe_payment_intent_id = session.payment_intent;
+                }
+              }
+            }
+
+            await supabase
+              .from('media_bookings')
+              .update(updates)
+              .eq('id', bookingId);
+
+            // Audit verb depends on type + resend flag so admin history
+            // shows distinct events for each pathway.
+            const action =
+              meta.type === 'media_manual'
+                ? 'manual_link_completed'
+                : isResend
+                ? 'remainder_link_resend_completed'
+                : 'remainder_link_completed';
+
+            await supabase.from('media_booking_audit_log').insert({
+              booking_id: bookingId,
+              action,
+              performed_by: 'stripe_webhook',
+              details: {
+                amount_cents: amountPaid,
+                previous_paid: previousPaid,
+                new_paid: newPaid,
+                new_remainder: newRemainder,
+                stripe_session_id: session.id,
+                resend: isResend,
+              },
+            });
+
+            console.log(
+              `[webhook] ${action} processed: booking=${bookingId} amount=${amountPaid} new_remainder=${newRemainder}`,
+            );
+          }
+        }
       }
       break;
     }
@@ -1292,6 +1402,82 @@ export async function POST(request: NextRequest) {
             remainder_amount: Math.max(0, remainderBooking.remainder_amount - chargeAmount),
             updated_at: new Date().toISOString(),
           }).eq('id', bookingId);
+        }
+      } else if (asyncMeta.type === 'media_remainder' || asyncMeta.type === 'media_manual') {
+        // ── Media Hub: async-payment completion (Cash App / bank xfer) ──
+        // Mirrors the synchronous handler in checkout.session.completed.
+        // Same idempotency rules: only stamp final_paid_at if it wasn't
+        // already set, and never apply more than (final_price_cents -
+        // previously_paid).
+        const bookingId = asyncMeta.booking_id;
+        const amountPaid = asyncSession.amount_total || 0;
+        const isResend = asyncMeta.resend === 'true';
+
+        if (bookingId && amountPaid > 0) {
+          const { data: rowBefore } = await supabase
+            .from('media_bookings')
+            .select('final_price_cents, deposit_cents, actual_deposit_paid, final_paid_at')
+            .eq('id', bookingId)
+            .maybeSingle();
+
+          type MediaRow = {
+            final_price_cents: number;
+            deposit_cents: number | null;
+            actual_deposit_paid: number | null;
+            final_paid_at: string | null;
+          };
+          const row = rowBefore as MediaRow | null;
+
+          if (row) {
+            const previousPaid = row.actual_deposit_paid ?? 0;
+            const newPaid = Math.min(row.final_price_cents, previousPaid + amountPaid);
+            const newRemainder = Math.max(0, row.final_price_cents - newPaid);
+
+            const updates: Record<string, unknown> = {
+              actual_deposit_paid: newPaid,
+            };
+            if (newRemainder === 0 && !row.final_paid_at) {
+              const nowIso = new Date().toISOString();
+              updates.final_paid_at = nowIso;
+              updates.remainder_paid_at = nowIso;
+              if (asyncMeta.type === 'media_manual') {
+                updates.status = 'deposited';
+                updates.deposit_paid_at = nowIso;
+                updates.deposit_cents = newPaid;
+                updates.stripe_session_id = asyncSession.id;
+                if (typeof asyncSession.payment_intent === 'string') {
+                  updates.stripe_payment_intent_id = asyncSession.payment_intent;
+                }
+              }
+            }
+
+            await supabase
+              .from('media_bookings')
+              .update(updates)
+              .eq('id', bookingId);
+
+            const action =
+              asyncMeta.type === 'media_manual'
+                ? 'manual_link_completed_async'
+                : isResend
+                ? 'remainder_link_resend_completed_async'
+                : 'remainder_link_completed_async';
+
+            await supabase.from('media_booking_audit_log').insert({
+              booking_id: bookingId,
+              action,
+              performed_by: 'stripe_webhook',
+              details: {
+                amount_cents: amountPaid,
+                previous_paid: previousPaid,
+                new_paid: newPaid,
+                new_remainder: newRemainder,
+                stripe_session_id: asyncSession.id,
+                resend: isResend,
+                async: true,
+              },
+            });
+          }
         }
       }
       break;

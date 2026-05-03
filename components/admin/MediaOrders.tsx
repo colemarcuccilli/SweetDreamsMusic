@@ -35,6 +35,8 @@ import {
   PackageCheck,
   Phone,
   TestTube2,
+  History,
+  Send,
 } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
 import {
@@ -337,7 +339,13 @@ function BookingPanel({
 
   // Modals: only one open at a time. Set the active modal by key.
   const [activeModal, setActiveModal] = useState<
-    null | 'chargeRemainder' | 'recordPayment' | 'adjustPrice'
+    | null
+    | 'chargeRemainder'
+    | 'recordPayment'
+    | 'adjustPrice'
+    | 'resendLink'
+    | 'addItem'
+    | 'cancelOrder'
   >(null);
 
   async function loadSessions() {
@@ -524,7 +532,7 @@ function BookingPanel({
         </div>
       </div>
 
-      {/* Action row: charge / record / adjust */}
+      {/* Action row: charge / resend / record / adjust / add-item / cancel */}
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
@@ -544,6 +552,22 @@ function BookingPanel({
         </button>
         <button
           type="button"
+          onClick={() => setActiveModal('resendLink')}
+          disabled={booking.is_test === true || fullyPaid}
+          className="font-mono text-xs px-3 py-1.5 border border-black/30 hover:bg-black hover:text-white disabled:opacity-30 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+          title={
+            booking.is_test
+              ? 'Test bookings cannot send real payment links'
+              : fullyPaid
+              ? 'Already paid in full'
+              : 'Email a fresh Stripe payment link to the buyer'
+          }
+        >
+          <Send className="w-3 h-3" />
+          Resend link
+        </button>
+        <button
+          type="button"
           onClick={() => setActiveModal('recordPayment')}
           disabled={booking.is_test === true}
           className="font-mono text-xs px-3 py-1.5 border border-black/30 hover:bg-black hover:text-white disabled:opacity-30 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
@@ -560,8 +584,28 @@ function BookingPanel({
           <DollarSign className="w-3 h-3" />
           Adjust price
         </button>
+        <button
+          type="button"
+          onClick={() => setActiveModal('addItem')}
+          className="font-mono text-xs px-3 py-1.5 border border-black/15 text-black/60 hover:bg-black/5 inline-flex items-center gap-1.5"
+          title="Add another offering for this buyer (separate booking row, same buyer)"
+        >
+          <Plus className="w-3 h-3" />
+          Add item for buyer
+        </button>
+        {booking.status !== 'cancelled' && (
+          <button
+            type="button"
+            onClick={() => setActiveModal('cancelOrder')}
+            className="font-mono text-xs px-3 py-1.5 border border-red-300 text-red-700 hover:bg-red-700 hover:text-white inline-flex items-center gap-1.5 ml-auto"
+            title="Mark this order cancelled. Refunds (if any) must be issued via Stripe directly."
+          >
+            <Trash2 className="w-3 h-3" />
+            Cancel order
+          </button>
+        )}
         {booking.is_test && (
-          <span className="font-mono text-[10px] text-purple-700 uppercase tracking-wider ml-auto">
+          <span className="font-mono text-[10px] text-purple-700 uppercase tracking-wider">
             test booking — money actions disabled
           </span>
         )}
@@ -728,6 +772,10 @@ function BookingPanel({
         </div>
       )}
 
+      {/* Audit history — collapsible. Loads only when opened so a 200-row
+          list view doesn't refire 200 audit-log queries. */}
+      <AuditHistoryPanel bookingId={booking.id} />
+
       {/* Modals */}
       {activeModal === 'chargeRemainder' && (
         <ChargeRemainderModal
@@ -757,6 +805,42 @@ function BookingPanel({
           bookingId={booking.id}
           currentTotal={total}
           paidSoFar={paid}
+          onClose={() => setActiveModal(null)}
+          onSuccess={() => {
+            setActiveModal(null);
+            onChange();
+          }}
+        />
+      )}
+      {activeModal === 'resendLink' && (
+        <ResendLinkModal
+          bookingId={booking.id}
+          remainder={remainder}
+          onClose={() => setActiveModal(null)}
+          onSuccess={() => {
+            setActiveModal(null);
+            onChange();
+          }}
+        />
+      )}
+      {activeModal === 'addItem' && (
+        <ManualBookingModal
+          prefillUserId={booking.user_id}
+          prefillUserLabel={
+            buyer
+              ? `${buyer.full_name || buyer.display_name || '(no name)'} · ${buyer.email || '(no email)'}`
+              : null
+          }
+          onClose={() => setActiveModal(null)}
+          onSuccess={() => {
+            setActiveModal(null);
+            onChange();
+          }}
+        />
+      )}
+      {activeModal === 'cancelOrder' && (
+        <CancelOrderModal
+          bookingId={booking.id}
           onClose={() => setActiveModal(null)}
           onSuccess={() => {
             setActiveModal(null);
@@ -1383,6 +1467,209 @@ function AdjustPriceModal({
   );
 }
 
+function CancelOrderModal({
+  bookingId,
+  onClose,
+  onSuccess,
+}: {
+  bookingId: string;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState('');
+
+  // Type-to-confirm because cancellation is high-stakes — admin has to
+  // type "cancel" before the button enables. Stripe refunds (if any)
+  // must be issued separately via the Stripe dashboard; cancelling
+  // here only flips the row's status.
+  const enabled = confirm.trim().toLowerCase() === 'cancel';
+
+  async function submit() {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/media/bookings/${bookingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'cancelled' }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Could not cancel');
+        setSubmitting(false);
+        return;
+      }
+      onSuccess();
+    } catch (e) {
+      console.error('[cancel-order modal] error:', e);
+      setError('Network error');
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <ModalShell title="Cancel order" onClose={onClose}>
+      <div className="space-y-3">
+        <div className="bg-red-50 border border-red-200 px-3 py-2 text-red-900 text-sm">
+          <p className="font-bold mb-1">This is destructive.</p>
+          <p>
+            The order moves to <span className="font-mono">cancelled</span>. The audit
+            log keeps the row, but the buyer order page will show it as cancelled.
+          </p>
+          <p className="mt-2">
+            <strong>Refunds</strong> are NOT handled here — issue them via the Stripe
+            dashboard if money has already moved.
+          </p>
+        </div>
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">
+            Type <span className="font-bold">cancel</span> to confirm
+          </p>
+          <input
+            type="text"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            className="w-full px-3 py-1.5 border border-black/20 bg-white text-sm font-mono"
+          />
+        </div>
+        {error && (
+          <p className="font-mono text-xs text-red-700 inline-flex items-center gap-1">
+            <AlertCircle className="w-3 h-3" /> {error}
+          </p>
+        )}
+        <div className="flex items-center gap-2 pt-2">
+          <button
+            type="button"
+            onClick={submit}
+            disabled={submitting || !enabled}
+            className="font-mono text-xs px-4 py-2 bg-red-700 text-white hover:bg-red-800 disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            {submitting ? 'Cancelling…' : 'Cancel order'}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="font-mono text-xs px-3 py-2 text-black/50 hover:text-black"
+          >
+            Keep order
+          </button>
+        </div>
+      </div>
+    </ModalShell>
+  );
+}
+
+function ResendLinkModal({
+  bookingId,
+  remainder,
+  onClose,
+  onSuccess,
+}: {
+  bookingId: string;
+  remainder: number;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [amountDollars, setAmountDollars] = useState((remainder / 100).toFixed(2));
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+
+  async function submit() {
+    const cents = Math.round((Number(amountDollars) || 0) * 100);
+    if (cents <= 0) {
+      setError('Amount must be > 0');
+      return;
+    }
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/media/bookings/${bookingId}/resend-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: cents }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Could not resend link');
+        setSubmitting(false);
+        return;
+      }
+      setResult(`Fresh link emailed to the buyer. URL: ${data.paymentUrl}`);
+    } catch (e) {
+      console.error('[resend-link modal] error:', e);
+      setError('Network error');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <ModalShell title="Resend payment link" onClose={onClose}>
+      {result ? (
+        <div className="space-y-3">
+          <p className="text-sm">{result}</p>
+          <button
+            type="button"
+            onClick={onSuccess}
+            className="font-mono text-xs px-3 py-1.5 bg-black text-white"
+          >
+            Done
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-sm">
+            Generates a brand-new Stripe payment link and emails it to the buyer. The
+            previous link stays valid in Stripe — but the new one is the canonical
+            current one.
+          </p>
+          <div>
+            <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">
+              Amount ($)
+            </p>
+            <input
+              type="number"
+              min={0.01}
+              step="0.01"
+              value={amountDollars}
+              onChange={(e) => setAmountDollars(e.target.value)}
+              className="w-full px-3 py-1.5 border border-black/20 bg-white text-sm"
+            />
+            <p className="font-mono text-[10px] text-black/50 mt-1">
+              Outstanding: {formatCents(remainder)} (defaults here)
+            </p>
+          </div>
+          {error && (
+            <p className="font-mono text-xs text-red-700 inline-flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" /> {error}
+            </p>
+          )}
+          <div className="flex items-center gap-2 pt-2">
+            <button
+              type="button"
+              onClick={submit}
+              disabled={submitting}
+              className="font-mono text-xs px-4 py-2 bg-black text-white hover:bg-accent hover:text-black disabled:opacity-30"
+            >
+              {submitting ? 'Sending…' : 'Send fresh link'}
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="font-mono text-xs px-3 py-2 text-black/50 hover:text-black"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </ModalShell>
+  );
+}
+
 // ============================================================
 // Manual booking creation modal
 // ============================================================
@@ -1413,16 +1700,23 @@ interface OfferingOption {
 function ManualBookingModal({
   onClose,
   onSuccess,
+  prefillUserId,
+  prefillUserLabel,
 }: {
   onClose: () => void;
   onSuccess: () => void;
+  // When the modal is opened from "Add item for buyer" on an existing
+  // booking, we lock the customer to the parent's buyer so admin can't
+  // accidentally add an item to a different customer.
+  prefillUserId?: string;
+  prefillUserLabel?: string | null;
 }) {
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [offeringOpts, setOfferingOpts] = useState<OfferingOption[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
 
   // Form state
-  const [userId, setUserId] = useState('');
+  const [userId, setUserId] = useState(prefillUserId || '');
   const [offeringId, setOfferingId] = useState('');
   const [priceDollars, setPriceDollars] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<
@@ -1551,30 +1845,41 @@ function ManualBookingModal({
         <p className="font-mono text-sm text-black/50">Loading customers + offerings…</p>
       ) : (
         <div className="space-y-3">
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">
-              Customer
-            </p>
-            <input
-              type="text"
-              value={customerSearch}
-              onChange={(e) => setCustomerSearch(e.target.value)}
-              placeholder="Search by name or email…"
-              className="w-full px-3 py-1.5 border border-black/20 bg-white text-sm mb-1"
-            />
-            <select
-              value={userId}
-              onChange={(e) => setUserId(e.target.value)}
-              className="w-full px-3 py-1.5 border border-black/20 bg-white text-sm font-mono"
-            >
-              <option value="">— Pick a customer —</option>
-              {filteredCustomers.map((c) => (
-                <option key={c.user_id} value={c.user_id}>
-                  {c.display_name || '(no name)'} · {c.email || '(no email)'}
-                </option>
-              ))}
-            </select>
-          </div>
+          {prefillUserId ? (
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">
+                Customer (locked)
+              </p>
+              <p className="px-3 py-1.5 border border-black/15 bg-black/5 text-sm font-mono">
+                {prefillUserLabel || '(prefilled)'}
+              </p>
+            </div>
+          ) : (
+            <div>
+              <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">
+                Customer
+              </p>
+              <input
+                type="text"
+                value={customerSearch}
+                onChange={(e) => setCustomerSearch(e.target.value)}
+                placeholder="Search by name or email…"
+                className="w-full px-3 py-1.5 border border-black/20 bg-white text-sm mb-1"
+              />
+              <select
+                value={userId}
+                onChange={(e) => setUserId(e.target.value)}
+                className="w-full px-3 py-1.5 border border-black/20 bg-white text-sm font-mono"
+              >
+                <option value="">— Pick a customer —</option>
+                {filteredCustomers.map((c) => (
+                  <option key={c.user_id} value={c.user_id}>
+                    {c.display_name || '(no name)'} · {c.email || '(no email)'}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">
@@ -1706,6 +2011,160 @@ function ManualBookingModal({
       )}
     </ModalShell>
   );
+}
+
+// ============================================================
+// Audit history panel — full action log for one booking
+// ============================================================
+//
+// Lazy: doesn't fetch until the admin clicks open. Avoids 200 separate
+// audit-log queries firing when the orders list first loads. The
+// chronological feed gives admin a single-pane view of every charge,
+// completion, payment, price adjustment, and email that ever fired
+// against a booking — invaluable when reconciling money disputes.
+
+interface AuditEntry {
+  id: string;
+  action: string;
+  performed_by: string;
+  details: Record<string, unknown> | null;
+  created_at: string;
+}
+
+function AuditHistoryPanel({ bookingId }: { bookingId: string }) {
+  const [open, setOpen] = useState(false);
+  const [entries, setEntries] = useState<AuditEntry[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function load() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/media/bookings/${bookingId}/audit-log`, {
+        cache: 'no-store',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Could not load history');
+        return;
+      }
+      setEntries(data.entries || []);
+      setLoaded(true);
+    } catch (e) {
+      console.error('[audit-history] load error:', e);
+      setError('Network error');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function toggle() {
+    const next = !open;
+    setOpen(next);
+    if (next && !loaded) load();
+  }
+
+  return (
+    <div className="border border-black/10 bg-white">
+      <button
+        type="button"
+        onClick={toggle}
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 hover:bg-black/[0.02] text-left"
+      >
+        <div className="inline-flex items-center gap-2">
+          <History className="w-3.5 h-3.5 text-black/50" />
+          <span className="font-mono text-[11px] uppercase tracking-wider font-bold text-black/60">
+            Order history {loaded ? `(${entries.length})` : ''}
+          </span>
+        </div>
+        {open ? (
+          <ChevronDown className="w-3.5 h-3.5 text-black/40" />
+        ) : (
+          <ChevronRight className="w-3.5 h-3.5 text-black/40" />
+        )}
+      </button>
+      {open && (
+        <div className="border-t border-black/10 px-3 py-2">
+          {loading ? (
+            <p className="font-mono text-xs text-black/50">Loading…</p>
+          ) : error ? (
+            <p className="font-mono text-xs text-red-700 inline-flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" /> {error}
+            </p>
+          ) : entries.length === 0 ? (
+            <p className="font-mono text-xs text-black/50">No audit entries yet.</p>
+          ) : (
+            <ol className="space-y-1.5">
+              {entries.map((e) => (
+                <li
+                  key={e.id}
+                  className="font-mono text-[11px] py-1.5 border-b border-black/5 last:border-b-0"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-bold">{formatAuditAction(e.action)}</span>
+                    <span className="text-black/40 shrink-0">
+                      {new Date(e.created_at).toLocaleString('en-US', {
+                        month: 'short', day: 'numeric',
+                        hour: 'numeric', minute: '2-digit',
+                      })}
+                    </span>
+                  </div>
+                  <div className="text-black/60 truncate">
+                    by {e.performed_by} · {summarizeAuditDetails(e)}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Action snake_case → human-readable label.
+function formatAuditAction(action: string): string {
+  switch (action) {
+    case 'cash_payment': return 'Cash payment recorded';
+    case 'venmo_payment': return 'Venmo payment recorded';
+    case 'check_payment': return 'Check payment recorded';
+    case 'other_payment': return 'Other payment recorded';
+    case 'remainder_charged_card': return 'Remainder charged (card)';
+    case 'remainder_link_sent': return 'Payment link emailed';
+    case 'remainder_link_resent': return 'Payment link RE-sent';
+    case 'component_completed': return 'Component completed';
+    case 'component_uncompleted': return 'Component reopened';
+    case 'total_adjusted': return 'Project total adjusted';
+    case 'manual_created_cash': return 'Manual booking — cash';
+    case 'manual_created_venmo': return 'Manual booking — Venmo';
+    case 'manual_created_check': return 'Manual booking — check';
+    case 'manual_created_other': return 'Manual booking — other';
+    case 'manual_created_link': return 'Manual booking — Stripe link';
+    case 'cart_item_added': return 'Cart item added';
+    case 'cart_item_removed': return 'Cart item removed';
+    default: return action;
+  }
+}
+
+// Pull the most useful 1-2 fields out of the JSONB details bag.
+function summarizeAuditDetails(e: AuditEntry): string {
+  const d = e.details;
+  if (!d) return '—';
+  const parts: string[] = [];
+  if (typeof d.amount_cents === 'number') {
+    parts.push(`$${(d.amount_cents / 100).toFixed(2)}`);
+  }
+  if (typeof d.method === 'string') parts.push(String(d.method));
+  if (typeof d.previous_total === 'number' && typeof d.new_total === 'number') {
+    parts.push(`$${(d.previous_total / 100).toFixed(2)} → $${(d.new_total / 100).toFixed(2)}`);
+  }
+  if (typeof d.slot_label === 'string') parts.push(String(d.slot_label));
+  if (typeof d.drive_url === 'string' && d.drive_url) parts.push('Drive link saved');
+  if (typeof d.collected_by === 'string') parts.push(`by ${d.collected_by}`);
+  if (typeof d.note === 'string' && d.note) parts.push(`note: ${d.note}`);
+  return parts.length ? parts.join(' · ') : '—';
 }
 
 // ============================================================

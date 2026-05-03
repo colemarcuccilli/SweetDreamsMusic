@@ -12,9 +12,12 @@ export async function GET(request: NextRequest) {
   const to = searchParams.get('to');
 
   // Fetch all bookings (with optional date range)
+  // Round 7c: extends select with band_id + booking_group_id + sweet_spot_addon
+  // so the accounting panel can break out band-session revenue separately
+  // from solo-session revenue without an N+1 join.
   let bookingsQuery = supabase
     .from('bookings')
-    .select('id, customer_name, customer_email, start_time, duration, total_amount, deposit_amount, remainder_amount, actual_deposit_paid, status, engineer_name, room, created_at')
+    .select('id, customer_name, customer_email, start_time, duration, total_amount, deposit_amount, remainder_amount, actual_deposit_paid, status, engineer_name, room, band_id, booking_group_id, sweet_spot_addon, created_at')
     .not('status', 'eq', 'cancelled')
     .order('created_at', { ascending: false });
 
@@ -113,6 +116,24 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Hydrate band display_names so the Accounting band-revenue panel can
+  // show "Band X earned $Y this month" without joining on the client.
+  const bandIds = Array.from(
+    new Set((bookings || [])
+      .map((b: { band_id: string | null }) => b.band_id)
+      .filter((id: string | null): id is string => !!id)),
+  );
+  const bandMap: Record<string, string> = {};
+  if (bandIds.length > 0) {
+    const { data: bandsData } = await supabase
+      .from('bands')
+      .select('id, display_name')
+      .in('id', bandIds);
+    for (const b of (bandsData || []) as Array<{ id: string; display_name: string }>) {
+      bandMap[b.id] = b.display_name;
+    }
+  }
+
   // Resolve engineer_id → display_name so the payroll calculator can
   // merge these into the same per-engineer buckets it uses for
   // bookings.engineer_name and media_sales.filmed_by/edited_by.
@@ -144,6 +165,7 @@ export async function GET(request: NextRequest) {
     mediaSessions: mediaSessions || [],
     mediaBookings: mediaBookings || [],
     mediaOfferingMap,
+    bandMap,
     engineerNameMap,
   });
 }

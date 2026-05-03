@@ -19,6 +19,11 @@ interface Booking {
   status: string;
   engineer_name: string | null;
   room: string | null;
+  // Round 7c: surface band attribution + Sweet Spot bundle so the
+  // accounting tab can split solo vs. band revenue.
+  band_id: string | null;
+  booking_group_id: string | null;
+  sweet_spot_addon: { tier?: string; price_cents?: number } | null;
   created_at: string;
 }
 
@@ -144,6 +149,9 @@ export default function Accounting() {
     }>
   >([]);
   const [mediaOfferingMap, setMediaOfferingMap] = useState<Record<string, string>>({});
+  // Round 7c: band display_names so the band-revenue panel renders
+  // human-readable band names without a separate fetch.
+  const [bandMap, setBandMap] = useState<Record<string, string>>({});
   const [cancelledBookings, setCancelledBookings] = useState<{ id: string; customer_name: string; start_time: string; total_amount: number; deposit_amount: number; actual_deposit_paid: number | null }[]>([]);
   const [cashLedger, setCashLedger] = useState<{ id: string; engineer_name: string; amount: number; client_name: string; note: string | null; status: string; created_at: string; booking_id: string | null; deposit_event_id?: string | null; deposited_at?: string | null; collection_event_id?: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
@@ -257,6 +265,7 @@ export default function Accounting() {
     setCancelledBookings(data.cancelledBookings || []);
     setMediaBookings(data.mediaBookings || []);
     setMediaOfferingMap(data.mediaOfferingMap || {});
+    setBandMap(data.bandMap || {});
     setLoading(false);
   }
 
@@ -565,6 +574,68 @@ export default function Accounting() {
       byStatus,
     };
   }, [mediaBookings, mediaOfferingMap]);
+
+  // Round 7c: Band-session revenue slice.
+  //
+  // Bands and solo sessions live on the same `bookings` table. We split
+  // them by `band_id IS NOT NULL` to give admins a clean per-stream view.
+  // The 3×8 booking_group_id fields let us count band PROJECTS (one per
+  // group) separately from band sessions (one per day-row).
+  //
+  // Sweet Spot revenue is surfaced as its own line because the bundle
+  // pricing tiers (standalone $2,500 / 8hr add-on $2,000 / 3×8 add-on
+  // $1,000) carry different margins and admin wants visibility.
+  const bandSessionStats = useMemo(() => {
+    const bandBookings = bookings.filter((b) => !!b.band_id);
+    const total = bandBookings.length;
+    const bookedRevenue = bandBookings.reduce((s, b) => s + (b.total_amount || 0), 0);
+    const collectedRevenue = bandBookings.reduce(
+      (s, b) => s + (b.actual_deposit_paid ?? b.deposit_amount ?? 0),
+      0,
+    );
+    const outstanding = bandBookings.reduce((s, b) => s + (b.remainder_amount || 0), 0);
+
+    // Project-level grouping: 3×8 = three rows but ONE project. Count
+    // unique booking_group_id values (NULL group_id = single-day = its
+    // own project, counted as 1 per row).
+    const projects = new Set<string>();
+    for (const b of bandBookings) {
+      projects.add(b.booking_group_id || `solo:${b.id}`);
+    }
+
+    // Sweet Spot bundle revenue (standalone tier added separately)
+    let sweetSpotRevenue = 0;
+    let sweetSpotCount = 0;
+    for (const b of bandBookings) {
+      const addon = b.sweet_spot_addon;
+      if (addon && typeof addon.price_cents === 'number') {
+        sweetSpotRevenue += addon.price_cents;
+        sweetSpotCount += 1;
+      }
+    }
+
+    // Per-band breakdown
+    const byBand: Record<string, { count: number; booked: number; collected: number }> = {};
+    for (const b of bandBookings) {
+      const id = b.band_id!;
+      const name = bandMap[id] || 'Unknown band';
+      if (!byBand[name]) byBand[name] = { count: 0, booked: 0, collected: 0 };
+      byBand[name].count += 1;
+      byBand[name].booked += b.total_amount || 0;
+      byBand[name].collected += b.actual_deposit_paid ?? b.deposit_amount ?? 0;
+    }
+
+    return {
+      total,
+      projectCount: projects.size,
+      bookedRevenue,
+      collectedRevenue,
+      outstanding,
+      sweetSpotRevenue,
+      sweetSpotCount,
+      byBand: Object.entries(byBand).sort((a, b) => b[1].booked - a[1].booked),
+    };
+  }, [bookings, bandMap]);
 
   // ===== Helper: compute per-person earnings from a set of bookings/media/beats =====
   type PersonEarnings = {
@@ -2024,6 +2095,54 @@ export default function Accounting() {
                 <MiniStat label="Deposits" value={formatCents(sessionStats.depositsCollected)} />
                 <MiniStat label="Remainder Due" value={formatCents(sessionStats.remainderOutstanding)} />
               </div>
+
+              {/* Round 7c: Band sessions slice — separate from solo sessions
+                  so admins can see what flat-rate band bookings + Sweet Spot
+                  bundles brought in. Only renders when there's any band activity. */}
+              {bandSessionStats.total > 0 && (
+                <div className="border-2 border-accent/40 p-4 bg-accent/5">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-mono text-sm font-bold uppercase tracking-wider">
+                      Band Sessions (subset of above)
+                    </h3>
+                    <span className="font-mono text-[10px] text-black/50 uppercase tracking-wider">
+                      {bandSessionStats.projectCount} project{bandSessionStats.projectCount === 1 ? '' : 's'} ·{' '}
+                      {bandSessionStats.total} day{bandSessionStats.total === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                    <MiniStat label="Booked" value={formatCents(bandSessionStats.bookedRevenue)} />
+                    <MiniStat label="Collected" value={formatCents(bandSessionStats.collectedRevenue)} />
+                    <MiniStat label="Outstanding" value={formatCents(bandSessionStats.outstanding)} />
+                    <MiniStat
+                      label={`Sweet Spot bundles (${bandSessionStats.sweetSpotCount})`}
+                      value={formatCents(bandSessionStats.sweetSpotRevenue)}
+                    />
+                  </div>
+                  {bandSessionStats.byBand.length > 0 && (
+                    <div>
+                      <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-2">
+                        By Band
+                      </p>
+                      <div className="space-y-1">
+                        {bandSessionStats.byBand.map(([name, data]) => (
+                          <div
+                            key={name}
+                            className="flex items-center justify-between py-1.5 px-3 bg-white border border-black/10 font-mono text-xs"
+                          >
+                            <span className="font-bold truncate">{name}</span>
+                            <div className="flex items-center gap-4 shrink-0">
+                              <span className="text-black/60">{data.count} day{data.count === 1 ? '' : 's'}</span>
+                              <span className="text-black/60">booked {formatCents(data.booked)}</span>
+                              <span className="font-bold text-green-700">collected {formatCents(data.collected)}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Session list */}
               <div className="space-y-1">
