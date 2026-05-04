@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Music, DollarSign, ShoppingCart, TrendingUp, Plus, X, Upload, Trash2, AlertCircle, CheckCircle, FileText, Pencil } from 'lucide-react';
+import { Music, DollarSign, ShoppingCart, TrendingUp, Plus, X, Upload, Trash2, AlertCircle, CheckCircle, FileText, Pencil, MessageSquare } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
 import { PRODUCER_COMMISSION, PLATFORM_COMMISSION, BEAT_LICENSES, BEAT_AGREEMENT_TEXT, BEAT_AGREEMENT_VERSION, BEAT_GENRES } from '@/lib/constants';
 import PrivateSaleModal from '@/components/beats/PrivateSaleModal';
+import ProducerClientSearch from './ProducerClientSearch';
 
 interface Beat {
   id: string;
@@ -45,7 +46,7 @@ interface Earnings {
   totalLeases: number;
 }
 
-type Tab = 'beats' | 'sales' | 'earnings';
+type Tab = 'beats' | 'sales' | 'earnings' | 'message';
 
 export default function ProducerDashboard({ isAdmin = false }: { isAdmin?: boolean }) {
   const [tab, setTab] = useState<Tab>('beats');
@@ -72,6 +73,7 @@ export default function ProducerDashboard({ isAdmin = false }: { isAdmin?: boole
   const tabs: { key: Tab; label: string; icon: typeof Music; badge?: number }[] = [
     { key: 'beats', label: 'My Beats', icon: Music, badge: pendingCount > 0 ? pendingCount : undefined },
     { key: 'sales', label: 'Sales', icon: ShoppingCart },
+    { key: 'message', label: 'Message Clients', icon: MessageSquare },
     { key: 'earnings', label: 'Earnings', icon: DollarSign },
   ];
 
@@ -134,6 +136,7 @@ export default function ProducerDashboard({ isAdmin = false }: { isAdmin?: boole
                 <>
                   {tab === 'beats' && <BeatsTab beats={beats} onBeatsChange={setBeats} isAdmin={isAdmin} />}
                   {tab === 'sales' && <SalesTab sales={sales} />}
+                  {tab === 'message' && <ProducerClientSearch />}
                   {tab === 'earnings' && earnings && <EarningsTab earnings={earnings} />}
                 </>
               )}

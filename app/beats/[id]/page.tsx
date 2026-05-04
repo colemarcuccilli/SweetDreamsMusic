@@ -6,6 +6,8 @@ import { formatCents } from '@/lib/utils';
 import { BEAT_LICENSES, SITE_URL } from '@/lib/constants';
 import BeatDetailClient from '@/components/beats/BeatDetailClient';
 import BuyButton from '@/components/beats/BuyButton';
+import MessageButton from '@/components/messaging/MessageButton';
+import { getSessionUser } from '@/lib/auth';
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -33,16 +35,27 @@ export default async function BeatDetailPage({ params }: Props) {
   const { id } = await params;
   const supabase = await createClient();
 
+  // user_id is needed for the "Message Producer" DM button (Round 9d).
+  // It's the FK to auth.users — distinct from profiles.id (the row's PK).
   const { data: beat, error } = await supabase
     .from('beats')
-    .select('*, profiles!producer_id(id, display_name, producer_name, public_profile_slug, profile_picture_url, bio)')
+    .select('*, profiles!producer_id(id, user_id, display_name, producer_name, public_profile_slug, profile_picture_url, bio)')
     .eq('id', id)
     .single();
 
   if (error || !beat) notFound();
 
+  // Round 9d: only show "Message Producer" to logged-in users who aren't
+  // the producer themselves. Anonymous viewers get a sign-in prompt
+  // baked into the auth flow elsewhere.
+  const viewer = await getSessionUser();
+
   const producer = beat.profiles;
   const producerName = producer?.producer_name || producer?.display_name || beat.producer;
+  const canMessageProducer =
+    !!viewer &&
+    !!producer?.user_id &&
+    producer.user_id !== viewer.id;
 
   return (
     <>
@@ -61,7 +74,7 @@ export default async function BeatDetailPage({ params }: Props) {
                 )}
                 <div>
                   <h1 className="text-display-md mb-3">{beat.title}</h1>
-                  <p className="font-mono text-white/80 text-lg">
+                  <p className="font-mono text-white/80 text-lg mb-3">
                     by{' '}
                     {producer?.public_profile_slug ? (
                       <Link href={`/u/${producer.public_profile_slug}`} className="text-accent hover:underline no-underline">
@@ -71,6 +84,14 @@ export default async function BeatDetailPage({ params }: Props) {
                       producerName
                     )}
                   </p>
+                  {canMessageProducer && (
+                    <MessageButton
+                      targetUserId={producer.user_id}
+                      targetLabel={producerName}
+                      size="sm"
+                      variant="secondary"
+                    />
+                  )}
                 </div>
               </div>
 
