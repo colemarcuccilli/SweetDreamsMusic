@@ -187,6 +187,12 @@ export async function sendEngineerAssignedNonRequested(to: string, details: {
   customerName: string; requestedEngineer: string; assignedEngineer: string;
   date: string; startTime: string; rescheduleDeadline: string;
 }) {
+  await mirrorToThread({
+    userEmail: to,
+    kind: 'booking_notification',
+    subject: 'Engineer Update',
+    body: `${details.requestedEngineer} couldn't take your session on ${details.date} at ${details.startTime}. ${details.assignedEngineer} accepted instead. To reschedule for your preferred engineer, request from your dashboard before ${details.rescheduleDeadline}.`,
+  });
   try {
     await resend.emails.send({
       from: FROM, to,
@@ -281,6 +287,12 @@ export async function sendBandSessionNeedsRescheduleAdmin(details: {
 export async function sendPriorityExpiredToClient(to: string, details: {
   customerName: string; requestedEngineer: string; date: string; startTime: string;
 }) {
+  await mirrorToThread({
+    userEmail: to,
+    kind: 'booking_notification',
+    subject: 'Engineer Update',
+    body: `${details.requestedEngineer} isn't available for your ${details.date} ${details.startTime} session. Another engineer will pick it up — or you can request a reschedule from your dashboard.`,
+  });
   try {
     await resend.emails.send({
       from: FROM, to,
@@ -415,6 +427,12 @@ export async function sendSessionReminder(to: string, details: {
   customerName: string; artistName?: string | null; date: string; startTime: string;
   room: string; engineerName: string | null; bookingId?: string; hasPrep?: boolean;
 }) {
+  await mirrorToThread({
+    userEmail: to,
+    kind: 'booking_notification',
+    subject: 'Session in 1 hour',
+    body: `Reminder: your session is at ${details.startTime} in ${ROOM_LABELS[details.room as Room] || details.room}.${details.engineerName ? ` Engineer: ${details.engineerName}.` : ''} See you soon.`,
+  });
   try {
     const roomLabel = ROOM_LABELS[details.room as Room] || details.room;
     const prepUrl = details.bookingId ? `${SITE_URL}/dashboard/prep/${details.bookingId}` : null;
@@ -565,6 +583,13 @@ export async function sendSessionFilesDelivered(to: string, details: {
 export async function sendPaymentLink(to: string, details: {
   customerName: string; amount: number; paymentUrl: string;
 }) {
+  await mirrorToThread({
+    userEmail: to,
+    kind: 'booking_notification',
+    subject: 'Payment link',
+    body: `Outstanding balance: ${formatMoney(details.amount)}. Pay at ${details.paymentUrl}.`,
+    attachments: [{ label: 'Pay now', url: details.paymentUrl, kind: 'link' as const }],
+  });
   try {
     await resend.emails.send({
       from: FROM, to, subject: 'Complete Your Remaining Balance — Sweet Dreams Music',
@@ -587,6 +612,13 @@ export async function sendSessionInvite(to: string, details: {
   duration: number; room: string; total: number; deposit: number;
   inviteUrl: string; isCash: boolean;
 }) {
+  await mirrorToThread({
+    userEmail: to,
+    kind: 'booking_notification',
+    subject: details.isCash ? 'Session Scheduled' : 'Session Invite',
+    body: `${details.engineerName} ${details.isCash ? 'booked a session for you' : 'invited you to a session'} on ${details.date} at ${details.startTime} in ${ROOM_LABELS[details.room as Room] || details.room}. ${details.isCash ? '' : `Pay ${formatMoney(details.deposit)} deposit to confirm.`}`,
+    attachments: [{ label: details.isCash ? 'View session' : 'Confirm + pay', url: details.inviteUrl, kind: 'link' as const }],
+  });
   try {
     const roomLabel = ROOM_LABELS[details.room as Room] || details.room;
     const subject = details.isCash
@@ -623,6 +655,13 @@ export async function sendSessionInvite(to: string, details: {
 export async function sendBeatReviewNotification(to: string, details: {
   producerName: string; beatTitle: string;
 }) {
+  await mirrorToThread({
+    userEmail: to,
+    kind: 'update',
+    subject: 'New beat for review',
+    body: `A new beat "${details.beatTitle}" was uploaded to your catalog and needs your review before it goes live on the store.`,
+    attachments: [{ label: 'Review beat', url: `${SITE_URL}/producer`, kind: 'link' as const }],
+  });
   try {
     await resend.emails.send({
       from: FROM, to,
@@ -671,6 +710,13 @@ export async function sendPrivateBeatSaleInvite(to: string, details: {
   buyerName: string; beatTitle: string; producerName: string;
   licenseType: string; amount: number; requiresPayment: boolean; token: string;
 }) {
+  await mirrorToThread({
+    userEmail: to,
+    kind: 'booking_notification',
+    subject: 'Private Beat Sale',
+    body: `${details.producerName} set up a private beat sale for "${details.beatTitle}" (${details.licenseType}, ${details.requiresPayment ? formatMoney(details.amount) : 'no charge'}). Review + sign the license to receive your files.`,
+    attachments: [{ label: 'Review & sign', url: `${SITE_URL}/beats/private/${details.token}`, kind: 'link' as const }],
+  });
   try {
     const actionText = details.requiresPayment ? 'Review & Purchase' : 'Review & Sign';
     await resend.emails.send({
@@ -700,6 +746,13 @@ export async function sendPrivateBeatSaleComplete(to: string, details: {
   buyerName: string; beatTitle: string; producerName: string;
   licenseType: string; amount: number; token: string;
 }) {
+  await mirrorToThread({
+    userEmail: to,
+    kind: 'booking_notification',
+    subject: 'Beat Purchase Complete',
+    body: `Purchase complete: "${details.beatTitle}" by ${details.producerName} (${details.licenseType}, ${formatMoney(details.amount)}). License agreement is on your download page.`,
+    attachments: [{ label: 'Download files', url: `${SITE_URL}/beats/private/${details.token}`, kind: 'link' as const }],
+  });
   try {
     await resend.emails.send({
       from: FROM, to,
@@ -792,6 +845,12 @@ export async function sendBeatSaleProducerNotification(to: string, details: {
   amount: number;
   producerEarnings: number;
 }) {
+  await mirrorToThread({
+    userEmail: to,
+    kind: 'booking_notification',
+    subject: 'Beat Sold',
+    body: `${details.buyerName} bought "${details.beatTitle}" (${details.licenseType}, ${formatMoney(details.amount)}). Your earnings: ${formatMoney(details.producerEarnings)} (60%). Track at /producer.`,
+  });
   try {
     await resend.emails.send({
       from: FROM,
@@ -847,6 +906,12 @@ export async function sendAdminBeatApprovalNotification(adminEmails: string[], d
 export async function sendBeatApprovedNotification(to: string, details: {
   beatTitle: string;
 }) {
+  await mirrorToThread({
+    userEmail: to,
+    kind: 'booking_notification',
+    subject: 'Beat Approved',
+    body: `"${details.beatTitle}" was approved. Sign the agreement + upload cover art at /producer to go live on the store.`,
+  });
   try {
     await resend.emails.send({
       from: FROM, to,
@@ -868,6 +933,12 @@ export async function sendBeatApprovedNotification(to: string, details: {
 export async function sendBeatRejectedNotification(to: string, details: {
   beatTitle: string; reason?: string;
 }) {
+  await mirrorToThread({
+    userEmail: to,
+    kind: 'booking_notification',
+    subject: 'Beat Not Approved',
+    body: `"${details.beatTitle}" was not approved.${details.reason ? ` Reason: ${details.reason}` : ''} Reach out if you'd like to re-submit.`,
+  });
   try {
     await resend.emails.send({
       from: FROM, to,
@@ -895,6 +966,12 @@ export async function sendLeaseRevokedNotification(to: string, details: {
   licenseType: string;
   purchaseDate: string;
 }) {
+  await mirrorToThread({
+    userEmail: to,
+    kind: 'update',
+    subject: 'Lease Grandfathered',
+    body: `Exclusive rights to "${details.beatTitle}" by ${details.producerName} were purchased by another buyer. Your ${details.licenseType} (purchased ${details.purchaseDate}) will run until expiry but cannot be renewed. Per the lease agreement you signed.`,
+  });
   try {
     await resend.emails.send({
       from: FROM,
@@ -935,6 +1012,13 @@ export async function sendPaymentReminder(to: string, details: {
   remainingAmount: number;
   paymentLink?: string;
 }) {
+  await mirrorToThread({
+    userEmail: to,
+    kind: 'booking_notification',
+    subject: 'Session Balance Due',
+    body: `Remaining balance from your ${details.sessionDate} session: ${formatMoney(details.remainingAmount)} of ${formatMoney(details.totalAmount)} (${formatMoney(details.amountPaid)} paid). Files + new bookings stay on hold until cleared.`,
+    attachments: details.paymentLink ? [{ label: 'Pay now', url: details.paymentLink, kind: 'link' as const }] : [],
+  });
   try {
     await resend.emails.send({
       from: FROM,
@@ -979,6 +1063,12 @@ export async function sendPaystubEmail(to: string, details: {
   totalPaid: number;
   balanceAfter: number;
 }) {
+  await mirrorToThread({
+    userEmail: to,
+    kind: 'booking_notification',
+    subject: `Paystub — ${formatMoney(details.payoutAmount)}${details.periodLabel ? ` (${details.periodLabel})` : ''}`,
+    body: `Payout of ${formatMoney(details.payoutAmount)} via ${details.method} recorded.${details.note ? ` Note: ${details.note}` : ''} Total earned: ${formatMoney(details.totalEarned)}. Balance after: ${formatMoney(details.balanceAfter)}.`,
+  });
   try {
     const d = details;
     let earningsRows = '';
@@ -1028,6 +1118,12 @@ export async function sendLeaseExpiryWarning(to: string, details: {
   expiresAt: string;
   renewalPrice: number;
 }) {
+  await mirrorToThread({
+    userEmail: to,
+    kind: 'booking_notification',
+    subject: 'Lease Expiring Soon',
+    body: `Your ${details.licenseType} for "${details.beatTitle}" by ${details.producerName} expires ${details.expiresAt}. Renew for ${formatMoney(details.renewalPrice)} from /dashboard/purchases.`,
+  });
   try {
     await resend.emails.send({
       from: FROM,
@@ -1061,6 +1157,14 @@ export async function sendLeaseExpiredNotice(to: string, details: {
   renewalPrice: number;
   canRenew: boolean;
 }) {
+  await mirrorToThread({
+    userEmail: to,
+    kind: 'booking_notification',
+    subject: 'Lease Expired',
+    body: details.canRenew
+      ? `Your ${details.licenseType} for "${details.beatTitle}" by ${details.producerName} expired. Renew for ${formatMoney(details.renewalPrice)} (25% off) from /dashboard/purchases.`
+      : `Your ${details.licenseType} for "${details.beatTitle}" by ${details.producerName} expired. Beat is now exclusive — please remove any content using this beat from distribution.`,
+  });
   try {
     await resend.emails.send({
       from: FROM,
@@ -1097,6 +1201,13 @@ export async function sendBandInviteEmail(details: {
   role: 'admin' | 'member';
   token: string;
 }) {
+  await mirrorToThread({
+    userEmail: details.toEmail,
+    kind: 'update',
+    subject: `Band Invite — ${details.bandName}`,
+    body: `${details.inviterName} invited you to join ${details.bandName} as ${details.role === 'admin' ? 'an admin' : 'a member'}. Review the invite to accept.`,
+    attachments: [{ label: 'Review & accept', url: `${SITE_URL}/bands/accept/${details.token}`, kind: 'link' as const }],
+  });
   try {
     const acceptUrl = `${SITE_URL}/bands/accept/${details.token}`;
     await resend.emails.send({
@@ -1140,6 +1251,17 @@ export async function sendBandMemberJoinedNotification(
   },
 ) {
   if (recipientEmails.length === 0) return;
+  // Mirror to every recipient's Sweet Dreams thread (each band manager
+  // gets a copy in their own inbox).
+  for (const email of recipientEmails) {
+    await mirrorToThread({
+      userEmail: email,
+      kind: 'update',
+      subject: `New member: ${details.bandName}`,
+      body: `${details.joinerName} accepted their invite and joined ${details.bandName} as ${details.joinerRole === 'admin' ? 'an admin' : 'a member'}.`,
+      attachments: [{ label: 'Open band hub', url: `${SITE_URL}/dashboard/bands/${details.bandId}`, kind: 'link' as const }],
+    });
+  }
   try {
     const bandUrl = `${SITE_URL}/dashboard/bands/${details.bandId}`;
     await resend.emails.send({
@@ -1183,12 +1305,22 @@ export async function sendEventInvitation(details: {
   token: string;
   customNote?: string;    // optional personal note from the admin
 }) {
+  const acceptUrl = `${SITE_URL}/events/rsvp/${details.token}`;
+  const whenFormatted = new Date(details.eventStartsAt).toLocaleString('en-US', {
+    weekday: 'short', month: 'long', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+  });
+  // Mirror to the invitee's Sweet Dreams thread if they're a registered
+  // user. If the email doesn't match a profile, the helper logs a warning
+  // and silently skips — invites to strangers don't create orphan threads.
+  await mirrorToThread({
+    userEmail: details.toEmail,
+    kind: 'booking_notification',
+    subject: `You're invited: ${details.eventTitle}`,
+    body: `${details.inviterName} invited you to ${details.eventTitle} on ${whenFormatted}${details.eventLocation ? ` at ${details.eventLocation}` : ''}.${details.customNote ? `\n\nNote from ${details.inviterName}: ${details.customNote}` : ''}`,
+    attachments: [{ label: 'RSVP', url: acceptUrl, kind: 'link' as const }],
+  });
   try {
-    const acceptUrl = `${SITE_URL}/events/rsvp/${details.token}`;
-    const whenFormatted = new Date(details.eventStartsAt).toLocaleString('en-US', {
-      weekday: 'short', month: 'long', day: 'numeric', year: 'numeric',
-      hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
-    });
     await resend.emails.send({
       from: FROM,
       to: details.toEmail,
@@ -1275,12 +1407,27 @@ export async function sendEventRsvpDecision(details: {
   approved: boolean;
   declineReason?: string;
 }) {
+  const eventUrl = `${SITE_URL}/events/${details.eventSlug}`;
+  const whenFormatted = new Date(details.eventStartsAt).toLocaleString('en-US', {
+    weekday: 'short', month: 'long', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+  });
+  await mirrorToThread({
+    userEmail: details.toEmail,
+    kind: 'booking_notification',
+    subject: details.approved
+      ? `You're in: ${details.eventTitle}`
+      : `About your request: ${details.eventTitle}`,
+    body: details.approved
+      ? `Your request to attend ${details.eventTitle} on ${whenFormatted}${details.eventLocation ? ` at ${details.eventLocation}` : ''} was approved. See you there.`
+      : `We couldn't fit you in for ${details.eventTitle} this time.${details.declineReason ? `\n\n${details.declineReason}` : ''}\n\nKeep an eye on the events page for what's coming up next.`,
+    attachments: [{
+      label: details.approved ? 'View event details' : 'See upcoming events',
+      url: details.approved ? eventUrl : `${SITE_URL}/events`,
+      kind: 'link' as const,
+    }],
+  });
   try {
-    const eventUrl = `${SITE_URL}/events/${details.eventSlug}`;
-    const whenFormatted = new Date(details.eventStartsAt).toLocaleString('en-US', {
-      weekday: 'short', month: 'long', day: 'numeric', year: 'numeric',
-      hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
-    });
     await resend.emails.send({
       from: FROM,
       to: details.toEmail,
@@ -1333,11 +1480,23 @@ export async function sendEventCancellation(details: {
   reason: string | null;
 }) {
   if (details.toEmails.length === 0) return;
-  try {
-    const whenFormatted = new Date(details.eventStartsAt).toLocaleString('en-US', {
-      weekday: 'short', month: 'long', day: 'numeric', year: 'numeric',
-      hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+  const whenFormatted = new Date(details.eventStartsAt).toLocaleString('en-US', {
+    weekday: 'short', month: 'long', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+  });
+  // Mirror cancellation to each recipient's Sweet Dreams thread. The email
+  // itself goes BCC (one send) but each user sees the cancellation in their
+  // own thread, not pooled into a shared one.
+  for (const recipientEmail of details.toEmails) {
+    await mirrorToThread({
+      userEmail: recipientEmail,
+      kind: 'booking_notification',
+      subject: `Cancelled: ${details.eventTitle}`,
+      body: `${details.eventTitle} (was scheduled for ${whenFormatted}${details.eventLocation ? ` at ${details.eventLocation}` : ''}) has been cancelled.${details.reason ? `\n\nNote from the team: ${details.reason}` : ''}`,
+      attachments: [{ label: 'See upcoming events', url: `${SITE_URL}/events`, kind: 'link' as const }],
     });
+  }
+  try {
     await resend.emails.send({
       from: FROM,
       to: FROM, // send-only address — real recipients go via bcc
@@ -1557,18 +1716,27 @@ export async function sendMediaSessionScheduled(to: string, details: {
   location: 'studio' | 'external';
   externalLocationText: string | null;
   engineerName: string;
+  bookingId?: string; // routes mirror into the booking thread when present
 }) {
+  const when = new Date(details.startsAt).toLocaleString('en-US', {
+    weekday: 'short', month: 'long', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+  });
+  const endTime = new Date(details.endsAt).toLocaleTimeString('en-US', {
+    hour: 'numeric', minute: '2-digit',
+  });
+  const locationLabel = details.location === 'studio'
+    ? 'Sweet Dreams Studio (Fort Wayne)'
+    : details.externalLocationText || 'External — details to follow';
+  await mirrorToThread({
+    userEmail: to,
+    mediaBookingId: details.bookingId,
+    kind: 'booking_notification',
+    subject: 'Session Scheduled',
+    body: `Your ${details.sessionKindLabel.toLowerCase()} for ${details.offeringTitle} is locked in: ${when} – ${endTime} with ${details.engineerName} at ${locationLabel}.`,
+    attachments: [{ label: 'View order', url: `${SITE_URL}/dashboard/media/orders`, kind: 'link' as const }],
+  });
   try {
-    const when = new Date(details.startsAt).toLocaleString('en-US', {
-      weekday: 'short', month: 'long', day: 'numeric', year: 'numeric',
-      hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
-    });
-    const endTime = new Date(details.endsAt).toLocaleTimeString('en-US', {
-      hour: 'numeric', minute: '2-digit',
-    });
-    const locationLabel = details.location === 'studio'
-      ? 'Sweet Dreams Studio (Fort Wayne)'
-      : details.externalLocationText || 'External — details to follow';
     await resend.emails.send({
       from: FROM,
       to,
@@ -1666,18 +1834,26 @@ export async function sendMediaSessionReminder(to: string, details: {
   location: 'studio' | 'external';
   externalLocationText: string | null;
   engineerName: string;
+  bookingId?: string; // routes mirror into the booking thread when present
 }) {
+  const start = new Date(details.startsAt);
+  const end = new Date(details.endsAt);
+  const startLabel = start.toLocaleString('en-US', {
+    weekday: 'short', month: 'long', day: 'numeric',
+    hour: 'numeric', minute: '2-digit',
+  });
+  const endLabel = end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  const locationLabel = details.location === 'studio'
+    ? 'Sweet Dreams Studio (Fort Wayne)'
+    : details.externalLocationText || 'External — see scheduling notes';
+  await mirrorToThread({
+    userEmail: to,
+    mediaBookingId: details.bookingId,
+    kind: 'update',
+    subject: 'Session in 1 hour',
+    body: `Heads up — your ${details.sessionKindLabel.toLowerCase()} starts in about an hour. ${startLabel} – ${endLabel}, ${locationLabel}, with ${details.engineerName}.`,
+  });
   try {
-    const start = new Date(details.startsAt);
-    const end = new Date(details.endsAt);
-    const startLabel = start.toLocaleString('en-US', {
-      weekday: 'short', month: 'long', day: 'numeric',
-      hour: 'numeric', minute: '2-digit',
-    });
-    const endLabel = end.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-    const locationLabel = details.location === 'studio'
-      ? 'Sweet Dreams Studio (Fort Wayne)'
-      : details.externalLocationText || 'External — see scheduling notes';
     await resend.emails.send({
       from: FROM,
       to,
@@ -1756,6 +1932,14 @@ export async function sendMediaDeliverablesReady(to: string, details: {
   bookingId: string;
   itemCount: number;
 }) {
+  await mirrorToThread({
+    userEmail: to,
+    mediaBookingId: details.bookingId,
+    kind: 'booking_notification',
+    subject: 'Your files are ready',
+    body: `The first deliverables for ${details.offeringTitle} are live in your dashboard — ${details.itemCount} item${details.itemCount === 1 ? '' : 's'} ready to download.`,
+    attachments: [{ label: 'Open order', url: `${SITE_URL}/dashboard/media/orders/${details.bookingId}`, kind: 'link' as const }],
+  });
   try {
     await resend.emails.send({
       from: FROM,
@@ -1788,6 +1972,14 @@ export async function sendMediaPaymentLink(to: string, details: {
   paymentUrl: string;
   bookingId: string;
 }) {
+  await mirrorToThread({
+    userEmail: to,
+    mediaBookingId: details.bookingId,
+    kind: 'booking_notification',
+    subject: 'Remaining balance',
+    body: `Your media order is ready for the next step — please pay the remaining balance of ${formatMoney(details.amount)} to keep production moving.`,
+    attachments: [{ label: 'Pay now', url: details.paymentUrl, kind: 'link' as const }],
+  });
   try {
     await resend.emails.send({
       from: FROM,

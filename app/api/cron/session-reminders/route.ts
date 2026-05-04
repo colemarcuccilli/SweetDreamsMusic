@@ -257,6 +257,7 @@ export async function GET(request: NextRequest) {
               location: session.location,
               externalLocationText: session.external_location_text,
               engineerName,
+              bookingId: session.parent_booking_id,
             });
           }
 

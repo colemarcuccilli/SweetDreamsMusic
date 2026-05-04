@@ -239,6 +239,7 @@ export async function POST(request: NextRequest) {
       location,
       externalLocationText,
       engineerName: engineerEntry.name,
+      bookingId: parentBookingId,
     });
   } catch (e) {
     console.error('[media/sessions] buyer email error:', e);
