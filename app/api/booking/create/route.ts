@@ -6,6 +6,7 @@ import { PRICING, SITE_URL, ROOM_LABELS, STUDIO_A_WEEKDAY_START, MAX_GUESTS, typ
 import { calculateSessionTotal, calculateBandSessionTotal, isSelfServeBandHours, parseTimeSlot } from '@/lib/utils';
 import { memberHasFlag } from '@/lib/bands';
 import { getMembership } from '@/lib/bands-server';
+import { isEngineerBlocked } from '@/lib/engineer-blocks';
 
 export async function POST(request: NextRequest) {
   try {
@@ -140,6 +141,29 @@ export async function POST(request: NextRequest) {
         if (overlap) {
           return NextResponse.json({ error: 'This time slot is already booked. Please choose a different time.' }, { status: 409 });
         }
+      }
+    }
+
+    // Engineer-specific availability check. If the buyer requested a
+    // specific engineer (or band-mode forced Iszac), we reject the booking
+    // when that engineer has self-blocked the window. "Any Available"
+    // bookings skip this — the priority claim flow will route around
+    // blocked engineers naturally.
+    if (requestedEngineer) {
+      const endDec = (startHour + Number(duration)) % 24;
+      const endTimeForCheck = `${Math.floor(endDec)}:${endDec % 1 >= 0.5 ? '30' : '00'}`;
+      const startISO = `${date}T${startTime}:00+00:00`;
+      const endISO = `${date}T${endTimeForCheck.padStart(5, '0')}:00+00:00`;
+      const blocked = await isEngineerBlocked({
+        engineerName: requestedEngineer,
+        startISO,
+        endISO,
+      });
+      if (blocked) {
+        const friendlyMsg = isBandBooking
+          ? `Iszac is blocked off for that time. Pick a different date or time — band sessions are dedicated to him.`
+          : `${requestedEngineer} is unavailable for that time. Pick a different time, choose another engineer, or select "Any Available".`;
+        return NextResponse.json({ error: friendlyMsg }, { status: 409 });
       }
     }
     // Same-day check using date strings to avoid UTC timezone mismatch
