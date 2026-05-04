@@ -252,73 +252,50 @@ export default function BandsPage() {
       </section>
 
       {/* ═══════════════════════════════════════════════════════════════
-          PHOTO GALLERY — the 8 Sweet Spot timeline stills
+          FIRST SWEET SPOT — embedded YouTube. 56.25% padding-bottom gives
+          a responsive 16:9 frame; accent border ties it to the dark
+          section. Photo gallery was removed once the video shipped — the
+          stills were a placeholder for the video drop.
           ═══════════════════════════════════════════════════════════════ */}
       <section className="bg-black text-white py-20 sm:py-28">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <p className="font-mono text-accent text-xs sm:text-sm font-semibold tracking-[0.3em] uppercase mb-3">
-            From the Floor
+            First Release
           </p>
-          <h2 className="text-heading-xl mb-4">SWEET SPOT, IN FRAMES</h2>
+          <h2 className="text-heading-xl mb-4">WATCH THE FIRST SWEET SPOT</h2>
           <p className="font-mono text-white/60 text-body-sm max-w-2xl mb-12 sm:mb-16">
-            Stills from a Sweet Spot session on the tracking floor. The full video is below — watch the
-            first Sweet Spot release.
+            Press play for the first Sweet Spot drop — full video, multicam, mixed live on the
+            tracking floor.
           </p>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-            {SWEET_SPOT_PHOTOS.map((photo, i) => (
-              <div
-                key={photo.src}
-                className={`relative overflow-hidden aspect-[4/3] ${
-                  i === 0 || i === 4 ? 'md:col-span-2 md:aspect-[2/1]' : ''
-                }`}
-              >
-                <Image
-                  src={photo.src}
-                  alt={photo.alt}
-                  fill
-                  className="object-cover hover:scale-105 transition-transform duration-500"
-                  sizes="(max-width: 768px) 50vw, 25vw"
-                />
-              </div>
-            ))}
-          </div>
 
-          {/* First Sweet Spot release — embedded YouTube. The 56.25%
-              padding-bottom trick gives a responsive 16:9 frame; the
-              accent border ties it to the rest of the dark section. */}
-          <div className="mt-12 sm:mt-16">
-            <p className="font-mono text-xs uppercase tracking-[0.3em] text-accent mb-3">
-              Watch the first Sweet Spot
-            </p>
-            <div
-              className="border-2 border-white/10 bg-black"
+          <div
+            className="border-2 border-white/10 bg-black"
+            style={{
+              position: 'relative',
+              paddingBottom: '56.25%',
+              height: 0,
+              overflow: 'hidden',
+            }}
+          >
+            <iframe
+              src="https://www.youtube.com/embed/hvfjYGGmcMQ"
+              title="The Sweet Spot — Sweet Dreams Music live-band video session"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerPolicy="strict-origin-when-cross-origin"
+              allowFullScreen
               style={{
-                position: 'relative',
-                paddingBottom: '56.25%',
-                height: 0,
-                overflow: 'hidden',
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                border: 0,
               }}
-            >
-              <iframe
-                src="https://www.youtube.com/embed/hvfjYGGmcMQ"
-                title="The Sweet Spot — Sweet Dreams Music live-band video session"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                referrerPolicy="strict-origin-when-cross-origin"
-                allowFullScreen
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: '100%',
-                  border: 0,
-                }}
-              />
-            </div>
-            <p className="font-mono text-white/50 text-body-sm mt-4">
-              Follow Sweet Dreams Music on YouTube to catch every Sweet Spot release as it drops.
-            </p>
+            />
           </div>
+          <p className="font-mono text-white/50 text-body-sm mt-4">
+            Follow Sweet Dreams Music on YouTube to catch every Sweet Spot release as it drops.
+          </p>
         </div>
       </section>
 
