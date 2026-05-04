@@ -1,5 +1,6 @@
 import { Resend } from 'resend';
 import { SUPER_ADMINS, ROOM_LABELS, SITE_URL, type Room } from './constants';
+import { mirrorToThread } from './messaging-mirror';
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM = 'Sweet Dreams Music <studio@sweetdreamsmusic.com>';
@@ -55,6 +56,15 @@ export async function sendBookingConfirmation(to: string, details: {
   customerName: string; date: string; startTime: string; duration: number;
   room: string; total: number; deposit: number; bookingId?: string;
 }) {
+  // Round 9e: mirror this notification into the buyer's Sweet Dreams thread
+  // so it shows up in their in-app inbox alongside the email. Studio sessions
+  // don't have media_booking threads, so we always target the SD thread.
+  await mirrorToThread({
+    userEmail: to,
+    kind: 'booking_notification',
+    subject: 'Booking Confirmed',
+    body: `Your ${details.duration}hr session is booked for ${details.date} at ${details.startTime} in ${ROOM_LABELS[details.room as Room] || details.room}. Deposit ${formatMoney(details.deposit)} paid; remainder ${formatMoney(details.total - details.deposit)} due at session.`,
+  });
   try {
     const roomLabel = ROOM_LABELS[details.room as Room] || details.room;
     const prepUrl = details.bookingId ? `${SITE_URL}/dashboard/prep/${details.bookingId}` : `${SITE_URL}/dashboard`;
@@ -325,6 +335,12 @@ export async function sendRescheduleRequestAlert(details: {
 export async function sendEngineerAssigned(to: string, details: {
   customerName: string; engineerName: string; date: string; startTime: string;
 }) {
+  await mirrorToThread({
+    userEmail: to,
+    kind: 'booking_notification',
+    subject: 'Engineer Assigned',
+    body: `${details.engineerName} has been confirmed as your engineer for the ${details.date} session at ${details.startTime}.`,
+  });
   try {
     await resend.emails.send({
       from: FROM, to, subject: 'Engineer Assigned — Sweet Dreams Music',
@@ -495,6 +511,13 @@ export async function sendPasswordReset(to: string, resetLink: string) {
 }
 
 export async function sendWelcomeEmail(to: string, name: string) {
+  // First message in the user's brand-new Sweet Dreams thread.
+  await mirrorToThread({
+    userEmail: to,
+    kind: 'update',
+    subject: `Welcome, ${name}`,
+    body: `Glad to have you at Sweet Dreams Music. This is your inbox — every receipt, booking confirmation, engineer assignment, and platform update lands here. You can reply directly to talk to Cole, Jay, or any of the engineers. They'll see it and respond from this same thread.`,
+  });
   try {
     await resend.emails.send({
       from: FROM, to, subject: 'Welcome to Sweet Dreams Music',
@@ -513,6 +536,12 @@ export async function sendSessionFilesDelivered(to: string, details: {
   customerName: string; engineerName: string; fileCount: number;
   date: string; room: string;
 }) {
+  await mirrorToThread({
+    userEmail: to,
+    kind: 'booking_notification',
+    subject: 'Your Files Are Ready',
+    body: `${details.engineerName} uploaded ${details.fileCount} file${details.fileCount > 1 ? 's' : ''} from your ${ROOM_LABELS[details.room as Room] || details.room} session. Download from your dashboard.`,
+  });
   try {
     const roomLabel = ROOM_LABELS[details.room as Room] || details.room;
     const reviewUrl = 'https://g.page/r/CcWAY0XlIQNpEBM/review';
@@ -725,6 +754,12 @@ export async function sendBeatPurchaseConfirmation(to: string, details: {
   amount: number;
   purchaseId: string;
 }) {
+  await mirrorToThread({
+    userEmail: to,
+    kind: 'booking_notification',
+    subject: 'Beat Purchase Confirmed',
+    body: `Purchase complete: "${details.beatTitle}" by ${details.producerName} (${details.licenseType}, ${formatMoney(details.amount)}). Download from /dashboard/purchases.`,
+  });
   try {
     await resend.emails.send({
       from: FROM,
@@ -1350,6 +1385,16 @@ export async function sendMediaPurchaseConfirmation(to: string, details: {
   configurationLines: string[];
   bookingId?: string;
 }) {
+  // Mirror into the booking thread (project-specific) so all the
+  // back-and-forth about THIS order lives together. If we have no
+  // bookingId fall back to the buyer's Sweet Dreams thread.
+  await mirrorToThread({
+    userEmail: to,
+    mediaBookingId: details.bookingId,
+    kind: 'booking_notification',
+    subject: 'Order Confirmed',
+    body: `Payment received for ${details.offeringTitle} (${formatMoney(details.amountPaid)}). ${details.studioHoursIncluded > 0 ? `${details.studioHoursIncluded} hours added to ${details.bandAttached ? 'your band' : 'your account'}'s prepaid balance. ` : ''}A producer reaches out within 1 business day to plan dates.`,
+  });
   try {
     const ownerLabel = details.bandAttached ? 'your band' : 'your account';
     const buildSection = details.configurationLines.length > 0
@@ -1779,6 +1824,16 @@ export async function sendMediaComponentReady(to: string, details: {
   driveUrl: string;
   bookingId: string;
 }) {
+  // Mirror to the booking thread — context lives with the project.
+  await mirrorToThread({
+    mediaBookingId: details.bookingId,
+    kind: 'booking_notification',
+    subject: `${details.componentLabel} ready`,
+    body: `${details.componentLabel} for ${details.offeringTitle} is live. Download from Google Drive.`,
+    attachments: [
+      { label: details.componentLabel, url: details.driveUrl, kind: 'file' as const },
+    ],
+  });
   try {
     await resend.emails.send({
       from: FROM,
