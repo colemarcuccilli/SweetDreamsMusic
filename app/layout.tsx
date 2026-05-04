@@ -7,6 +7,7 @@ import Footer from '@/components/layout/Footer';
 import JsonLd from '@/components/seo/JsonLd';
 import { AudioPlayerProvider } from '@/components/audio/AudioPlayerContext';
 import AudioPlayerBar from '@/components/audio/AudioPlayerBar';
+import MessageWidgetSlot from '@/components/messaging/MessageWidgetSlot';
 import { SEO, SITE_URL, GEO, BRAND } from '@/lib/constants';
 import './globals.css';
 
@@ -111,6 +112,10 @@ export default function RootLayout({
           <main className="min-h-screen pt-16 sm:pt-20 pb-20">{children}</main>
           <Footer />
           <AudioPlayerBar />
+          {/* Authenticated-only messaging widget — bottom-right floating
+              chat button. Server component checks session + only renders
+              for logged-in users; anonymous visitors see nothing. */}
+          <MessageWidgetSlot />
         </AudioPlayerProvider>
         <Analytics />
       </body>

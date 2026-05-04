@@ -2,9 +2,10 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Shield, Wrench, User, Music, Rocket, Bell, Users, PartyPopper, Film } from 'lucide-react';
+import { LayoutDashboard, Shield, Wrench, User, Music, Rocket, Bell, Users, PartyPopper, Film, Inbox } from 'lucide-react';
 import type { UserRole } from '@/lib/constants';
 import SignOutButton from '@/components/auth/SignOutButton';
+import UnreadBell from '@/components/messaging/UnreadBell';
 
 interface DashboardNavProps {
   role: UserRole;
@@ -20,6 +21,7 @@ export default function DashboardNav({ role, isProducer, displayName, email, pro
   const tabs = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
     { href: '/dashboard/hub', label: 'Artist Hub', icon: Rocket, show: true },
+    { href: '/dashboard/inbox', label: 'Inbox', icon: Inbox, show: true },
     { href: '/dashboard/bands', label: 'Bands', icon: Users, show: true },
     { href: '/dashboard/events', label: 'Events', icon: PartyPopper, show: true },
     // Media Hub — visible to every logged-in user. Visibility filtering
@@ -41,7 +43,13 @@ export default function DashboardNav({ role, isProducer, displayName, email, pro
             <h1 className="text-heading-xl">{displayName || 'Welcome'}</h1>
             <p className="font-mono text-white/80 text-sm mt-1">{email}</p>
           </div>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Unread bell — links to /dashboard/inbox with a numbered
+                badge capped at 9+. Sits alongside the other top-right
+                pills so it's discoverable from any dashboard page. */}
+            <div className="bg-white/5 hover:bg-white/10 transition-colors rounded">
+              <UnreadBell />
+            </div>
             <Link
               href="/dashboard/updates"
               className={`border border-white/20 text-white font-mono text-xs font-bold uppercase tracking-wider px-3 py-2 hover:border-accent hover:text-accent transition-colors no-underline inline-flex items-center gap-1.5 ${
