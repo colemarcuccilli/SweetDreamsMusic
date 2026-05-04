@@ -1944,7 +1944,11 @@ function ManualBookingModal({
               Payment method
             </p>
             <div className="flex flex-wrap gap-2">
-              {(['cash', 'venmo', 'check', 'other', 'link'] as const).map((m) => (
+              {/* Manual bookings are for offline collections only — venmo +
+                  email-link options were removed per Cole. The 'link' code
+                  path stays in the server route + state type for future
+                  reuse, just isn't exposed in this UI. */}
+              {(['cash', 'check', 'other'] as const).map((m) => (
                 <button
                   key={m}
                   type="button"
@@ -1955,14 +1959,12 @@ function ManualBookingModal({
                       : 'border-black/20 hover:bg-black/5'
                   }`}
                 >
-                  {m === 'link' ? 'Email link' : m}
+                  {m}
                 </button>
               ))}
             </div>
             <p className="font-mono text-[10px] text-black/50 mt-1">
-              {paymentMethod === 'link'
-                ? 'Creates a Stripe Payment Link, emails buyer, marks booking as inquiry until paid.'
-                : 'Marks booking fully paid; cash flows through the cash ledger.'}
+              Marks booking fully paid; cash flows through the cash ledger.
             </p>
           </div>
 

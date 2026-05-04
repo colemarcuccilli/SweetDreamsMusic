@@ -97,11 +97,15 @@ export async function POST(request: NextRequest) {
   // ── Resolve buyer + offering ───────────────────────────────────────
   const service = createServiceClient();
   const [{ data: buyerRow }, { data: offeringRow }] = await Promise.all([
-    service.from('profiles').select('user_id, email, display_name, full_name').eq('user_id', userId).maybeSingle(),
+    // profiles.full_name does NOT exist in this schema — display_name is
+    // the one full-name column on profiles. Selecting full_name caused the
+    // query to error out and return null, which surfaced as "Buyer not
+    // found" even when the dropdown showed a valid match.
+    service.from('profiles').select('user_id, email, display_name').eq('user_id', userId).maybeSingle(),
     service.from('media_offerings').select('id, title, slug, components').eq('id', offeringId).maybeSingle(),
   ]);
   const buyer = buyerRow as
-    | { user_id: string; email: string | null; display_name: string | null; full_name: string | null }
+    | { user_id: string; email: string | null; display_name: string | null }
     | null;
   const offering = offeringRow as
     | { id: string; title: string; slug: string; components: Record<string, unknown> | null }
@@ -160,7 +164,7 @@ export async function POST(request: NextRequest) {
     // Cash ledger insert (parallels /api/admin/media/bookings/[id]/record-payment)
     if (paymentMethod === 'cash' && priceCents > 0) {
       try {
-        const buyerName = buyer.full_name || buyer.display_name || 'Unknown';
+        const buyerName = buyer.display_name || 'Unknown';
         await service.from('cash_ledger').insert({
           media_booking_id: bookingId,
           booking_id: null,
@@ -257,7 +261,7 @@ export async function POST(request: NextRequest) {
     if (buyer.email) {
       try {
         await sendMediaPaymentLink(buyer.email, {
-          buyerName: buyer.full_name || buyer.display_name || 'there',
+          buyerName: buyer.display_name || 'there',
           amount: priceCents,
           paymentUrl: link.url,
           bookingId,
