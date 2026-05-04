@@ -30,6 +30,8 @@ import { formatCents } from '@/lib/utils';
 import { describeConfig, type ConfiguredComponents } from '@/lib/media-config';
 import DashboardNav from '@/components/layout/DashboardNav';
 import CancelSessionButton from '@/components/media/CancelSessionButton';
+import MessageThread from '@/components/media/MessageThread';
+import PackageReview from '@/components/media/PackageReview';
 
 export const dynamic = 'force-dynamic';
 
@@ -202,6 +204,25 @@ export default async function OrderDetailPage({
               isTest={!!booking.is_test}
             />
           )}
+
+          {/* Proposed package — Round 8c. Hidden when no package or
+              still in draft (admin's still building). Once sent, buyer
+              reviews + approves each line item here. */}
+          <PackageReview bookingId={booking.id} />
+
+          {/* Conversation — Round 8b. Buyer ↔ admin ↔ engineer thread.
+              Drives all the scoping, idea sharing, and date negotiation
+              that doesn't fit cleanly into a payment or status field. */}
+          <div id="conversation">
+            <p className="font-mono text-[11px] uppercase tracking-wider text-black/50 mb-3">
+              Talk to us
+            </p>
+            <MessageThread bookingId={booking.id} />
+            <p className="font-mono text-[11px] text-black/40 mt-2">
+              Cole or Jay will reply here. References, ideas, and date proposals all
+              live in this thread so nothing gets lost.
+            </p>
+          </div>
 
           {/* Production status — Round 7. Per-component progress: cover
               art done, shorts pending, etc. Renders only when the

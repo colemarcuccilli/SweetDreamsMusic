@@ -7,6 +7,7 @@ import {
   sendEngineerClaimConfirmation,
   sendEngineerPassNotification,
   sendPriorityExpiredToClient,
+  sendBandSessionNeedsRescheduleAdmin,
 } from '@/lib/email';
 import { ENGINEERS, findEngineerByEmail, isSameEngineer, type Room } from '@/lib/constants';
 
@@ -166,14 +167,52 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Only the requested engineer can pass' }, { status: 403 });
     }
 
-    // Mark as passed — immediately opens to all engineers
-    await serviceClient.from('bookings').update({
+    // Mark as passed. For solo sessions this immediately opens to all
+    // other engineers in the studio. Bands are different — only Iszac is
+    // qualified to run a band session, so a pass means admins need to
+    // coordinate a reschedule with the band directly. No other engineer
+    // is ever notified for a band pass.
+    const { error: passErr } = await serviceClient.from('bookings').update({
       engineer_passed: true,
       engineer_passed_at: new Date().toISOString(),
       priority_expires_at: new Date().toISOString(), // Expire priority immediately
       priority_notified: true, // Prevent the cron from re-processing
     }).eq('id', bookingId);
+    if (passErr) {
+      // If the pass write fails the booking is still claimable — don't fire
+      // notifications that imply otherwise.
+      console.error('[respond] pass update failed:', passErr);
+      return NextResponse.json({ error: 'Could not record pass' }, { status: 500 });
+    }
 
+    const isBandBooking = !!booking.band_id;
+
+    if (isBandBooking) {
+      // Band branch: alert admins, no buyer email yet (Round 8b chat thread
+      // will be the proper surface), no fan-out to other engineers.
+      let bandName: string | null = null;
+      try {
+        const { data: bandRow } = await serviceClient
+          .from('bands')
+          .select('display_name')
+          .eq('id', booking.band_id)
+          .maybeSingle();
+        bandName = (bandRow as { display_name: string } | null)?.display_name ?? null;
+      } catch { /* best-effort lookup */ }
+
+      await sendBandSessionNeedsRescheduleAdmin({
+        bookingId,
+        customerName: booking.customer_name,
+        bandName,
+        date: dateStr,
+        startTime: timeStr,
+        duration: booking.duration,
+      });
+
+      return NextResponse.json({ success: true, action: 'passed', band: true });
+    }
+
+    // Solo branch — existing behavior unchanged.
     // Notify the client
     if (booking.customer_email && booking.requested_engineer) {
       await sendPriorityExpiredToClient(booking.customer_email, {

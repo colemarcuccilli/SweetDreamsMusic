@@ -51,3 +51,6 @@ firestore.indexes.json
 
 # superpowers brainstorming sessions — local-only, ephemeral mockups
 .superpowers/
+
+# Claude Code local config — generated per-machine, contains personal allowlists
+.claude/settings.local.json

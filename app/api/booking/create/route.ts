@@ -10,9 +10,18 @@ import { getMembership } from '@/lib/bands-server';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { date, startTime, duration, room, engineer, customerName, customerEmail: bodyCustomerEmail, customerPhone, guestCount: rawGuestCount, notes, bandId, sweetSpotAddon: rawSweetSpotAddon } = body;
+    const { date, startTime, duration, room, engineer: rawEngineer, customerName, customerEmail: bodyCustomerEmail, customerPhone, guestCount: rawGuestCount, notes, bandId, sweetSpotAddon: rawSweetSpotAddon } = body;
     const guestCount = Math.min(Math.max(1, Number(rawGuestCount) || 1), MAX_GUESTS);
     const isBandBooking = typeof bandId === 'string' && bandId.length > 0;
+    // Band sessions ALWAYS route to Iszac — he's the dedicated band engineer.
+    // Server-side enforcement matters here because the body is otherwise the
+    // booker's word; without this override a tampered POST or stale UI state
+    // could route a band priority alert to the wrong engineer.
+    const requestedEngineer: string = isBandBooking
+      ? 'Iszac Griner'
+      : typeof rawEngineer === 'string'
+        ? rawEngineer
+        : '';
 
     // Sweet Spot filming add-on validation. Only meaningful for band bookings
     // on the 8hr or 24hr (3-day) tier. Server re-validates the kind matches
@@ -251,7 +260,7 @@ export async function POST(request: NextRequest) {
         end_time: endTime,
         duration_hours: String(duration),
         room,
-        engineer: engineer || '',
+        engineer: requestedEngineer,
         notes: notes || '',
         total_amount: String(pricing.total),
         deposit_amount: String(pricing.deposit),

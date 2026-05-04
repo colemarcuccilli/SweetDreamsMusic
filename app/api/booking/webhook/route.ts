@@ -103,13 +103,22 @@ export async function POST(request: NextRequest) {
                 extra_filming_hours: 2,
               };
             }
-          } catch {
-            console.warn('[webhook] sweet_spot_addon parse failed — proceeding without addon');
+          } catch (e) {
+            // Sweet Spot is part of the priced deposit — silently dropping
+            // it would mean the customer paid for an add-on with no row to
+            // back it. Roll back the dedup claim so Stripe retries; if the
+            // payload is permanently bad, admin investigates from logs.
+            console.error('[webhook] sweet_spot_addon parse failed — rolling back claim:', e);
+            await supabase.from('stripe_webhook_events').delete().eq('event_id', event.id);
+            return NextResponse.json({ error: 'Sweet Spot metadata corrupted' }, { status: 500 });
           }
         }
 
-        // Calculate dynamic priority window: until 12 hours before session (min 2 hours from now)
-        const priorityExpiry = meta.engineer ? calculatePriorityExpiry(startDateTime) : null;
+        // Calculate dynamic priority window: until 12 hours before session (min 2 hours from now).
+        // Bands always carry a priority window — even if meta.engineer is somehow
+        // empty (defense-in-depth) we want Iszac to get the priority claim, not
+        // fall through to the all-engineers fan-out.
+        const priorityExpiry = (meta.engineer || isBandBooking) ? calculatePriorityExpiry(startDateTime) : null;
         const rescheduleDeadline = calculateRescheduleDeadline(startDateTime);
 
         // Branch on multi-day vs single-day. The multi-day path inserts 3
@@ -132,6 +141,11 @@ export async function POST(request: NextRequest) {
           const remainderCents = parseInt(meta.remainder_amount);
           const perDayTotal = Math.round(totalCents / 3);
           const perDayRemainder = Math.round(remainderCents / 3);
+          // Day 1 absorbs the rounding leftover so the sum of remainders
+          // always equals remainderCents exactly. Math.round can leave a
+          // 1-cent gap in either direction; deriving Day 1 from the others
+          // (vs. from totals) keeps the math consistent and never negative.
+          const day1Remainder = Math.max(0, remainderCents - 2 * perDayRemainder);
           const day1SetupMinutes = parseInt(meta.setup_minutes_before || '60', 10) || 60;
 
           // Day 1 / Day 2 / Day 3 anchor dates. We compute by adding 24h to
@@ -166,9 +180,7 @@ export async function POST(request: NextRequest) {
               requested_engineer: meta.engineer || null,
               total_amount: perDayTotal,
               deposit_amount: i === 0 ? depositCents : 0,
-              remainder_amount: i === 0
-                ? totalCents - depositCents - 2 * perDayTotal
-                : perDayRemainder,
+              remainder_amount: i === 0 ? day1Remainder : perDayRemainder,
               actual_deposit_paid: i === 0 ? session.amount_total : 0,
               night_fees_amount: 0,
               same_day_fee: false,
@@ -193,17 +205,26 @@ export async function POST(request: NextRequest) {
             }).select('id').single();
 
             if (error) {
-              console.error(`[webhook] 3-day band row insert (day ${i + 1}) failed:`, error);
-            } else if (row) {
+              // 3-day inserts must all succeed atomically. If any day fails,
+              // roll back what we wrote + clear the dedup claim so Stripe
+              // retries the whole event. Without this, a partial insert would
+              // be permanent (claim-at-start blocks future retries).
+              console.error(`[webhook] 3-day band row insert (day ${i + 1}) failed — rolling back:`, error);
+              if (insertedIds.length > 0) {
+                await supabase.from('bookings').delete().in('id', insertedIds);
+              }
+              await supabase.from('stripe_webhook_events').delete().eq('event_id', event.id);
+              return NextResponse.json(
+                { error: `Day ${i + 1} insert failed: ${error.message}` },
+                { status: 500 },
+              );
+            }
+            if (row) {
               insertedIds.push(row.id);
               if (i === 0) newBooking = row;
             }
           }
 
-          // Admin alert: 3-day blocks need a follow-up call. Send an email
-          // to SUPER_ADMINS so Cole/Jay see it land. Reuse the standard
-          // admin booking alert helper but with a callout in the customer
-          // notes already baked into the day-1 row.
           console.log(
             `[webhook] 3-day band block inserted: groupId=${groupId} rowCount=${insertedIds.length} band=${meta.band_id || 'none'}`,
           );
@@ -219,7 +240,7 @@ export async function POST(request: NextRequest) {
                 ).toISOString()
               : endDateTime;
 
-          const { data: row } = await supabase.from('bookings').insert({
+          const { data: row, error: insertErr } = await supabase.from('bookings').insert({
             customer_name: meta.customer_name,
             customer_email: meta.customer_email,
             customer_phone: meta.customer_phone || null,
@@ -249,6 +270,17 @@ export async function POST(request: NextRequest) {
             setup_minutes_before: parseInt(meta.setup_minutes_before || '0', 10) || 0,
             sweet_spot_addon: sweetSpotAddon,
           }).select('id').single();
+          if (insertErr || !row) {
+            // Customer paid; without a booking row we'd have a ghost charge.
+            // Roll back the dedup claim so Stripe retries — better to receive
+            // a duplicate event later than to silently lose the booking.
+            console.error('[webhook] solo/band-single insert failed — rolling back claim:', insertErr);
+            await supabase.from('stripe_webhook_events').delete().eq('event_id', event.id);
+            return NextResponse.json(
+              { error: insertErr?.message || 'Booking insert failed' },
+              { status: 500 },
+            );
+          }
           newBooking = row;
         }
 
@@ -283,10 +315,34 @@ export async function POST(request: NextRequest) {
           total: parseInt(meta.total_amount),
         });
 
-        // Notify engineers — priority to requested engineer, or all engineers for this studio
+        // Notify engineers. Two routing rules:
+        //   • Band sessions ALWAYS go to Iszac (the dedicated band engineer)
+        //     with priority — never fan out to other Studio A engineers. If
+        //     Iszac can't take it, he reschedules with the band directly via
+        //     the chat thread (Round 8b) — no fallback claim path.
+        //   • Solo sessions: requested engineer gets priority; if no
+        //     preference, fan out to every engineer assigned to that studio.
         const room = meta.room as string;
-        if (meta.engineer && priorityExpiry) {
-          // Requested engineer gets priority — only notify them
+        if (isBandBooking) {
+          // Resolve Iszac from the roster. Use displayName "Iszac" or canonical
+          // name "Iszac Griner" — both work since the roster carries both.
+          // displayName 'Iszac' uniquely identifies him in the roster; checking
+          // both `name` and `displayName` confuses TS narrowing in disjunctions.
+          const iszac = ENGINEERS.find((e) => e.displayName === 'Iszac');
+          if (iszac && priorityExpiry) {
+            const priorityLabel = getPriorityHoursLabel(priorityExpiry);
+            await sendEngineerPriorityAlert(iszac.email, {
+              id: newBooking?.id || '',
+              customerName: meta.customer_name,
+              date: dateStr,
+              startTime: timeStr,
+              duration,
+              room: meta.room,
+              priorityHours: priorityLabel,
+            });
+          }
+        } else if (meta.engineer && priorityExpiry) {
+          // Solo: requested engineer gets priority — only notify them
           const requestedEng = ENGINEERS.find(
             (e) => e.name === meta.engineer || e.displayName === meta.engineer
           );
@@ -303,7 +359,7 @@ export async function POST(request: NextRequest) {
             });
           }
         } else {
-          // No preference — notify all engineers for this studio
+          // Solo, no preference — notify all engineers for this studio
           const engineerEmails = ENGINEERS
             .filter((e) => e.studios.includes(room as Room))
             .map((e) => e.email);
@@ -1204,10 +1260,15 @@ export async function POST(request: NextRequest) {
           // Same logic as checkout.session.completed for booking_deposit
           const startDateTime = `${asyncMeta.session_date}T${asyncMeta.start_time}:00`;
           const endDateTime = `${asyncMeta.session_date}T${asyncMeta.end_time}:00`;
-          const priorityExpiry = asyncMeta.engineer ? calculatePriorityExpiry(startDateTime) : null;
+          const isAsyncBandBooking = asyncMeta.type === 'band_booking_deposit';
+          // Bands always get a priority window even if asyncMeta.engineer is empty —
+          // mirrors the sync branch's defense-in-depth so Iszac never gets bypassed.
+          const priorityExpiry = (asyncMeta.engineer || isAsyncBandBooking)
+            ? calculatePriorityExpiry(startDateTime)
+            : null;
           const rescheduleDeadline = calculateRescheduleDeadline(startDateTime);
 
-          const { data: newBooking } = await supabase.from('bookings').insert({
+          const { data: newBooking, error: asyncInsErr } = await supabase.from('bookings').insert({
             customer_name: asyncMeta.customer_name,
             customer_email: asyncMeta.customer_email,
             customer_phone: asyncMeta.customer_phone || null,
@@ -1237,6 +1298,14 @@ export async function POST(request: NextRequest) {
             // need to honor this too or the calendar would under-block.
             setup_minutes_before: parseInt(asyncMeta.setup_minutes_before || '0', 10) || 0,
           }).select().single();
+          if (asyncInsErr || !newBooking) {
+            console.error('[webhook] async-payment booking insert failed — rolling back claim:', asyncInsErr);
+            await supabase.from('stripe_webhook_events').delete().eq('event_id', event.id);
+            return NextResponse.json(
+              { error: asyncInsErr?.message || 'Async booking insert failed' },
+              { status: 500 },
+            );
+          }
 
           // Send all emails
           const startDate = new Date(startDateTime);
@@ -1258,7 +1327,20 @@ export async function POST(request: NextRequest) {
           });
 
           const room = asyncMeta.room as string;
-          if (asyncMeta.engineer && priorityExpiry) {
+          if (isAsyncBandBooking) {
+            // Band sessions: always Iszac, never fan out — same routing as
+            // the sync branch above. Iszac reschedules with the band directly
+            // if he can't take it; no other engineer can claim a band session.
+            const iszac = ENGINEERS.find((e) => e.displayName === 'Iszac');
+            if (iszac && priorityExpiry) {
+              const priorityLabel = getPriorityHoursLabel(priorityExpiry);
+              await sendEngineerPriorityAlert(iszac.email, {
+                id: newBooking?.id || '', customerName: asyncMeta.customer_name,
+                date: dateStr, startTime: timeStr, duration, room: asyncMeta.room,
+                priorityHours: priorityLabel,
+              });
+            }
+          } else if (asyncMeta.engineer && priorityExpiry) {
             const requestedEng = ENGINEERS.find(
               (e) => e.name === asyncMeta.engineer || e.displayName === asyncMeta.engineer
             );

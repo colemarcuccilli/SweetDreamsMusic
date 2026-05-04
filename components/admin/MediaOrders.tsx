@@ -39,6 +39,8 @@ import {
   Send,
 } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
+import MessageThread from '@/components/media/MessageThread';
+import PackageBuilder from '@/components/media/PackageBuilder';
 import {
   type MediaSessionBooking,
   type MediaSessionKind,
@@ -771,6 +773,27 @@ function BookingPanel({
           {error}
         </div>
       )}
+
+      {/* Final package — Round 8c. Admin builds + sends to buyer.
+          Pre-fills from offering's configurator slots; auto-injects a
+          planning_call line item when music_video or shorts>2. */}
+      <PackageBuilder
+        bookingId={booking.id}
+        offering={offering ? {
+          id: offering.id,
+          title: offering.title,
+          slug: offering.slug,
+          price_cents: null,
+          components: offering.components,
+        } : null}
+        configuredComponents={booking.configured_components as { selections?: Record<string, unknown> } | null}
+        onChange={onChange}
+      />
+
+      {/* Conversation — Round 8b. Buyer ↔ admin ↔ engineer thread.
+          Same component the buyer sees on /dashboard/media/orders/[id];
+          admin role is auto-detected from the session. */}
+      <MessageThread bookingId={booking.id} />
 
       {/* Audit history — collapsible. Loads only when opened so a 200-row
           list view doesn't refire 200 audit-log queries. */}

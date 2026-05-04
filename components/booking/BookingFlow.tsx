@@ -97,6 +97,19 @@ export default function BookingFlow({
     }
   }, [isBandMode, duration]);
   const [engineer, setEngineer] = useState<string>('any');
+  // Band sessions are Iszac-only — he's the dedicated band engineer. The
+  // server enforces this regardless, but mirroring the rule client-side
+  // keeps the picker consistent with what gets submitted.
+  useEffect(() => {
+    if (isBandMode) {
+      setEngineer('Iszac Griner');
+    } else if (engineer === 'Iszac Griner') {
+      // Switching out of band mode — reset so the solo flow shows "Any
+      // Available" instead of leaving the band-specific engineer pinned.
+      setEngineer('any');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isBandMode]);
   const [customerName, setCustomerName] = useState(userName);
   const [customerEmail] = useState(userEmail);
   const [customerPhone, setCustomerPhone] = useState('');
@@ -527,40 +540,55 @@ export default function BookingFlow({
           )}
         </div>
 
-        <div className="mb-4">
-          <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">
-            Request an Engineer <span className="font-normal text-black/60">(not guaranteed)</span>
-          </h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <button
-              onClick={() => setEngineer('any')}
-              className={cn(
-                'p-4 border-2 font-mono text-sm text-left transition-colors',
-                engineer === 'any' ? 'border-black bg-black text-white' : 'border-black/20 hover:border-black'
-              )}
-            >
-              <p className="font-bold uppercase tracking-wider">Any Available</p>
-              <p className={cn('text-xs mt-1', engineer === 'any' ? 'text-white/80' : 'text-black/60')}>
-                We&apos;ll match you
-              </p>
-            </button>
-            {ENGINEERS.filter((eng) => eng.studios.includes(room)).map((eng) => (
+        {isBandMode ? (
+          // Band sessions are dedicated to Iszac — no picker, just a
+          // confirmation that he's the engineer for this booking.
+          <div className="mb-4 p-4 border-2 border-black bg-black text-white">
+            <p className="font-mono text-[11px] uppercase tracking-wider text-white/60 mb-1">
+              Your engineer
+            </p>
+            <p className="font-bold text-lg">Iszac</p>
+            <p className="font-mono text-xs text-white/70 mt-1">
+              Iszac is our dedicated band session engineer. He&apos;ll reach out to confirm
+              your booking and coordinate the day.
+            </p>
+          </div>
+        ) : (
+          <div className="mb-4">
+            <h3 className="font-mono text-sm font-semibold uppercase tracking-wider mb-4">
+              Request an Engineer <span className="font-normal text-black/60">(not guaranteed)</span>
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <button
-                key={eng.name}
-                onClick={() => setEngineer(eng.name)}
+                onClick={() => setEngineer('any')}
                 className={cn(
                   'p-4 border-2 font-mono text-sm text-left transition-colors',
-                  engineer === eng.name ? 'border-black bg-black text-white' : 'border-black/20 hover:border-black'
+                  engineer === 'any' ? 'border-black bg-black text-white' : 'border-black/20 hover:border-black'
                 )}
               >
-                <p className="font-bold uppercase tracking-wider">{eng.displayName}</p>
-                <p className={cn('text-xs mt-1', engineer === eng.name ? 'text-white/80' : 'text-black/60')}>
-                  {eng.specialties.join(', ')}
+                <p className="font-bold uppercase tracking-wider">Any Available</p>
+                <p className={cn('text-xs mt-1', engineer === 'any' ? 'text-white/80' : 'text-black/60')}>
+                  We&apos;ll match you
                 </p>
               </button>
-            ))}
+              {ENGINEERS.filter((eng) => eng.studios.includes(room)).map((eng) => (
+                <button
+                  key={eng.name}
+                  onClick={() => setEngineer(eng.name)}
+                  className={cn(
+                    'p-4 border-2 font-mono text-sm text-left transition-colors',
+                    engineer === eng.name ? 'border-black bg-black text-white' : 'border-black/20 hover:border-black'
+                  )}
+                >
+                  <p className="font-bold uppercase tracking-wider">{eng.displayName}</p>
+                  <p className={cn('text-xs mt-1', engineer === eng.name ? 'text-white/80' : 'text-black/60')}>
+                    {eng.specialties.join(', ')}
+                  </p>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </section>
 
       {/* ============ SECTION 3: TIME & DURATION ============ */}

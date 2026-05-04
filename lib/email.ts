@@ -8,6 +8,25 @@ function formatMoney(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
+// Round 8 hardening: escape user-supplied text before interpolating into
+// email HTML. The chat thread (Round 8b) and any future helper that takes
+// free-form buyer input should run text through this — otherwise a buyer
+// can inject <script>, <img onerror=...>, etc. into admin inboxes.
+//
+// Replaces the five HTML-significant chars and converts \n to <br/> so the
+// caller doesn't have to. For interpolation into href/src attributes use
+// a different escape — but we don't do that for user-supplied URLs (the
+// validators upstream require http(s)://).
+export function escapeHtml(input: string): string {
+  return String(input)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/\n/g, '<br/>');
+}
+
 function wrap(content: string): string {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:0;background:#000;font-family:'IBM Plex Mono',monospace;color:#fff"><div style="max-width:600px;margin:0 auto;padding:40px 24px">${content}<div style="margin-top:40px;padding-top:24px;border-top:1px solid #333;text-align:center"><p style="color:#666;font-size:11px;margin:0">Sweet Dreams Music LLC &mdash; Fort Wayne, IN</p><p style="color:#666;font-size:11px;margin:4px 0 0"><a href="${SITE_URL}" style="color:#F4C430;text-decoration:none">sweetdreamsmusic.com</a></p></div></div></body></html>`;
 }
@@ -210,6 +229,43 @@ export async function sendEngineerPassNotification(engineerEmails: string[], det
       console.error(`Email error (pass notification to ${email}):`, e);
     }
   }
+}
+
+/**
+ * Sent to SUPER_ADMINS when Iszac passes a band session. Bands route only to
+ * Iszac — there's no fallback claim path — so when he passes, admins need to
+ * step in and coordinate a reschedule with the band directly. The buyer is
+ * NOT auto-notified (Round 8b chat thread is the right surface for that).
+ */
+export async function sendBandSessionNeedsRescheduleAdmin(details: {
+  bookingId: string;
+  customerName: string;
+  bandName?: string | null;
+  date: string;
+  startTime: string;
+  duration: number;
+}) {
+  try {
+    await resend.emails.send({
+      from: FROM,
+      to: [...SUPER_ADMINS],
+      subject: `Iszac passed band session — coordinate reschedule (${details.customerName})`,
+      html: wrap(`
+        ${h1('Band Session — Needs Reschedule')}
+        ${p(`Iszac passed on this band session. Bands route only to him, so no other engineer can pick it up — admins need to coordinate a reschedule with the band directly.`)}
+        ${detailTable(`
+          ${detail('Band', details.bandName || details.customerName)}
+          ${detail('Booker', details.customerName)}
+          ${detail('Original date', details.date)}
+          ${detail('Original time', details.startTime)}
+          ${detail('Duration', `${details.duration} hour${details.duration > 1 ? 's' : ''}`)}
+          ${detail('Booking ID', details.bookingId.slice(0, 8))}
+        `)}
+        ${btn('Open in admin', `${SITE_URL}/admin`)}
+        ${p('<span style="color:#888;font-size:12px">Reach out to the band, propose a new date, then update the booking from the admin panel. The buyer hasn\'t been auto-notified yet.</span>')}
+      `),
+    });
+  } catch (e) { console.error('Email error (band needs reschedule):', e); }
 }
 
 export async function sendPriorityExpiredToClient(to: string, details: {
@@ -1841,4 +1897,91 @@ export async function sendSweetSpotInquiry(details: {
       `),
     });
   } catch (e) { console.error('Email error (sweet spot inquiry):', e); }
+}
+
+/**
+ * Round 8b: notification when someone posts a new message to a media
+ * booking thread. Recipients depend on who wrote the message:
+ *   • buyer or engineer wrote → admins (Cole + Jay) get notified
+ *   • admin wrote             → buyer's email gets notified
+ *
+ * The body is a preview only (240 chars) — full thread lives at the order
+ * page. Email exists to bring the other side back to the site.
+ *
+ * Service-client lookup of buyer email + admin emails happens before this
+ * helper is called (POST route does it). We just need the rendered fields.
+ */
+export async function sendNewMediaMessageNotification(args: {
+  bookingId: string;
+  authorRole: 'admin' | 'buyer' | 'engineer';
+  authorName: string;
+  bodyPreview: string;
+  hasAttachments: boolean;
+}) {
+  try {
+    // Resolve recipients + the buyer email/order URL via the service
+    // client. Lazy import to keep this module client-safe wherever it's
+    // included.
+    const { createServiceClient } = await import('@/lib/supabase/server');
+    const service = createServiceClient();
+
+    const { data: bookingRow } = await service
+      .from('media_bookings')
+      .select('id, user_id, band_id')
+      .eq('id', args.bookingId)
+      .maybeSingle();
+    if (!bookingRow) return;
+    const booking = bookingRow as { id: string; user_id: string; band_id: string | null };
+
+    // Resolve buyer email — auth.users + profiles.
+    let buyerEmail: string | null = null;
+    try {
+      const { data: u } = await service.auth.admin.getUserById(booking.user_id);
+      buyerEmail = u?.user?.email ?? null;
+    } catch { /* best-effort */ }
+
+    const orderUrl = `${SITE_URL}/dashboard/media/orders/${args.bookingId}`;
+    const adminUrl = `${SITE_URL}/admin`;
+    // SECURITY: bodyPreview is user-supplied. escapeHtml prevents XSS in
+    // admin inboxes (a buyer could otherwise embed <script>/<img onerror>).
+    const previewHtml = args.bodyPreview
+      ? `<blockquote style="border-left:3px solid #F4C430;padding:8px 12px;margin:0;color:#ccc;font-size:14px">${escapeHtml(args.bodyPreview)}</blockquote>`
+      : `<p style="color:#888;font-size:13px;font-style:italic;margin:0">[attachment-only message]</p>`;
+    const safeAuthorName = escapeHtml(args.authorName);
+    const attachmentNote = args.hasAttachments
+      ? p('<span style="color:#F4C430;font-size:12px;font-weight:700">📎 Attachments included</span>')
+      : '';
+
+    if (args.authorRole === 'admin') {
+      // Notify the buyer.
+      if (buyerEmail) {
+        await resend.emails.send({
+          from: FROM,
+          to: buyerEmail,
+          subject: `New message about your order from ${safeAuthorName}`,
+          html: wrap(
+            h1('NEW MESSAGE') +
+            p(`<strong style="color:#F4C430">${safeAuthorName}</strong> sent you a message about your media order.`) +
+            previewHtml +
+            attachmentNote +
+            btn('Open conversation', orderUrl)
+          ),
+        });
+      }
+    } else {
+      // Buyer or engineer wrote — notify admins.
+      await resend.emails.send({
+        from: FROM,
+        to: [...SUPER_ADMINS],
+        subject: `New ${args.authorRole} message — order ${args.bookingId.slice(0, 8)}`,
+        html: wrap(
+          h1('NEW MESSAGE') +
+          p(`<strong style="color:#F4C430">${safeAuthorName}</strong> (${args.authorRole}) just posted on a media order.`) +
+          previewHtml +
+          attachmentNote +
+          btn('Open in admin', adminUrl)
+        ),
+      });
+    }
+  } catch (e) { console.error('Email error (new media message):', e); }
 }
