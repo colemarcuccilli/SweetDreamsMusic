@@ -261,8 +261,8 @@ export default function BandsPage() {
           </p>
           <h2 className="text-heading-xl mb-4">SWEET SPOT, IN FRAMES</h2>
           <p className="font-mono text-white/60 text-body-sm max-w-2xl mb-12 sm:mb-16">
-            Stills from a Sweet Spot session on the tracking floor. The full video is coming — our first
-            Sweet Spot release drops soon.
+            Stills from a Sweet Spot session on the tracking floor. The full video is below — watch the
+            first Sweet Spot release.
           </p>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
             {SWEET_SPOT_PHOTOS.map((photo, i) => (
@@ -283,17 +283,40 @@ export default function BandsPage() {
             ))}
           </div>
 
-          {/* Placeholder for first Sweet Spot video — swap in Cloudflare Stream
-              embed when user uploads it next week. Keeping the slot reserved
-              so we don't forget. */}
-          <div className="mt-12 sm:mt-16 border-2 border-white/10 bg-white/5 p-8 sm:p-12 text-center">
-            <Film className="w-10 h-10 text-accent mx-auto mb-4" strokeWidth={1.5} />
-            <p className="font-mono text-xs uppercase tracking-[0.3em] text-accent mb-2">Coming Soon</p>
-            <p className="font-mono text-body-md text-white/80 mb-2">
-              Our first Sweet Spot video drops next week.
+          {/* First Sweet Spot release — embedded YouTube. The 56.25%
+              padding-bottom trick gives a responsive 16:9 frame; the
+              accent border ties it to the rest of the dark section. */}
+          <div className="mt-12 sm:mt-16">
+            <p className="font-mono text-xs uppercase tracking-[0.3em] text-accent mb-3">
+              Watch the first Sweet Spot
             </p>
-            <p className="font-mono text-body-sm text-white/50">
-              Check back to watch the full session, or follow Sweet Dreams Music on YouTube to catch it live.
+            <div
+              className="border-2 border-white/10 bg-black"
+              style={{
+                position: 'relative',
+                paddingBottom: '56.25%',
+                height: 0,
+                overflow: 'hidden',
+              }}
+            >
+              <iframe
+                src="https://www.youtube.com/embed/hvfjYGGmcMQ"
+                title="The Sweet Spot — Sweet Dreams Music live-band video session"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                referrerPolicy="strict-origin-when-cross-origin"
+                allowFullScreen
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  border: 0,
+                }}
+              />
+            </div>
+            <p className="font-mono text-white/50 text-body-sm mt-4">
+              Follow Sweet Dreams Music on YouTube to catch every Sweet Spot release as it drops.
             </p>
           </div>
         </div>

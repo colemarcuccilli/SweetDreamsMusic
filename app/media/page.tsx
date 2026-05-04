@@ -30,8 +30,10 @@ export const dynamic = 'force-dynamic';
 
 // Embedded portfolio videos — bottom of page, "show, don't tell" proof of work.
 // Add IDs here when new videos go live; small enough list to keep inline rather
-// than paying for a CMS round trip.
+// than paying for a CMS round trip. The Sweet Spot leads — it's our flagship
+// live-band format and the most recent release.
 const PORTFOLIO_VIDEOS = [
+  { id: 'hvfjYGGmcMQ', title: 'The Sweet Spot — Live Band Session' },
   { id: 'tyQStwbljvo', title: 'Music Video' },
   { id: 'aVDCLVVbVBM', title: 'Music Video' },
   { id: '7BKNcbAsTaQ', title: 'Music Video' },
