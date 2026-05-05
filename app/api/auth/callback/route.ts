@@ -40,10 +40,10 @@ export async function GET(request: NextRequest) {
           if (ageMs < 2 * 60 * 1000) {
             const { data: profile } = await supabase
               .from('profiles')
-              .select('full_name')
+              .select('display_name')
               .eq('user_id', user.id)
               .single();
-            const name = profile?.full_name || user.user_metadata?.full_name || 'there';
+            const name = profile?.display_name || user.user_metadata?.full_name || 'there';
             sendWelcomeEmail(user.email!, name);
           }
         }

@@ -60,7 +60,6 @@ interface OfferingRow {
 interface ProfileRow {
   user_id: string;
   display_name: string | null;
-  full_name: string | null;
   email: string | null;
 }
 
@@ -196,7 +195,7 @@ function SessionCard({
   const offering = parent ? offeringMap.get(parent.offering_id) : undefined;
   const buyer = parent ? profileMap.get(parent.user_id) : undefined;
   const buyerLabel =
-    buyer?.full_name || buyer?.display_name || buyer?.email || 'Buyer';
+    buyer?.display_name || buyer?.email || 'Buyer';
   const bandLabel = parent?.band_id ? bandMap.get(parent.band_id)?.display_name : null;
 
   const start = new Date(session.starts_at);

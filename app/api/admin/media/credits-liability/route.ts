@@ -53,15 +53,15 @@ export async function GET() {
   );
   const [profileRes, bandRes] = await Promise.all([
     userIds.length
-      ? service.from('profiles').select('user_id, display_name, full_name, email').in('user_id', userIds)
+      ? service.from('profiles').select('user_id, display_name, email').in('user_id', userIds)
       : Promise.resolve({ data: [], error: null }),
     bandIds.length
       ? service.from('bands').select('id, display_name').in('id', bandIds)
       : Promise.resolve({ data: [], error: null }),
   ]);
   const profileMap = new Map<string, string>();
-  for (const p of (profileRes.data || []) as Array<{ user_id: string; display_name: string | null; full_name: string | null; email: string | null }>) {
-    profileMap.set(p.user_id, p.full_name || p.display_name || p.email || 'User');
+  for (const p of (profileRes.data || []) as Array<{ user_id: string; display_name: string | null; email: string | null }>) {
+    profileMap.set(p.user_id, p.display_name || p.email || 'User');
   }
   const bandMap = new Map<string, string>();
   for (const b of (bandRes.data || []) as Array<{ id: string; display_name: string }>) {

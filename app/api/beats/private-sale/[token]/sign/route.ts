@@ -24,11 +24,11 @@ export async function POST(
   // Get buyer profile for real name
   const { data: buyerProfile } = await supabase
     .from('profiles')
-    .select('id, display_name, full_name')
+    .select('id, display_name')
     .eq('user_id', user.id)
     .single();
 
-  const buyerName = buyerProfile?.full_name || buyerProfile?.display_name || user.email?.split('@')[0] || 'Buyer';
+  const buyerName = buyerProfile?.display_name || user.email?.split('@')[0] || 'Buyer';
 
   const serviceClient = createServiceClient();
 

@@ -209,14 +209,14 @@ export async function GET(request: NextRequest) {
       const engineerIds = Array.from(new Set(rows.map((r) => r.engineer_id)));
       const [{ data: profiles }, { data: engineerProfiles }] = await Promise.all([
         buyerIds.length
-          ? supabase.from('profiles').select('user_id, display_name, full_name, email').in('user_id', buyerIds)
+          ? supabase.from('profiles').select('user_id, display_name, email').in('user_id', buyerIds)
           : Promise.resolve({ data: [] }),
         engineerIds.length
           ? supabase.from('profiles').select('user_id, display_name, email').in('user_id', engineerIds)
           : Promise.resolve({ data: [] }),
       ]);
-      const profileMap = new Map<string, { display_name: string | null; full_name: string | null; email: string | null }>();
-      for (const p of (profiles || []) as Array<{ user_id: string; display_name: string | null; full_name: string | null; email: string | null }>) {
+      const profileMap = new Map<string, { display_name: string | null; email: string | null }>();
+      for (const p of (profiles || []) as Array<{ user_id: string; display_name: string | null; email: string | null }>) {
         profileMap.set(p.user_id, p);
       }
       const engineerProfileMap = new Map<string, { display_name: string | null; email: string | null }>();
@@ -233,7 +233,7 @@ export async function GET(request: NextRequest) {
           }
           const buyer = profileMap.get(parent.user_id);
           const buyerName =
-            buyer?.full_name || buyer?.display_name || buyer?.email?.split('@')[0] || 'there';
+            buyer?.display_name || buyer?.email?.split('@')[0] || 'there';
 
           // Engineer name resolution: prefer the canonical ENGINEERS roster
           // entry (matches what the rest of the system uses). Fall back to

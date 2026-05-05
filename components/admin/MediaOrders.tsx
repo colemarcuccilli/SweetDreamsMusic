@@ -94,7 +94,6 @@ interface OfferingRow {
 interface ProfileRow {
   user_id: string;
   display_name: string | null;
-  full_name: string | null;
   email: string | null;
   phone: string | null;
 }
@@ -217,7 +216,7 @@ export default function MediaOrders() {
             const offering = offeringMap.get(b.offering_id);
             const buyer = profileMap.get(b.user_id);
             const buyerName =
-              buyer?.full_name || buyer?.display_name || buyer?.email || 'Unknown buyer';
+              buyer?.display_name || buyer?.email || 'Unknown buyer';
             const bandName = b.band_id ? bandMap.get(b.band_id)?.display_name : null;
             const isExpanded = expandedId === b.id;
 
@@ -492,7 +491,7 @@ function BookingPanel({
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="md:col-span-1">
           <p className="font-mono text-[10px] uppercase tracking-wider text-black/50 mb-1">Buyer</p>
-          <p className="text-sm font-bold">{buyer?.full_name || buyer?.display_name || '—'}</p>
+          <p className="text-sm font-bold">{buyer?.display_name || '—'}</p>
           {buyerEmail && (
             <a href={`mailto:${buyerEmail}`} className="block font-mono text-[11px] text-black/60 hover:text-accent truncate">
               {buyerEmail}
@@ -851,7 +850,7 @@ function BookingPanel({
           prefillUserId={booking.user_id}
           prefillUserLabel={
             buyer
-              ? `${buyer.full_name || buyer.display_name || '(no name)'} · ${buyer.email || '(no email)'}`
+              ? `${buyer.display_name || '(no name)'} · ${buyer.email || '(no email)'}`
               : null
           }
           onClose={() => setActiveModal(null)}

@@ -226,12 +226,11 @@ export async function POST(request: NextRequest) {
   // ── Buyer profile (for the booking's customer fields) ──────────────
   const { data: buyerProfile } = await service
     .from('profiles')
-    .select('display_name, full_name, artist_name')
+    .select('display_name')
     .eq('user_id', user.id)
     .maybeSingle();
   const buyerName =
-    (buyerProfile as { full_name?: string; display_name?: string } | null)?.full_name ||
-    (buyerProfile as { full_name?: string; display_name?: string } | null)?.display_name ||
+    (buyerProfile as { display_name?: string } | null)?.display_name ||
     user.email.split('@')[0] ||
     'Customer';
 

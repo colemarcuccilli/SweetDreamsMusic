@@ -11,14 +11,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Login required to purchase beats' }, { status: 401 });
   }
 
-  // Get buyer's full name from profile
+  // Get buyer's display name from profile
   const { data: buyerProfile } = await supabase
     .from('profiles')
-    .select('display_name, full_name')
+    .select('display_name')
     .eq('user_id', user.id)
     .single();
 
-  const buyerName = buyerProfile?.full_name || buyerProfile?.display_name || user.email?.split('@')[0] || 'Buyer';
+  const buyerName = buyerProfile?.display_name || user.email?.split('@')[0] || 'Buyer';
 
   const { beatId, licenseType } = await request.json();
 

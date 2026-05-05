@@ -274,15 +274,15 @@ export async function PATCH(
         const buyerId = (prevRow as { user_id: string }).user_id;
         const offeringId = (prevRow as { offering_id: string }).offering_id;
         const [{ data: buyerProfile }, { data: offeringRow }] = await Promise.all([
-          service.from('profiles').select('display_name, full_name, email').eq('user_id', buyerId).maybeSingle(),
+          service.from('profiles').select('display_name, email').eq('user_id', buyerId).maybeSingle(),
           service.from('media_offerings').select('title').eq('id', offeringId).maybeSingle(),
         ]);
-        const buyer = buyerProfile as { display_name?: string; full_name?: string; email?: string } | null;
+        const buyer = buyerProfile as { display_name?: string; email?: string } | null;
         const offering = offeringRow as { title?: string } | null;
         const buyerEmail = buyer?.email;
         if (buyerEmail) {
           await sendMediaDeliverablesReady(buyerEmail, {
-            buyerName: buyer?.full_name || buyer?.display_name || buyerEmail.split('@')[0] || 'there',
+            buyerName: buyer?.display_name || buyerEmail.split('@')[0] || 'there',
             offeringTitle: offering?.title || 'your media order',
             bookingId: id,
             itemCount: newItems.length,

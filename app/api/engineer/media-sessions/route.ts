@@ -80,7 +80,7 @@ export async function GET() {
       ? service.from('media_offerings').select('id, title').in('id', offeringIds)
       : Promise.resolve({ data: [] }),
     buyerIds.length
-      ? service.from('profiles').select('user_id, display_name, full_name, email').in('user_id', buyerIds)
+      ? service.from('profiles').select('user_id, display_name, email').in('user_id', buyerIds)
       : Promise.resolve({ data: [] }),
     bandIds.length
       ? service.from('bands').select('id, display_name').in('id', bandIds)

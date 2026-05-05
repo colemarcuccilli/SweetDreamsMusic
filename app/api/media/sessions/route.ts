@@ -212,12 +212,11 @@ export async function POST(request: NextRequest) {
   // Buyer profile for emails
   const { data: buyerProfile } = await service
     .from('profiles')
-    .select('display_name, full_name, email')
+    .select('display_name, email')
     .eq('user_id', user.id)
     .maybeSingle();
   const buyerName =
-    (buyerProfile as { full_name?: string; display_name?: string; email?: string } | null)?.full_name ||
-    (buyerProfile as { full_name?: string; display_name?: string; email?: string } | null)?.display_name ||
+    (buyerProfile as { display_name?: string; email?: string } | null)?.display_name ||
     user.email.split('@')[0];
 
   // Offering title for the email

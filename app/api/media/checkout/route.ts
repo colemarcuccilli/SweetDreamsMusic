@@ -140,11 +140,10 @@ export async function POST(request: NextRequest) {
 
   const { data: buyerProfile } = await supabase
     .from('profiles')
-    .select('display_name, full_name')
+    .select('display_name')
     .eq('user_id', user.id)
     .single();
   const buyerName =
-    buyerProfile?.full_name ||
     buyerProfile?.display_name ||
     user.email.split('@')[0] ||
     'Buyer';

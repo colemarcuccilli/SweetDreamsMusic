@@ -105,11 +105,11 @@ export async function POST(
   // ── Resolve buyer email ───────────────────────────────────────────
   const { data: buyerProfile } = await service
     .from('profiles')
-    .select('email, display_name, full_name')
+    .select('email, display_name')
     .eq('user_id', booking.user_id)
     .maybeSingle();
   const buyer = buyerProfile as
-    | { email: string | null; display_name: string | null; full_name: string | null }
+    | { email: string | null; display_name: string | null }
     | null;
   if (!buyer?.email) {
     return NextResponse.json(
@@ -145,7 +145,7 @@ export async function POST(
     // Email the buyer
     try {
       await sendMediaPaymentLink(buyer.email, {
-        buyerName: buyer.full_name || buyer.display_name || 'there',
+        buyerName: buyer.display_name || 'there',
         amount,
         paymentUrl: link.url,
         bookingId: booking.id,

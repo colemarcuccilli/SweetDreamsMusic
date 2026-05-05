@@ -57,7 +57,7 @@ export async function GET() {
       ? service.from('media_offerings').select('id, title, slug, components, price_cents').in('id', offeringIds)
       : Promise.resolve({ data: [], error: null }),
     userIds.length
-      ? service.from('profiles').select('user_id, display_name, full_name, email, phone').in('user_id', userIds)
+      ? service.from('profiles').select('user_id, display_name, email, phone').in('user_id', userIds)
       : Promise.resolve({ data: [], error: null }),
     bandIds.length
       ? service.from('bands').select('id, display_name').in('id', bandIds)
@@ -74,7 +74,6 @@ export async function GET() {
   const profiles = (profileRes.data || []) as Array<{
     user_id: string;
     display_name: string | null;
-    full_name: string | null;
     email: string | null;
     phone: string | null;
   }>;
