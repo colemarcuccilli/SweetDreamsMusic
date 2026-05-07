@@ -127,12 +127,16 @@ export function classifyPath(pathname: string): Bucket | null {
   // cause legit events to be dropped.
   if (pathname === '/api/booking/webhook') return null;
 
-  // Auth-adjacent flows: account claim, unauth user lookup. The Supabase
-  // sign-in / sign-up flow goes directly to supabase.co from the browser and
-  // doesn't hit our app, so there's no /api/auth/signin here.
+  // Auth-adjacent flows: account claim, unauth user lookup, password reset.
+  // The Supabase sign-in / sign-up flow goes directly to supabase.co from
+  // the browser and doesn't hit our app, so there's no /api/auth/signin
+  // here. Password reset DOES hit us (since we mint+email the link
+  // ourselves through Resend) so we throttle that — 5/min/IP keeps
+  // someone from spamming reset attempts at a known email.
   if (
     pathname === '/api/booking/claim' ||
-    pathname === '/api/booking/lookup-user'
+    pathname === '/api/booking/lookup-user' ||
+    pathname === '/api/auth/forgot-password'
   ) return 'auth';
 
   // Contact / inquiry / application forms (high-value targets for spam).

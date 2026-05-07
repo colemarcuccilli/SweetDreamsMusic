@@ -513,15 +513,31 @@ export async function sendSessionReminderToStaff(emails: string[], details: {
   } catch (e) { console.error('Email error (staff reminder):', e); }
 }
 
-export async function sendPasswordReset(to: string, resetLink: string) {
+/**
+ * Password reset email.
+ *
+ * Sent from /api/auth/forgot-password — we generate the recovery link via
+ * service.auth.admin.generateLink({ type: 'recovery' }) and email it via
+ * Resend rather than letting Supabase Auth send its own (rate-limited,
+ * unbranded) version. The link still verifies through Supabase's normal
+ * recovery flow — clicking it sets a session and lands on /reset-password
+ * where updateUser({ password }) does the actual change.
+ *
+ * Deliberately NOT mirrored into the user's Sweet Dreams thread: anyone
+ * with concurrent access to the inbox (shared computer, partner who can
+ * read your email, etc.) could use the link. Email-only is the right
+ * audience for a credential-rotation flow.
+ */
+export async function sendPasswordReset(to: string, resetLink: string, name?: string) {
   try {
     await resend.emails.send({
       from: FROM, to, subject: 'Reset Your Password — Sweet Dreams Music',
       html: wrap(`
         ${h1('Reset Password')}
-        ${p('We received a request to reset your password. Click the button below to set a new one.')}
+        ${p(name ? `Hey ${name}, we received a request to reset your password.` : 'We received a request to reset your password.')}
+        ${p('Click the button below to set a new one. The link is valid for 1 hour.')}
         ${btn('Reset Password', resetLink)}
-        ${p('If you didn\'t request this, you can safely ignore this email.')}
+        ${p('<span style="color:#888;font-size:12px">If you didn\'t request this, you can safely ignore this email — your password won\'t change unless you click the link above.</span>')}
         <p style="font-size:11px;color:#666;margin-top:24px;word-break:break-all">${resetLink}</p>
       `),
     });

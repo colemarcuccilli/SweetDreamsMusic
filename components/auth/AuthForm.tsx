@@ -32,11 +32,23 @@ export default function AuthForm() {
 
     try {
       if (mode === 'forgot') {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/reset-password`,
+        // Custom branded reset flow — see /api/auth/forgot-password for why
+        // we don't call supabase.auth.resetPasswordForEmail directly.
+        // The route always returns 200 (anti-enumeration), so we always
+        // show the same success message regardless of whether the email
+        // matches an account.
+        const res = await fetch('/api/auth/forgot-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
         });
-        if (error) throw error;
-        setMessage('Check your email for a password reset link.');
+        if (res.status === 429) {
+          throw new Error('Too many reset attempts. Please wait a minute and try again.');
+        }
+        if (!res.ok) {
+          throw new Error('Could not send reset email. Please try again.');
+        }
+        setMessage('If an account exists for that email, a reset link is on its way. Check your inbox (and spam folder just in case).');
       } else if (mode === 'signup') {
         const params = new URLSearchParams(window.location.search);
         const redirect = params.get('redirect');
