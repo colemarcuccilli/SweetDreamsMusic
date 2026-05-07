@@ -54,3 +54,5 @@ firestore.indexes.json
 
 # Claude Code local config — generated per-machine, contains personal allowlists
 .claude/settings.local.json
+
+.vercel
