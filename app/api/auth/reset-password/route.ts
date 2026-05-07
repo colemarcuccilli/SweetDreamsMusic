@@ -106,11 +106,19 @@ export async function POST(request: Request) {
     );
   }
 
-  // Update the password. service.auth.admin.updateUserById bypasses the
-  // user's session entirely — this works even if the user has no
-  // active session (which they don't, since they came in via email link).
+  // Update the password AND mark the email confirmed (we just delivered
+  // a working email to that address — that's the same proof of email
+  // ownership that the signup confirmation flow exists to establish).
+  // This unblocks any user whose account is stuck `email_confirmed_at IS
+  // NULL` because Supabase's built-in confirmation email failed to
+  // deliver — they can self-rescue via Forgot Password.
+  //
+  // service.auth.admin.updateUserById bypasses the user's session
+  // entirely — this works even if the user has no active session
+  // (which they don't, since they came in via email link).
   const { error: updateErr } = await service.auth.admin.updateUserById(row.user_id, {
     password,
+    email_confirm: true,
   });
 
   if (updateErr) {
