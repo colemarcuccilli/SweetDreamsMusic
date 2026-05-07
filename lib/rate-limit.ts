@@ -136,7 +136,8 @@ export function classifyPath(pathname: string): Bucket | null {
   if (
     pathname === '/api/booking/claim' ||
     pathname === '/api/booking/lookup-user' ||
-    pathname === '/api/auth/forgot-password'
+    pathname === '/api/auth/forgot-password' ||
+    pathname === '/api/auth/reset-password'
   ) return 'auth';
 
   // Contact / inquiry / application forms (high-value targets for spam).
