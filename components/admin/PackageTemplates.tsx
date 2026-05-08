@@ -2,21 +2,13 @@
 
 // components/admin/PackageTemplates.tsx
 //
-// Round A read-only view: lists package templates with their line items.
-// Empty in production until Round B's calculator can create them. Sets
-// the navigation slot + UI shape so subsequent rounds slot in cleanly.
-//
-// Live behaviour today:
-//   • Empty list → friendly empty state ("Round B will add the calculator
-//     here") so admins don't think the page is broken.
-//   • Future templates → renders one card per template with its lines.
-//
-// Anything destructive (edit, archive, generate-quote) is a Round B+
-// feature. Buttons exist as disabled placeholders so the layout doesn't
-// shift when actions land.
+// Round B-enabled list view: lists templates and opens the calculator
+// for create / edit. Archived templates are still shown (faded) so
+// admin can see history; "Archive" is the soft-delete action.
 
-import { useEffect, useState } from 'react';
-import { Loader2, AlertCircle, Package, Crown, Users, Clock, Film, Music, Archive } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
+import { Loader2, AlertCircle, Package, Crown, Users, Clock, Film, Music, Archive, Plus, Pencil } from 'lucide-react';
+import PackageCalculator, { type PackageTemplateForEdit } from './PackageCalculator';
 
 interface TemplateLine {
   id: string;
@@ -72,29 +64,75 @@ function lineKindIcon(kind: TemplateLine['kind']) {
   }
 }
 
+// Convert a PackageTemplate (server shape) → PackageTemplateForEdit
+// (calculator-friendly shape with localId on each line).
+function toEditShape(t: PackageTemplate): PackageTemplateForEdit {
+  return {
+    id: t.id,
+    name: t.name,
+    description: t.description,
+    audience: t.audience,
+    is_membership: t.is_membership,
+    duration_days: t.duration_days,
+    membership_months: t.membership_months,
+    price_cents: t.price_cents,
+    is_active: t.is_active,
+    // The calculator's EditableLine shape ignores DB sort_order and uses
+    // array position instead — server lines arrive pre-sorted by sort_order
+    // (the API's GET orders by it), so map order is correct.
+    lines: t.lines.map((l) => ({
+      localId: `srv-${l.id}`,
+      kind: l.kind,
+      quantity: l.quantity,
+      full_price_cents: l.full_price_cents,
+      package_value_cents: l.package_value_cents,
+      media_offering_id: l.media_offering_id,
+      notes: l.notes,
+    })),
+  };
+}
+
 export default function PackageTemplates() {
   const [templates, setTemplates] = useState<PackageTemplate[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<PackageTemplateForEdit | null>(null);
+  const [archiving, setArchiving] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    setError(null);
+    try {
+      const res = await fetch('/api/admin/packages/templates', { cache: 'no-store' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body?.error || 'Could not load package templates.');
+        return;
+      }
+      const body = await res.json();
+      setTemplates((body.templates ?? []) as PackageTemplate[]);
+    } catch {
+      setError('Network error while loading templates.');
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch('/api/admin/packages/templates', { cache: 'no-store' });
-        if (cancelled) return;
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          setError(body?.error || 'Could not load package templates.');
-          return;
-        }
-        const body = await res.json();
-        setTemplates((body.templates ?? []) as PackageTemplate[]);
-      } catch {
-        if (!cancelled) setError('Network error while loading templates.');
+    refresh();
+  }, [refresh]);
+
+  async function archive(id: string) {
+    if (!confirm('Archive this template? Existing entitlements continue working; new quotes will be blocked.')) return;
+    setArchiving(id);
+    try {
+      const res = await fetch(`/api/admin/packages/templates/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        alert(body?.error || 'Archive failed.');
+        return;
       }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+      await refresh();
+    } finally {
+      setArchiving(null);
+    }
+  }
 
   if (error) {
     return (
@@ -115,7 +153,7 @@ export default function PackageTemplates() {
 
   return (
     <div className="space-y-6">
-      {/* Header + (disabled-for-now) primary action */}
+      {/* Header + primary action */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <p className="font-mono text-accent text-xs sm:text-sm font-semibold tracking-[0.3em] uppercase mb-2">
@@ -130,11 +168,22 @@ export default function PackageTemplates() {
           </p>
         </div>
         <button
-          disabled
-          title="Coming in Round B (calculator)"
-          className="bg-black/10 text-black/40 font-mono text-xs font-bold uppercase tracking-wider px-4 py-3 cursor-not-allowed inline-flex items-center gap-2"
+          onClick={() => setEditing({
+            // Inline construction so we can set the seed without mutating
+            // the calculator's blankTemplate(). Calculator handles the rest.
+            name: '',
+            description: '',
+            audience: 'solo',
+            is_membership: false,
+            duration_days: 60,
+            membership_months: 3,
+            price_cents: 0,
+            is_active: true,
+            lines: [],
+          })}
+          className="bg-black text-white font-mono text-xs font-bold uppercase tracking-wider px-4 py-3 hover:bg-black/80 transition-colors inline-flex items-center gap-2"
         >
-          + New Template
+          <Plus className="w-3.5 h-3.5" /> New Template
         </button>
       </div>
 
@@ -146,16 +195,18 @@ export default function PackageTemplates() {
             No package templates yet.
           </p>
           <p className="font-mono text-[11px] text-black/45 max-w-md mx-auto">
-            Round B will add the calculator UI here — admin builds a template
-            (line items, discount, valuation) and saves it. Then quotes can be
-            generated from any template and sent to customers.
+            Click "New Template" to build a bundle. Round C will add the quoting
+            flow — for now you're shaping the catalog admin will draw from later.
           </p>
         </div>
       ) : (
         <ul className="space-y-3">
           {templates.map((tpl) => {
             const totalFullPrice = tpl.lines.reduce((s, l) => s + l.full_price_cents, 0);
-            const discountCents = Math.max(0, totalFullPrice - tpl.price_cents);
+            const grossRevenue = tpl.is_membership
+              ? tpl.price_cents * (tpl.membership_months ?? 0)
+              : tpl.price_cents;
+            const discountCents = Math.max(0, totalFullPrice - grossRevenue);
             const discountPct = totalFullPrice > 0
               ? Math.round((discountCents / totalFullPrice) * 100)
               : 0;
@@ -196,7 +247,7 @@ export default function PackageTemplates() {
                       <p className="font-bold text-lg">{formatMoney(tpl.price_cents)}</p>
                       {tpl.is_membership && tpl.membership_months && (
                         <p className="font-mono text-[10px] text-black/50">
-                          × {tpl.membership_months} months
+                          × {tpl.membership_months} months ({formatMoney(grossRevenue)})
                         </p>
                       )}
                       {discountCents > 0 && (
@@ -230,11 +281,47 @@ export default function PackageTemplates() {
                       </ul>
                     </div>
                   )}
+
+                  {/* Row actions */}
+                  <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-black/10">
+                    <button
+                      onClick={() => setEditing(toEditShape(tpl))}
+                      className="font-mono text-[10px] uppercase tracking-wider font-bold px-3 py-1.5 border border-black/20 hover:border-black inline-flex items-center gap-1.5"
+                    >
+                      <Pencil className="w-3 h-3" />
+                      Edit
+                    </button>
+                    {tpl.is_active && (
+                      <button
+                        onClick={() => archive(tpl.id)}
+                        disabled={archiving === tpl.id}
+                        className="font-mono text-[10px] uppercase tracking-wider font-bold px-3 py-1.5 border border-black/20 hover:border-red-700 hover:text-red-700 inline-flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        {archiving === tpl.id ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Archive className="w-3 h-3" />
+                        )}
+                        Archive
+                      </button>
+                    )}
+                  </div>
                 </div>
               </li>
             );
           })}
         </ul>
+      )}
+
+      {editing && (
+        <PackageCalculator
+          initial={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            refresh();
+          }}
+        />
       )}
     </div>
   );
