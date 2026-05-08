@@ -21,6 +21,10 @@ export default function DashboardNav({ role, isProducer, displayName, email, pro
   const tabs = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, show: true },
     { href: '/dashboard/hub', label: 'Artist Hub', icon: Rocket, show: true },
+    // Engineer sits right after Artist Hub so engineers (the staff who
+    // actually log in most often) have one-click access to their work
+    // surface. Hidden from regular users — show: engineer || admin.
+    { href: '/engineer', label: 'Engineer', icon: Wrench, show: role === 'engineer' || role === 'admin' },
     { href: '/dashboard/inbox', label: 'Inbox', icon: Inbox, show: true },
     { href: '/dashboard/bands', label: 'Bands', icon: Users, show: true },
     { href: '/dashboard/events', label: 'Events', icon: PartyPopper, show: true },
@@ -29,7 +33,6 @@ export default function DashboardNav({ role, isProducer, displayName, email, pro
     // not at the tab level. Rule per Cole: tab is universal, catalog
     // adapts.
     { href: '/dashboard/media', label: 'Media', icon: Film, show: true },
-    { href: '/engineer', label: 'Engineer', icon: Wrench, show: role === 'engineer' || role === 'admin' },
     { href: '/producer', label: 'Producer', icon: Music, show: isProducer === true },
     { href: '/admin', label: 'Admin', icon: Shield, show: role === 'admin' },
   ].filter((t) => t.show);
