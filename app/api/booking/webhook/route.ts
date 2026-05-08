@@ -9,7 +9,9 @@ import {
   sendEngineerPriorityAlert,
   sendMediaPurchaseConfirmation,
   sendMediaPurchaseAdminAlert,
+  sendPackageQuoteAccepted,
 } from '@/lib/email';
+import { mintEntitlementFromQuote } from '@/lib/packages-mint';
 import { ENGINEERS, type Room } from '@/lib/constants';
 import { calculatePriorityExpiry, getPriorityHoursLabel, calculateRescheduleDeadline } from '@/lib/priority';
 import { awardXP } from '@/lib/xp-system';
@@ -1236,6 +1238,175 @@ export async function POST(request: NextRequest) {
             );
           }
         }
+      } else if (meta.type === 'package_quote') {
+        // ── Package quote accepted + paid ─────────────────────────
+        // Round D: customer paid for either:
+        //   - A one-off package (mode='payment') — single charge, mint
+        //     entitlement immediately
+        //   - A membership (mode='subscription') — first invoice paid,
+        //     mint entitlement covering the full term (Stripe Subscription
+        //     handles subsequent monthly invoices via cancel_at)
+        //
+        // Either way, we mint the entitlement here. Race-safe: the
+        // `mintEntitlementFromQuote` helper looks up an existing
+        // entitlement by quote_id first, so retries are no-ops.
+        const quoteId = meta.quote_id;
+        if (!quoteId) {
+          console.error('[webhook][package_quote] missing quote_id in metadata');
+          await supabase.from('stripe_webhook_events').delete().eq('event_id', event.id);
+          return NextResponse.json({ error: 'Missing quote_id' }, { status: 400 });
+        }
+
+        // Pull the quote, template, and template lines so the helper
+        // has everything it needs to mint balances.
+        const { data: quoteRow, error: qErr } = await supabase
+          .from('package_quotes')
+          .select('id, template_id, user_id, band_id, status')
+          .eq('id', quoteId)
+          .maybeSingle();
+        if (qErr || !quoteRow) {
+          console.error('[webhook][package_quote] quote lookup:', qErr);
+          await supabase.from('stripe_webhook_events').delete().eq('event_id', event.id);
+          return NextResponse.json({ error: 'Quote not found' }, { status: 500 });
+        }
+        type Q = { id: string; template_id: string; user_id: string | null; band_id: string | null; status: string };
+        const quote = quoteRow as Q;
+
+        const [{ data: tplRow }, { data: linesRows }] = await Promise.all([
+          supabase
+            .from('package_templates')
+            .select('is_membership, membership_months, duration_days')
+            .eq('id', quote.template_id)
+            .single(),
+          supabase
+            .from('package_template_lines')
+            .select('id, kind, quantity, media_offering_id, full_price_cents, package_value_cents, notes')
+            .eq('template_id', quote.template_id),
+        ]);
+        if (!tplRow) {
+          console.error('[webhook][package_quote] template missing for quote', quoteId);
+          await supabase.from('stripe_webhook_events').delete().eq('event_id', event.id);
+          return NextResponse.json({ error: 'Template missing' }, { status: 500 });
+        }
+        type Tpl = {
+          is_membership: boolean;
+          membership_months: number | null;
+          duration_days: number | null;
+        };
+        const tpl = tplRow as Tpl;
+
+        type Line = {
+          id: string;
+          kind: 'studio_hours' | 'media_offering' | 'beat_credit' | 'custom';
+          quantity: number;
+          media_offering_id: string | null;
+          full_price_cents: number;
+          package_value_cents: number;
+          notes: string | null;
+        };
+        const lines = (linesRows ?? []) as Line[];
+
+        // For memberships, look up the subscription details from
+        // the Stripe session so we can stamp the subscription id +
+        // initial period end on the entitlement.
+        let stripeSubscriptionId: string | undefined;
+        let stripeSubscriptionIterations: number | undefined;
+        let currentPeriodEnd: string | undefined;
+        if (tpl.is_membership && session.subscription) {
+          stripeSubscriptionId = typeof session.subscription === 'string'
+            ? session.subscription
+            : session.subscription.id;
+          stripeSubscriptionIterations = tpl.membership_months ?? undefined;
+          // Pull current_period_end from the subscription itself, AND
+          // set cancel_at so Stripe stops billing after the contract
+          // term (Cole's rule: memberships do NOT auto-renew). We can't
+          // set this from the checkout session call because the Stripe
+          // SDK type doesn't expose it on subscription_data — but the
+          // subscription itself has cancel_at as a first-class field.
+          try {
+            const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+            const cpe = (sub as { current_period_end?: number }).current_period_end;
+            if (typeof cpe === 'number') {
+              currentPeriodEnd = new Date(cpe * 1000).toISOString();
+            }
+
+            // Compute cancel_at: subscription start + months × 30 days
+            // (close enough to the membership term boundary; Stripe will
+            // cancel on the next billing date after this passes).
+            const months = tpl.membership_months ?? 3;
+            const startTime = (sub as { current_period_start?: number }).current_period_start
+              ?? Math.floor(Date.now() / 1000);
+            const cancelAt = startTime + months * 30 * 86400;
+            await stripe.subscriptions.update(stripeSubscriptionId, {
+              cancel_at: cancelAt,
+            });
+            console.log(`[webhook][package_quote] subscription ${stripeSubscriptionId} cancel_at=${new Date(cancelAt * 1000).toISOString()}`);
+          } catch (e) {
+            console.error('[webhook][package_quote] subscription update/retrieve:', e);
+            // Non-fatal — entitlement still mints. Admin can manually
+            // set cancel_at via Stripe dashboard if this fails.
+          }
+        }
+
+        try {
+          const result = await mintEntitlementFromQuote(
+            supabase,
+            quote,
+            tpl,
+            lines,
+            {
+              stripeCheckoutSessionId: session.id,
+              stripeSubscriptionId,
+              stripeSubscriptionIterations,
+              currentPeriodEnd,
+            },
+          );
+
+          if (result.alreadyMinted) {
+            console.log(`[webhook][package_quote] already minted entitlement ${result.entitlementId} — dedup`);
+            break;
+          }
+
+          console.log(`[webhook][package_quote] minted entitlement ${result.entitlementId} for quote ${quote.id}`);
+
+          // Notify admins. Pull recipient identity for the email.
+          try {
+            let recipientName = 'Recipient';
+            let recipientEmail = '';
+            if (quote.user_id) {
+              const { data: profile } = await supabase
+                .from('profiles')
+                .select('display_name, email')
+                .eq('user_id', quote.user_id)
+                .maybeSingle();
+              const p = profile as { display_name: string | null; email: string | null } | null;
+              if (p) {
+                recipientName = p.display_name ?? 'Recipient';
+                recipientEmail = p.email ?? '';
+              }
+            } else if (quote.band_id) {
+              const { data: band } = await supabase.from('bands').select('display_name').eq('id', quote.band_id).maybeSingle();
+              recipientName = (band as { display_name: string } | null)?.display_name ?? 'Band';
+            }
+            const tplName = (meta.template_name as string) || 'package';
+            const totalCents = session.amount_total ?? 0;
+            await sendPackageQuoteAccepted({
+              templateName: tplName,
+              recipientName,
+              recipientEmail,
+              totalPriceCents: totalCents,
+              isMembership: tpl.is_membership,
+              quoteId: quote.id,
+            });
+          } catch (e) {
+            console.error('[webhook][package_quote] admin email error:', e);
+          }
+        } catch (e) {
+          // Roll back the idempotency claim so Stripe retries.
+          console.error('[webhook][package_quote] mint failed:', e);
+          await supabase.from('stripe_webhook_events').delete().eq('event_id', event.id);
+          return NextResponse.json({ error: 'Mint failed' }, { status: 500 });
+        }
       }
       break;
     }
@@ -1587,6 +1758,81 @@ export async function POST(request: NextRequest) {
         await supabase.from('bookings')
           .update({ status: 'cancelled' })
           .eq('stripe_payment_intent_id', charge.payment_intent as string);
+      }
+      break;
+    }
+
+    case 'invoice.payment_failed': {
+      // Round D: a monthly membership invoice failed (declined card,
+      // expired card, etc.). Stripe retries 4× over ~3 weeks per its
+      // dunning schedule, then cancels the subscription. Per Cole's
+      // policy: the entitlement stays USABLE — payment_status flips to
+      // 'past_due' so admin can see what's outstanding without losing
+      // the customer's access. Admin escalates to 'collections' or
+      // 'written_off' manually.
+      const invoice = event.data.object as Stripe.Invoice;
+      const subId = (invoice as { subscription?: string | Stripe.Subscription }).subscription;
+      const subscriptionId = typeof subId === 'string' ? subId : subId?.id;
+      if (!subscriptionId) break;
+
+      const { data: ent } = await supabase
+        .from('package_entitlements')
+        .select('id, payment_status')
+        .eq('stripe_subscription_id', subscriptionId)
+        .maybeSingle();
+      if (!ent) {
+        // Not one of our package memberships — could be an unrelated
+        // subscription that the same Stripe account uses elsewhere.
+        // Ignore.
+        break;
+      }
+      type E = { id: string; payment_status: string };
+      const entRow = ent as E;
+      // Only flip from 'current'; don't downgrade 'collections' or
+      // 'written_off' just because another retry came in.
+      if (entRow.payment_status === 'current') {
+        await supabase
+          .from('package_entitlements')
+          .update({
+            payment_status: 'past_due',
+            last_payment_failed_at: new Date().toISOString(),
+          })
+          .eq('id', entRow.id);
+        console.log(`[webhook][invoice.payment_failed] entitlement ${entRow.id} → past_due`);
+      } else {
+        console.log(`[webhook][invoice.payment_failed] entitlement ${entRow.id} already ${entRow.payment_status} — left alone`);
+      }
+      break;
+    }
+
+    case 'invoice.paid': {
+      // Round D: a monthly membership invoice succeeded. If the
+      // entitlement is past_due (failed payment in a prior cycle that
+      // now succeeded), flip it back to 'current'. Also bump
+      // current_period_end so admin sees the next billing date.
+      const invoice = event.data.object as Stripe.Invoice;
+      const subId = (invoice as { subscription?: string | Stripe.Subscription }).subscription;
+      const subscriptionId = typeof subId === 'string' ? subId : subId?.id;
+      if (!subscriptionId) break;
+
+      const { data: ent } = await supabase
+        .from('package_entitlements')
+        .select('id, payment_status')
+        .eq('stripe_subscription_id', subscriptionId)
+        .maybeSingle();
+      if (!ent) break;
+      const entRow = ent as { id: string; payment_status: string };
+
+      const periodEnd = (invoice as { period_end?: number }).period_end;
+      const updates: Record<string, unknown> = {};
+      if (entRow.payment_status === 'past_due') {
+        updates.payment_status = 'current';
+      }
+      if (typeof periodEnd === 'number') {
+        updates.current_period_end = new Date(periodEnd * 1000).toISOString();
+      }
+      if (Object.keys(updates).length > 0) {
+        await supabase.from('package_entitlements').update(updates).eq('id', entRow.id);
       }
       break;
     }

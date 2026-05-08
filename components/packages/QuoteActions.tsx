@@ -41,7 +41,17 @@ export default function QuoteActions({ token }: Props) {
         setError(body?.error || 'Accept failed.');
         return;
       }
-      // Success — refresh the server component so the status banner updates.
+      // Round D: server returns a Stripe Checkout URL. Redirect to it.
+      // The actual quote status flip + entitlement mint happens in the
+      // Stripe webhook on payment success — when we land back at
+      // /quotes/[token]?status=success, the page reloads and shows
+      // the "accepted" banner.
+      if (body?.checkout_url) {
+        window.location.href = body.checkout_url as string;
+        return;
+      }
+      // Backwards-compat: if some older accept path still returns ok
+      // without a URL (shouldn't happen post-Round-D), refresh.
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Network error.');
@@ -114,7 +124,7 @@ export default function QuoteActions({ token }: Props) {
           className="bg-black text-white font-mono text-sm font-bold uppercase tracking-wider px-6 py-4 hover:bg-black/80 transition-colors disabled:opacity-50 inline-flex items-center gap-2"
         >
           {accepting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-          {accepting ? 'Accepting…' : 'Accept Quote'}
+          {accepting ? 'Redirecting to checkout…' : 'Accept & Pay'}
         </button>
         <button
           onClick={() => setShowDeclineModal(true)}
