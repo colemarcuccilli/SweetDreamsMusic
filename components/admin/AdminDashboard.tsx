@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Calendar, Music, Users, DollarSign, Clock, Video, Mic, FileText, LayoutDashboard, BarChart3, Bell, PartyPopper, Film, ClipboardList } from 'lucide-react';
+import { Calendar, Music, Users, DollarSign, Clock, Video, Mic, FileText, LayoutDashboard, BarChart3, Bell, PartyPopper, Film, ClipboardList, Package } from 'lucide-react';
 import type { SessionUser } from '@/lib/auth';
 import AdminOverview from './AdminOverview';
 import BookingManager from './BookingManager';
@@ -18,8 +18,9 @@ import ClientCRM from './ClientCRM';
 import PlatformAnalytics from './PlatformAnalytics';
 import Notifications from './Notifications';
 import AdminEvents from './AdminEvents';
+import PackageTemplates from './PackageTemplates';
 
-type Tab = 'overview' | 'clients' | 'accounting' | 'bookings' | 'events' | 'media' | 'media-catalog' | 'media-orders' | 'blocks' | 'beats' | 'producers' | 'contracts' | 'users' | 'analytics' | 'notifications';
+type Tab = 'overview' | 'clients' | 'accounting' | 'bookings' | 'events' | 'media' | 'media-catalog' | 'media-orders' | 'packages' | 'blocks' | 'beats' | 'producers' | 'contracts' | 'users' | 'analytics' | 'notifications';
 
 export default function AdminDashboard({ user }: { user: SessionUser }) {
   const [tab, setTab] = useState<Tab>('overview');
@@ -33,6 +34,10 @@ export default function AdminDashboard({ user }: { user: SessionUser }) {
     { key: 'media', label: 'Media Sales', icon: Video },
     { key: 'media-catalog', label: 'Media Catalog', icon: Film },
     { key: 'media-orders', label: 'Media Orders', icon: ClipboardList },
+    // Packages & memberships sit alongside media catalog/orders since
+    // they're a sibling concept (bundling offerings + studio time + beats).
+    // Round A is read-only foundation.
+    { key: 'packages', label: 'Packages', icon: Package },
     { key: 'blocks', label: 'Block Off', icon: Clock },
     { key: 'beats', label: 'Beat Store', icon: Music },
     { key: 'producers', label: 'Producers', icon: Mic },
@@ -97,6 +102,7 @@ export default function AdminDashboard({ user }: { user: SessionUser }) {
           {tab === 'media' && <MediaSales />}
           {tab === 'media-catalog' && <MediaCatalog />}
           {tab === 'media-orders' && <MediaOrders />}
+          {tab === 'packages' && <PackageTemplates />}
           {tab === 'blocks' && <StudioBlocks />}
           {tab === 'beats' && <BeatManager />}
           {tab === 'producers' && <ProducerApplications />}
