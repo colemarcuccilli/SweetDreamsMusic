@@ -2248,3 +2248,180 @@ export async function sendNewMediaMessageNotification(args: {
     }
   } catch (e) { console.error('Email error (new media message):', e); }
 }
+
+// ── Package quotes ────────────────────────────────────────────────────
+//
+// Round C: when admin sends a quote, the customer receives a branded
+// email with the link to /quotes/[token] where they can view + accept.
+// Mirrored into the recipient's Sweet Dreams thread so the in-app
+// inbox stays the source of truth.
+
+export interface PackageQuoteEmailLine {
+  /** Display label, e.g. "12 studio hours" or "Music Video — Sweet Spot" */
+  label: string;
+  /** Full retail value of this line in cents, for the "what it's worth" column */
+  full_price_cents: number;
+}
+
+/**
+ * Email + thread mirror for a sent package quote.
+ *
+ * The HTML body is intentionally lightweight — a customer-facing
+ * quote needs to be readable in 5 seconds. The headline is the price,
+ * the second line is the savings vs retail, the third is the CTA. The
+ * full line breakdown lives on the /quotes/[token] page; we don't
+ * try to recreate it inside the email.
+ */
+export async function sendPackageQuote(to: string, details: {
+  recipientName: string;
+  templateName: string;
+  templateDescription?: string | null;
+  isMembership: boolean;
+  membershipMonths?: number | null;
+  durationDays?: number | null;
+  pricePerMonthCents?: number | null; // membership only
+  totalPriceCents: number;             // one-off total OR membership total contract value
+  retailPriceCents: number;            // sum of full retail line values
+  lines: PackageQuoteEmailLine[];
+  customerMessage?: string | null;
+  expiresAt: string;                   // ISO
+  token: string;
+  inviterName: string;
+}) {
+  const reviewUrl = `${SITE_URL}/quotes/${details.token}`;
+  const discountCents = Math.max(0, details.retailPriceCents - details.totalPriceCents);
+  const discountPct = details.retailPriceCents > 0
+    ? Math.round((discountCents / details.retailPriceCents) * 100)
+    : 0;
+
+  const expiryFormatted = new Date(details.expiresAt).toLocaleDateString('en-US', {
+    weekday: 'short', month: 'long', day: 'numeric',
+  });
+
+  // Mirror to the recipient's Sweet Dreams thread.
+  await mirrorToThread({
+    userEmail: to,
+    kind: 'booking_notification',
+    subject: `New quote: ${details.templateName}`,
+    body: details.isMembership
+      ? `${details.inviterName} sent you a ${details.membershipMonths}-month membership quote for "${details.templateName}". ${formatMoney(details.pricePerMonthCents ?? 0)}/month × ${details.membershipMonths} months = ${formatMoney(details.totalPriceCents)} total. ${discountCents > 0 ? `${discountPct}% off retail. ` : ''}Review and accept by ${expiryFormatted}.`
+      : `${details.inviterName} sent you a quote for "${details.templateName}". ${formatMoney(details.totalPriceCents)} ${discountCents > 0 ? `(${discountPct}% off retail). ` : ''}Review and accept by ${expiryFormatted}.`,
+    attachments: [{ label: 'Review quote', url: reviewUrl, kind: 'link' as const }],
+  });
+
+  try {
+    const linesHtml = details.lines.map((l) =>
+      detail(l.label, formatMoney(l.full_price_cents))
+    ).join('');
+
+    const priceBlock = details.isMembership
+      ? `
+        <div style="background:#111;padding:20px;margin:16px 0;border-left:3px solid #F4C430">
+          <p style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.1em;margin:0 0 6px">Per month</p>
+          <p style="font-size:28px;font-weight:700;color:#F4C430;margin:0">${formatMoney(details.pricePerMonthCents ?? 0)}</p>
+          <p style="font-size:12px;color:#aaa;margin:8px 0 0">
+            × ${details.membershipMonths} months = <strong>${formatMoney(details.totalPriceCents)}</strong> total
+          </p>
+        </div>
+      `
+      : `
+        <div style="background:#111;padding:20px;margin:16px 0;border-left:3px solid #F4C430">
+          <p style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.1em;margin:0 0 6px">One-time</p>
+          <p style="font-size:28px;font-weight:700;color:#F4C430;margin:0">${formatMoney(details.totalPriceCents)}</p>
+          ${details.durationDays ? `<p style="font-size:12px;color:#aaa;margin:8px 0 0">Valid for ${details.durationDays} days after acceptance</p>` : ''}
+        </div>
+      `;
+
+    const savingsBlock = discountCents > 0
+      ? `<p style="font-size:13px;color:#aaa;margin:0 0 12px"><span style="color:#F4C430;font-weight:700">${discountPct}% off retail</span> &mdash; saving ${formatMoney(discountCents)} compared to buying these à la carte.</p>`
+      : '';
+
+    const noteBlock = details.customerMessage
+      ? `
+        <p style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:0.05em;margin:24px 0 8px">A note from ${escapeHtml(details.inviterName)}</p>
+        <div style="background:#111;padding:16px;margin:0 0 16px;border-left:3px solid #F4C430">
+          <p style="font-size:14px;color:#ccc;margin:0;white-space:pre-wrap">${escapeHtml(details.customerMessage)}</p>
+        </div>
+      `
+      : '';
+
+    await resend.emails.send({
+      from: FROM,
+      to,
+      subject: `Quote: ${details.templateName}`,
+      html: wrap(
+        h1("YOU'VE GOT A QUOTE") +
+        p(`Hey ${escapeHtml(details.recipientName)}, ${escapeHtml(details.inviterName)} put together a package for you.`) +
+        priceBlock +
+        savingsBlock +
+        `<p style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:0.1em;margin:24px 0 8px">What's included</p>` +
+        `<table cellpadding="0" cellspacing="0" border="0" style="width:100%;margin-bottom:16px">${linesHtml}</table>` +
+        noteBlock +
+        btn('Review & accept', reviewUrl) +
+        p(`<span style="color:#888;font-size:12px">This quote expires on ${expiryFormatted}. Click the button to view the full breakdown and accept.</span>`)
+      ),
+    });
+  } catch (e) { console.error('Email error (package quote):', e); }
+}
+
+/**
+ * Admin-facing notification when a customer accepts a quote. Goes to
+ * SUPER_ADMINS so payment plumbing can pick up the next step.
+ */
+export async function sendPackageQuoteAccepted(details: {
+  templateName: string;
+  recipientName: string;
+  recipientEmail: string;
+  totalPriceCents: number;
+  isMembership: boolean;
+  quoteId: string;
+}) {
+  try {
+    await resend.emails.send({
+      from: FROM,
+      to: [...SUPER_ADMINS],
+      replyTo: details.recipientEmail,
+      subject: `Quote accepted: ${details.templateName} — ${details.recipientName}`,
+      html: wrap(
+        h1('QUOTE ACCEPTED') +
+        p(`<strong style="color:#F4C430">${escapeHtml(details.recipientName)}</strong> accepted the quote for <strong>${escapeHtml(details.templateName)}</strong>.`) +
+        `<table cellpadding="0" cellspacing="0" border="0" style="width:100%;margin:16px 0">${
+          detail('Customer', escapeHtml(details.recipientName)) +
+          detail('Email', escapeHtml(details.recipientEmail)) +
+          detail('Package', escapeHtml(details.templateName)) +
+          detail('Type', details.isMembership ? 'Membership (monthly billing)' : 'One-time') +
+          detail('Total', formatMoney(details.totalPriceCents))
+        }</table>` +
+        p('Payment plumbing comes in Round D. For now, this notification confirms the customer is committed.') +
+        btn('Open admin', `${SITE_URL}/admin`)
+      ),
+    });
+  } catch (e) { console.error('Email error (quote accepted admin):', e); }
+}
+
+/**
+ * Admin-facing notification when a customer declines.
+ */
+export async function sendPackageQuoteDeclined(details: {
+  templateName: string;
+  recipientName: string;
+  recipientEmail: string;
+  declineReason?: string | null;
+}) {
+  try {
+    await resend.emails.send({
+      from: FROM,
+      to: [...SUPER_ADMINS],
+      replyTo: details.recipientEmail,
+      subject: `Quote declined: ${details.templateName} — ${details.recipientName}`,
+      html: wrap(
+        h1('QUOTE DECLINED') +
+        p(`<strong>${escapeHtml(details.recipientName)}</strong> declined the quote for <strong>${escapeHtml(details.templateName)}</strong>.`) +
+        (details.declineReason
+          ? `<div style="background:#111;padding:16px;margin:16px 0;border-left:3px solid #F4C430"><p style="font-size:14px;color:#ccc;margin:0;white-space:pre-wrap">${escapeHtml(details.declineReason)}</p></div>`
+          : '') +
+        p('Worth a follow-up — reply to this email to land in the customer\'s inbox.')
+      ),
+    });
+  } catch (e) { console.error('Email error (quote declined admin):', e); }
+}

@@ -7,8 +7,10 @@
 // admin can see history; "Archive" is the soft-delete action.
 
 import { useEffect, useState, useCallback } from 'react';
-import { Loader2, AlertCircle, Package, Crown, Users, Clock, Film, Music, Archive, Plus, Pencil } from 'lucide-react';
+import { Loader2, AlertCircle, Package, Crown, Users, Clock, Film, Music, Archive, Plus, Pencil, Send, FileText, Layers } from 'lucide-react';
 import PackageCalculator, { type PackageTemplateForEdit } from './PackageCalculator';
+import GenerateQuoteModal from './GenerateQuoteModal';
+import PackageQuotes from './PackageQuotes';
 
 interface TemplateLine {
   id: string;
@@ -92,11 +94,16 @@ function toEditShape(t: PackageTemplate): PackageTemplateForEdit {
   };
 }
 
+type SubTab = 'templates' | 'quotes';
+
 export default function PackageTemplates() {
+  const [subTab, setSubTab] = useState<SubTab>('templates');
   const [templates, setTemplates] = useState<PackageTemplate[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<PackageTemplateForEdit | null>(null);
   const [archiving, setArchiving] = useState<string | null>(null);
+  // Generate-quote-from-template modal: holds the template being quoted from.
+  const [quotingFrom, setQuotingFrom] = useState<PackageTemplate | null>(null);
 
   const refresh = useCallback(async () => {
     setError(null);
@@ -159,7 +166,7 @@ export default function PackageTemplates() {
           <p className="font-mono text-accent text-xs sm:text-sm font-semibold tracking-[0.3em] uppercase mb-2">
             Admin · Packages & Memberships
           </p>
-          <h1 className="text-heading-xl mb-2">PACKAGE TEMPLATES</h1>
+          <h1 className="text-heading-xl mb-2">PACKAGES</h1>
           <p className="font-mono text-xs text-black/60 max-w-2xl">
             One-time bundles and 3-month memberships you can quote to customers.
             All session valuations use Studio B rate as the baseline. Studio A,
@@ -167,26 +174,53 @@ export default function PackageTemplates() {
             booking time.
           </p>
         </div>
+        {subTab === 'templates' && (
+          <button
+              onClick={() => setEditing({
+              // Inline construction so we can set the seed without mutating
+              // the calculator's blankTemplate(). Calculator handles the rest.
+              name: '',
+              description: '',
+              audience: 'solo',
+              is_membership: false,
+              duration_days: 60,
+              membership_months: 3,
+              price_cents: 0,
+              is_active: true,
+              lines: [],
+            })}
+            className="bg-black text-white font-mono text-xs font-bold uppercase tracking-wider px-4 py-3 hover:bg-black/80 transition-colors inline-flex items-center gap-2"
+          >
+            <Plus className="w-3.5 h-3.5" /> New Template
+          </button>
+        )}
+      </div>
+
+      {/* Sub-tabs */}
+      <div className="flex gap-1 border-b border-black/15">
         <button
-          onClick={() => setEditing({
-            // Inline construction so we can set the seed without mutating
-            // the calculator's blankTemplate(). Calculator handles the rest.
-            name: '',
-            description: '',
-            audience: 'solo',
-            is_membership: false,
-            duration_days: 60,
-            membership_months: 3,
-            price_cents: 0,
-            is_active: true,
-            lines: [],
-          })}
-          className="bg-black text-white font-mono text-xs font-bold uppercase tracking-wider px-4 py-3 hover:bg-black/80 transition-colors inline-flex items-center gap-2"
+          onClick={() => setSubTab('templates')}
+          className={`font-mono text-xs font-bold uppercase tracking-wider px-4 py-2 border-b-2 transition-colors inline-flex items-center gap-1.5 ${
+            subTab === 'templates' ? 'border-accent text-accent' : 'border-transparent text-black/55 hover:text-black'
+          }`}
         >
-          <Plus className="w-3.5 h-3.5" /> New Template
+          <Layers className="w-3.5 h-3.5" /> Templates ({templates.length})
+        </button>
+        <button
+          onClick={() => setSubTab('quotes')}
+          className={`font-mono text-xs font-bold uppercase tracking-wider px-4 py-2 border-b-2 transition-colors inline-flex items-center gap-1.5 ${
+            subTab === 'quotes' ? 'border-accent text-accent' : 'border-transparent text-black/55 hover:text-black'
+          }`}
+        >
+          <FileText className="w-3.5 h-3.5" /> Quotes
         </button>
       </div>
 
+      {subTab === 'quotes' ? (
+        <PackageQuotes />
+      ) : (
+      /* Body — Templates tab */
+      <>
       {/* Body */}
       {templates.length === 0 ? (
         <div className="border-2 border-dashed border-black/10 p-12 text-center">
@@ -283,7 +317,16 @@ export default function PackageTemplates() {
                   )}
 
                   {/* Row actions */}
-                  <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-black/10">
+                  <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-black/10 flex-wrap">
+                    {tpl.is_active && (
+                      <button
+                        onClick={() => setQuotingFrom(tpl)}
+                        className="font-mono text-[10px] uppercase tracking-wider font-bold px-3 py-1.5 bg-black text-white inline-flex items-center gap-1.5"
+                      >
+                        <Send className="w-3 h-3" />
+                        Quote To Customer
+                      </button>
+                    )}
                     <button
                       onClick={() => setEditing(toEditShape(tpl))}
                       className="font-mono text-[10px] uppercase tracking-wider font-bold px-3 py-1.5 border border-black/20 hover:border-black inline-flex items-center gap-1.5"
@@ -312,6 +355,8 @@ export default function PackageTemplates() {
           })}
         </ul>
       )}
+      </>
+      )}
 
       {editing && (
         <PackageCalculator
@@ -320,6 +365,26 @@ export default function PackageTemplates() {
           onSaved={() => {
             setEditing(null);
             refresh();
+          }}
+        />
+      )}
+
+      {quotingFrom && (
+        <GenerateQuoteModal
+          template={{
+            id: quotingFrom.id,
+            name: quotingFrom.name,
+            audience: quotingFrom.audience,
+            is_membership: quotingFrom.is_membership,
+            membership_months: quotingFrom.membership_months,
+            duration_days: quotingFrom.duration_days,
+            price_cents: quotingFrom.price_cents,
+          }}
+          onClose={() => setQuotingFrom(null)}
+          onCreated={() => {
+            setQuotingFrom(null);
+            // Jump to the Quotes tab so admin sees what they just made.
+            setSubTab('quotes');
           }}
         />
       )}
