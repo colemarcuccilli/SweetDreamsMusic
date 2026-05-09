@@ -7,10 +7,11 @@
 // admin can see history; "Archive" is the soft-delete action.
 
 import { useEffect, useState, useCallback } from 'react';
-import { Loader2, AlertCircle, Package, Crown, Users, Clock, Film, Music, Archive, Plus, Pencil, Send, FileText, Layers } from 'lucide-react';
+import { Loader2, AlertCircle, Package, Crown, Users, Clock, Film, Music, Archive, Plus, Pencil, Send, FileText, Layers, Inbox } from 'lucide-react';
 import PackageCalculator, { type PackageTemplateForEdit } from './PackageCalculator';
 import GenerateQuoteModal from './GenerateQuoteModal';
 import PackageQuotes from './PackageQuotes';
+import PackageAddonRequests from './PackageAddonRequests';
 
 interface TemplateLine {
   id: string;
@@ -94,7 +95,7 @@ function toEditShape(t: PackageTemplate): PackageTemplateForEdit {
   };
 }
 
-type SubTab = 'templates' | 'quotes';
+type SubTab = 'templates' | 'quotes' | 'addon-requests';
 
 export default function PackageTemplates() {
   const [subTab, setSubTab] = useState<SubTab>('templates');
@@ -214,10 +215,20 @@ export default function PackageTemplates() {
         >
           <FileText className="w-3.5 h-3.5" /> Quotes
         </button>
+        <button
+          onClick={() => setSubTab('addon-requests')}
+          className={`font-mono text-xs font-bold uppercase tracking-wider px-4 py-2 border-b-2 transition-colors inline-flex items-center gap-1.5 ${
+            subTab === 'addon-requests' ? 'border-accent text-accent' : 'border-transparent text-black/55 hover:text-black'
+          }`}
+        >
+          <Inbox className="w-3.5 h-3.5" /> Add-on Requests
+        </button>
       </div>
 
       {subTab === 'quotes' ? (
         <PackageQuotes />
+      ) : subTab === 'addon-requests' ? (
+        <PackageAddonRequests />
       ) : (
       /* Body — Templates tab */
       <>

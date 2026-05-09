@@ -6,6 +6,7 @@ import { Folder, Target, BarChart3, Calendar, Award, ChevronRight, Rocket, Music
 import { PROJECT_PHASES, METRIC_PLATFORMS, GOAL_CATEGORIES } from '@/lib/hub-constants';
 import { ACHIEVEMENTS } from '@/lib/achievements';
 import { SkeletonList } from './LoadingSkeleton';
+import ActivePackages from './ActivePackages';
 
 interface OverviewData {
   projects: { id: string; title: string; project_type: string; current_phase: string; target_release_date: string | null; status: string; cover_image_url: string | null }[];
@@ -61,6 +62,14 @@ export default function HubOverview({ onXpEarned, onNavigate }: HubOverviewProps
   return (
     <div>
       <h2 className="text-heading-md mb-6">OVERVIEW</h2>
+
+      {/* Active packages & memberships — only renders when the customer
+          has at least one entitlement, so users without packages see
+          nothing extra. Sits at the top of overview because if you HAVE
+          a package, that's the highest-priority info on the page. */}
+      <div className="mb-8">
+        <ActivePackages />
+      </div>
 
       {/* Welcome section when hub is mostly empty */}
       {isEmpty && (
