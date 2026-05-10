@@ -6,6 +6,7 @@ import { formatCents } from '@/lib/utils';
 import { PRODUCER_COMMISSION, PLATFORM_COMMISSION, ENGINEER_SESSION_SPLIT, BUSINESS_SESSION_SPLIT, MEDIA_SELLER_COMMISSION, MEDIA_BUSINESS_CUT, MEDIA_WORKER_TOTAL, ENGINEERS } from '@/lib/constants';
 import CreditsLiabilityPanel from './CreditsLiabilityPanel';
 import PackageAccounting from './PackageAccounting';
+import CashCorrectionsLog from './CashCorrectionsLog';
 
 interface Booking {
   id: string;
@@ -1119,6 +1120,11 @@ export default function Accounting() {
               <div className="mt-6 border-t border-black/10 pt-6">
                 <PackageAccounting />
               </div>
+
+              {/* Cash corrections audit log — surfaces post-completion
+                  edits engineers/admins make to cash totals. Appears
+                  only when corrections exist. */}
+              <CashCorrectionsLog />
 
               {/* Monthly breakdown */}
               {sessionsByMonth.length > 0 && (

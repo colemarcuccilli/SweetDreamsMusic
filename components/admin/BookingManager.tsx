@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, ChevronDown, DollarSign, X, Check, Clock, Pencil, Mail, Banknote, CreditCard, Send, Upload, Download, FileAudio, Plus } from 'lucide-react';
+import { RefreshCw, ChevronDown, DollarSign, X, Check, Clock, Pencil, Mail, Banknote, CreditCard, Send, Upload, Download, FileAudio, Plus, Edit3 } from 'lucide-react';
 import { formatCents } from '@/lib/utils';
 import { ENGINEERS, ROOM_LABELS } from '@/lib/constants';
+import CashCorrectionModal from '@/components/booking/CashCorrectionModal';
 
 interface Booking {
   id: string;
@@ -73,6 +74,11 @@ export default function BookingManager() {
   const [dateInput, setDateInput] = useState('');
   const [durationInput, setDurationInput] = useState(2);
   const [showDebug, setShowDebug] = useState<string | null>(null);
+  // Cash correction modal — holds the booking we're correcting (id +
+  // customer name + current total). null when closed.
+  const [cashCorrection, setCashCorrection] = useState<
+    { id: string; customer_name: string; total_amount: number } | null
+  >(null);
   const [showCashPayment, setShowCashPayment] = useState<string | null>(null);
   const [cashAmount, setCashAmount] = useState('');
   const [cashNote, setCashNote] = useState('');
@@ -1269,6 +1275,22 @@ export default function BookingManager() {
                           <Mail className="w-3 h-3" /> Re-alert Engineers
                         </button>
                       )}
+                      {/* Correct Cash — only for cash bookings (no Stripe
+                          payment intent OR session). Stripe-paid sessions
+                          must use the Stripe refund flow, not this. */}
+                      {!b.stripe_payment_intent_id && !b.stripe_checkout_session_id && (
+                        <button
+                          onClick={() => setCashCorrection({
+                            id: b.id,
+                            customer_name: b.customer_name,
+                            total_amount: b.total_amount,
+                          })}
+                          className="border border-black/20 text-black/60 font-mono text-[10px] font-bold uppercase px-3 py-2 hover:bg-black/5 inline-flex items-center gap-1"
+                          title="Correct the cash collected amount (logged to audit)"
+                        >
+                          <Edit3 className="w-3 h-3" /> Correct Cash
+                        </button>
+                      )}
                     </div>
 
                     {/* Debug Toggle */}
@@ -1306,6 +1328,21 @@ export default function BookingManager() {
             );
           })}
         </div>
+      )}
+
+      {/* Cash correction modal — admin-side */}
+      {cashCorrection && (
+        <CashCorrectionModal
+          bookingId={cashCorrection.id}
+          customerName={cashCorrection.customer_name}
+          currentTotalCents={cashCorrection.total_amount}
+          onClose={() => setCashCorrection(null)}
+          onSaved={() => {
+            setCashCorrection(null);
+            // Refresh the bookings list so the corrected total renders.
+            fetchBookings();
+          }}
+        />
       )}
     </div>
   );

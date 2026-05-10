@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { formatCents } from '@/lib/utils';
 import { ENGINEERS } from '@/lib/constants';
+import CashCorrectionModal from '@/components/booking/CashCorrectionModal';
 
 interface Booking {
   id: string;
@@ -425,6 +426,9 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
   const [showCashPayment, setShowCashPayment] = useState(false);
   const [cashAmount, setCashAmount] = useState('');
   const [cashNote, setCashNote] = useState('');
+  // Cash correction modal — engineers can edit their own session
+  // totals after completion. Goes through audit log + admin alert.
+  const [showCashCorrection, setShowCashCorrection] = useState(false);
   const [notifying, setNotifying] = useState(false);
   const [showChangeEngineer, setShowChangeEngineer] = useState(false);
   const [selectedEngineer, setSelectedEngineer] = useState(booking.engineer_name || '');
@@ -1449,6 +1453,18 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
                 >
                   {showDebug ? 'Hide Details' : 'Debug'}
                 </button>
+                {/* Correct Cash — only for cash bookings (no Stripe).
+                    Engineers can edit their own session totals after
+                    completion. Goes through audit log. */}
+                {!booking.stripe_payment_intent_id && (
+                  <button
+                    onClick={() => setShowCashCorrection(true)}
+                    className="font-mono text-xs uppercase tracking-wider text-black/60 px-3 py-2 hover:text-black border border-black/15 hover:border-black inline-flex items-center gap-1"
+                    title="Correct cash collected (logged for admin)"
+                  >
+                    Correct Cash
+                  </button>
+                )}
               </div>
               {showFileUpload && (
                 <div className="mt-3 p-4 bg-black/5 border border-black/10 space-y-3">
@@ -1540,6 +1556,21 @@ function BookingCard({ booking, onUpdate, completed, unclaimed, onClaim, onPass,
 
       {chargeError && (
         <p className="font-mono text-xs text-red-600 mt-2">{chargeError}</p>
+      )}
+
+      {/* Cash correction modal — engineer-side */}
+      {showCashCorrection && (
+        <CashCorrectionModal
+          bookingId={booking.id}
+          customerName={booking.customer_name}
+          currentTotalCents={booking.total_amount}
+          onClose={() => setShowCashCorrection(false)}
+          onSaved={() => {
+            setShowCashCorrection(false);
+            // Refresh the parent so the new total appears.
+            onUpdate?.();
+          }}
+        />
       )}
     </div>
   );
