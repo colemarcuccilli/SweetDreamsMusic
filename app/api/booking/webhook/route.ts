@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
+import { Resend } from 'resend';
 import { stripe } from '@/lib/stripe';
 import { createServiceClient } from '@/lib/supabase/server';
 import {
@@ -12,10 +13,58 @@ import {
   sendPackageQuoteAccepted,
 } from '@/lib/email';
 import { mintEntitlementFromQuote, extendEntitlement } from '@/lib/packages-mint';
-import { ENGINEERS, type Room } from '@/lib/constants';
+import { ENGINEERS, SUPER_ADMINS, SITE_URL, type Room } from '@/lib/constants';
 import { calculatePriorityExpiry, getPriorityHoursLabel, calculateRescheduleDeadline } from '@/lib/priority';
 import { awardXP } from '@/lib/xp-system';
 import type Stripe from 'stripe';
+
+const resend = new Resend(process.env.RESEND_API_KEY);
+
+/**
+ * Best-effort admin alert when the webhook handler fails after a payment
+ * has succeeded. Customer's card was charged but no booking row exists
+ * — admin must intervene manually before retrying. We swallow any
+ * delivery error so an email outage doesn't compound the original
+ * webhook failure.
+ */
+async function alertAdminOfWebhookFailure(args: {
+  eventId: string;
+  eventType: string;
+  reason: string;
+  metadata?: Record<string, string>;
+  paymentIntent?: string | null;
+  amount?: number | null;
+}) {
+  try {
+    const metaLines = args.metadata
+      ? Object.entries(args.metadata)
+          .filter(([k]) => !k.startsWith('cart_part_')) // big nested cart is noisy
+          .map(([k, v]) => `<li><strong>${k}</strong>: ${String(v).slice(0, 200)}</li>`)
+          .join('')
+      : '';
+    await resend.emails.send({
+      from: 'Sweet Dreams Music <studio@sweetdreamsmusic.com>',
+      to: [...SUPER_ADMINS],
+      subject: `🚨 WEBHOOK FAILURE — ${args.eventType} (${args.eventId.slice(0, 16)})`,
+      html: `
+        <h2 style="color:#cc0000">Stripe webhook handler failed</h2>
+        <p><strong>Event:</strong> ${args.eventId} (${args.eventType})</p>
+        <p><strong>Reason:</strong> ${args.reason}</p>
+        ${args.paymentIntent ? `<p><strong>Payment intent:</strong> ${args.paymentIntent}</p>` : ''}
+        ${args.amount != null ? `<p><strong>Amount:</strong> $${(args.amount / 100).toFixed(2)}</p>` : ''}
+        ${metaLines ? `<p><strong>Metadata:</strong></p><ul>${metaLines}</ul>` : ''}
+        <p style="background:#fff3cd;padding:10px;border-left:3px solid #cc0000">
+          The customer was charged but no booking/order was created.
+          Check Vercel logs and Stripe dashboard, then create the
+          missing row manually + send confirmation.
+        </p>
+        <p><a href="https://dashboard.stripe.com/events/${args.eventId}">View on Stripe</a> · <a href="${SITE_URL}/admin">Open admin</a></p>
+      `,
+    });
+  } catch (e) {
+    console.error('[webhook] admin alert send failed (swallowed):', e);
+  }
+}
 
 export async function POST(request: NextRequest) {
   const body = await request.text();
@@ -59,6 +108,14 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // ── Top-level safety net ─────────────────────────────────────────────
+  // If anything in the switch handler throws an UNCAUGHT exception, we
+  // rolled back the dedup claim and fire an admin alert so the customer
+  // doesn't disappear into the void. This is the fix for the May 8-10
+  // outage where 4 paid bookings were silently lost: the previous code
+  // relied on each branch handling its own rollback, so an unhandled
+  // throw stuck the claim and Stripe's retries were deduped to no-ops.
+  try {
   switch (event.type) {
     case 'checkout.session.completed': {
       const session = event.data.object as Stripe.Checkout.Session;
@@ -1887,5 +1944,78 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // ── Silent-fall-through detection ────────────────────────────────────
+  // checkout.session.completed must always be handled by ONE of the
+  // branches above (booking_deposit, beat_purchase, media_purchase,
+  // package_quote, etc.). If the event arrived with metadata.type
+  // missing or unrecognized, we'd silently return 200 without creating
+  // any row — the bug that caused the May 8-10 outage would manifest
+  // here. Fire an admin alert + roll back the claim so Stripe retries.
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object as Stripe.Checkout.Session;
+    const meta = (session.metadata || {}) as Record<string, string>;
+    const knownTypes = new Set([
+      'booking_deposit', 'band_booking_deposit',
+      'invite_deposit', 'booking_remainder',
+      'beat_purchase', 'beat_renewal', 'beat_upgrade', 'private_beat_sale',
+      'media_purchase', 'media_remainder', 'media_manual',
+      'package_quote',
+    ]);
+    if (!meta.type || !knownTypes.has(meta.type)) {
+      console.error(
+        `[webhook] checkout.session.completed event ${event.id} fell through — meta.type='${meta.type ?? '(missing)'}'`,
+      );
+      await supabase.from('stripe_webhook_events').delete().eq('event_id', event.id);
+      await alertAdminOfWebhookFailure({
+        eventId: event.id,
+        eventType: event.type,
+        reason: `Unknown or missing metadata.type: '${meta.type ?? '(missing)'}'. Stripe will retry.`,
+        metadata: meta,
+        paymentIntent: typeof session.payment_intent === 'string' ? session.payment_intent : null,
+        amount: session.amount_total,
+      });
+      return NextResponse.json(
+        { error: `Unknown metadata.type: ${meta.type ?? '(missing)'}` },
+        { status: 500 },
+      );
+    }
+  }
+
   return NextResponse.json({ received: true });
+  } catch (uncaught) {
+    // ── Uncaught failure — recover the claim + alert admin ────────────
+    // This is the safety net that ensures a paid customer never silently
+    // disappears. Whatever threw, we delete the claim so Stripe retries
+    // (giving us another chance once the bug is fixed) and email admins
+    // immediately so they can intervene if needed.
+    console.error('[webhook] UNCAUGHT exception — rolling back claim:', uncaught);
+    try {
+      await supabase.from('stripe_webhook_events').delete().eq('event_id', event.id);
+    } catch (rollbackErr) {
+      console.error('[webhook] rollback delete also failed:', rollbackErr);
+    }
+    let metaForAlert: Record<string, string> | undefined;
+    let paymentIntent: string | null = null;
+    let amount: number | null = null;
+    try {
+      if (event.type === 'checkout.session.completed') {
+        const session = event.data.object as Stripe.Checkout.Session;
+        metaForAlert = (session.metadata || {}) as Record<string, string>;
+        paymentIntent = typeof session.payment_intent === 'string' ? session.payment_intent : null;
+        amount = session.amount_total ?? null;
+      }
+    } catch { /* ignore */ }
+    await alertAdminOfWebhookFailure({
+      eventId: event.id,
+      eventType: event.type,
+      reason: `Uncaught exception: ${uncaught instanceof Error ? uncaught.message : String(uncaught)}`,
+      metadata: metaForAlert,
+      paymentIntent,
+      amount,
+    });
+    return NextResponse.json(
+      { error: 'Webhook handler exception — Stripe will retry' },
+      { status: 500 },
+    );
+  }
 }
