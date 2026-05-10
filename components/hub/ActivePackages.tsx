@@ -16,13 +16,17 @@
 //   • Per-balance redeem actions for media offerings + beat credits
 
 import { useEffect, useState } from 'react';
-import { Loader2, Package, Crown, Users, Clock, Film, Music, Calendar, AlertCircle, CheckCircle2, Plus, Zap } from 'lucide-react';
+import { Loader2, Package, Crown, Users, Clock, Film, Music, Calendar, AlertCircle, CheckCircle2, Plus, Zap, CreditCard } from 'lucide-react';
 import RequestMoreModal from './RequestMoreModal';
 import RedeemSessionModal from './RedeemSessionModal';
+import RedeemBeatModal from './RedeemBeatModal';
+import RedeemMediaModal from './RedeemMediaModal';
 
 interface Balance {
   id: string;
   kind: 'studio_hours' | 'media_offering' | 'beat_credit' | 'custom';
+  media_offering_id: string | null;
+  full_price_cents: number;
   notes: string | null;
   quantity_granted: number;
   quantity_redeemed: number;
@@ -36,6 +40,7 @@ interface Entitlement {
   ends_at: string;
   band_id: string | null;
   band_name: string | null;
+  has_stripe_subscription: boolean;
   template_name: string;
   template_description: string | null;
   template_is_membership: boolean;
@@ -77,6 +82,26 @@ export default function ActivePackages() {
   const [error, setError] = useState<string | null>(null);
   const [requestingFor, setRequestingFor] = useState<Entitlement | null>(null);
   const [redeemingFor, setRedeemingFor] = useState<Entitlement | null>(null);
+  const [redeemingBeatFor, setRedeemingBeatFor] = useState<Entitlement | null>(null);
+  const [redeemingMediaFor, setRedeemingMediaFor] = useState<{ ent: Entitlement; balance: Balance } | null>(null);
+  const [openingPortal, setOpeningPortal] = useState<string | null>(null);
+
+  // Pop the Stripe Billing Portal in a new tab so the customer can
+  // update their card if a payment failed (or just review billing).
+  async function openBillingPortal(entitlementId: string) {
+    setOpeningPortal(entitlementId);
+    try {
+      const res = await fetch(`/api/packages/entitlements/${entitlementId}/billing-portal`, { method: 'POST' });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(body?.error || 'Could not open billing portal.');
+        return;
+      }
+      if (body?.portal_url) window.open(body.portal_url as string, '_blank');
+    } finally {
+      setOpeningPortal(null);
+    }
+  }
 
   async function refresh() {
     try {
@@ -235,6 +260,31 @@ export default function ActivePackages() {
                         Book Studio Time
                       </button>
                     )}
+                    {/* Beat credit redemption */}
+                    {ent.balances.some((b) => b.kind === 'beat_credit' && b.quantity_redeemed < b.quantity_granted) && (
+                      <button
+                        onClick={() => setRedeemingBeatFor(ent)}
+                        className="font-mono text-[10px] uppercase tracking-wider font-bold px-3 py-1.5 bg-black text-white inline-flex items-center gap-1.5"
+                      >
+                        <Music className="w-3 h-3" />
+                        Claim Beat
+                      </button>
+                    )}
+                    {/* Media offering redemption — one button per
+                        unredeemed media balance (since each line is a
+                        specific offering) */}
+                    {ent.balances
+                      .filter((b) => b.kind === 'media_offering' && b.quantity_redeemed < b.quantity_granted)
+                      .map((b) => (
+                        <button
+                          key={b.id}
+                          onClick={() => setRedeemingMediaFor({ ent, balance: b })}
+                          className="font-mono text-[10px] uppercase tracking-wider font-bold px-3 py-1.5 bg-black text-white inline-flex items-center gap-1.5"
+                        >
+                          <Film className="w-3 h-3" />
+                          Start: {b.notes ?? 'media offering'}
+                        </button>
+                      ))}
                     <button
                       onClick={() => setRequestingFor(ent)}
                       className="font-mono text-[10px] uppercase tracking-wider font-bold px-3 py-1.5 border border-black/20 hover:border-black inline-flex items-center gap-1.5"
@@ -242,6 +292,27 @@ export default function ActivePackages() {
                       <Plus className="w-3 h-3" />
                       Request More
                     </button>
+                    {/* Stripe billing portal — only for memberships with
+                        an active Stripe subscription. Lets customers
+                        update their card if a payment fails. */}
+                    {ent.has_stripe_subscription && (
+                      <button
+                        onClick={() => openBillingPortal(ent.id)}
+                        disabled={openingPortal === ent.id}
+                        className={`font-mono text-[10px] uppercase tracking-wider font-bold px-3 py-1.5 inline-flex items-center gap-1.5 disabled:opacity-50 ${
+                          isPastDue
+                            ? 'bg-orange-400 text-black hover:bg-orange-500'
+                            : 'border border-black/20 hover:border-black'
+                        }`}
+                      >
+                        {openingPortal === ent.id ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <CreditCard className="w-3 h-3" />
+                        )}
+                        Manage Payment
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -267,7 +338,30 @@ export default function ActivePackages() {
           onClose={() => setRedeemingFor(null)}
           onRedeemed={() => {
             setRedeemingFor(null);
-            // Refresh so the progress bar reflects the new redemption.
+            refresh();
+          }}
+        />
+      )}
+
+      {redeemingBeatFor && (
+        <RedeemBeatModal
+          entitlement={redeemingBeatFor}
+          onClose={() => setRedeemingBeatFor(null)}
+          onRedeemed={() => {
+            setRedeemingBeatFor(null);
+            refresh();
+          }}
+        />
+      )}
+
+      {redeemingMediaFor && (
+        <RedeemMediaModal
+          entitlementId={redeemingMediaFor.ent.id}
+          templateName={redeemingMediaFor.ent.template_name}
+          balance={redeemingMediaFor.balance}
+          onClose={() => setRedeemingMediaFor(null)}
+          onRedeemed={() => {
+            setRedeemingMediaFor(null);
             refresh();
           }}
         />

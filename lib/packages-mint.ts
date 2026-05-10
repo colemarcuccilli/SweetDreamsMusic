@@ -28,6 +28,10 @@ export interface QuoteForMint {
   user_id: string | null;
   band_id: string | null;
   status: string;
+  /** When set, the quote represents an EXTENSION of an existing entitlement
+   *  rather than a fresh purchase. The webhook calls extendEntitlement()
+   *  instead of mintEntitlementFromQuote() in that case. */
+  extends_entitlement_id?: string | null;
 }
 
 export interface TemplateForMint {
@@ -195,3 +199,151 @@ export async function mintEntitlementFromQuote(
 
   return { entitlementId, alreadyMinted: false };
 }
+
+/**
+ * Extend an existing entitlement by N months. Called from the webhook
+ * when a quote with extends_entitlement_id is paid. We:
+ *   1. Bump ends_at by months × 30 days
+ *   2. Add proportional balance lines (so customer gets N more months
+ *      of value at the same per-month rate)
+ *   3. Mark the extension quote as 'accepted' so it doesn't show up
+ *      as pending
+ *   4. Stamp the new Stripe subscription details on the entitlement
+ *
+ * Returns alreadyMinted=true if the quote was already accepted (retry).
+ */
+export async function extendEntitlement(
+  service: SupabaseClient,
+  quote: QuoteForMint & { extends_entitlement_id: string },
+  template: TemplateForMint,
+  templateLines: TemplateLineForMint[],
+  months: number,
+  stripe: MintStripeData,
+): Promise<MintResult> {
+  // Idempotency.
+  if (quote.status === 'accepted') {
+    return {
+      entitlementId: quote.extends_entitlement_id,
+      alreadyMinted: true,
+    };
+  }
+
+  // Race-safe accept.
+  const { data: acceptUpdate, error: acceptErr } = await service
+    .from('package_quotes')
+    .update({ status: 'accepted', accepted_at: new Date().toISOString() })
+    .eq('id', quote.id)
+    .in('status', ['draft', 'sent'])
+    .select('id');
+  if (acceptErr) {
+    throw new Error(`Quote accept update failed: ${acceptErr.message}`);
+  }
+  if (!acceptUpdate || acceptUpdate.length === 0) {
+    return { entitlementId: quote.extends_entitlement_id, alreadyMinted: true };
+  }
+
+  // Pull the existing entitlement's current ends_at + balances.
+  const { data: existingEnt, error: entErr } = await service
+    .from('package_entitlements')
+    .select('id, ends_at')
+    .eq('id', quote.extends_entitlement_id)
+    .single();
+  if (entErr || !existingEnt) {
+    throw new Error('Existing entitlement not found for extension');
+  }
+
+  // Compute new ends_at = max(current, now()) + months × 30d.
+  // (max ensures we extend forward, not into the past if the extension
+  // was issued shortly before original expiry — gives the customer at
+  // least the full extension window from now.)
+  const currentEnd = new Date((existingEnt as { ends_at: string }).ends_at);
+  const baseDate = currentEnd > new Date() ? currentEnd : new Date();
+  const newEnd = new Date(baseDate);
+  newEnd.setMonth(newEnd.getMonth() + months);
+
+  // Update the entitlement: bump ends_at + stamp new Stripe subscription.
+  // (Original stripe_subscription_id is overwritten with the new one
+  // because Stripe's checkout creates a fresh subscription per quote.
+  // The old subscription has cancel_at set so it auto-stops; the
+  // new one carries the extension.)
+  const { error: updateErr } = await service
+    .from('package_entitlements')
+    .update({
+      ends_at: newEnd.toISOString(),
+      stripe_subscription_id: stripe.stripeSubscriptionId ?? null,
+      stripe_subscription_iterations: stripe.stripeSubscriptionIterations ?? null,
+      current_period_end: stripe.currentPeriodEnd ?? null,
+      // Reset payment_status to current — they just paid.
+      payment_status: 'current',
+      last_payment_failed_at: null,
+    })
+    .eq('id', quote.extends_entitlement_id);
+  if (updateErr) {
+    throw new Error(`Entitlement extend update failed: ${updateErr.message}`);
+  }
+
+  // Add balance line ADDITIONS proportional to the extension.
+  // Each template line represents a full membership term's worth of
+  // that line's value. For an extension of N months out of an M-month
+  // template, each line contributes (N/M) × original_quantity.
+  // Round up so customers don't lose fractional value.
+  const originalMonths = template.membership_months ?? 1;
+  if (originalMonths > 0 && templateLines.length > 0) {
+    // Pull existing balances for this entitlement so we can either
+    // ADD to existing balances (preferred — keeps a single row per kind)
+    // or insert new ones if no matching balance exists.
+    const { data: existingBals } = await service
+      .from('package_entitlement_balances')
+      .select('id, kind, media_offering_id, quantity_granted, quantity_redeemed')
+      .eq('entitlement_id', quote.extends_entitlement_id);
+    type Bal = {
+      id: string;
+      kind: 'studio_hours' | 'media_offering' | 'beat_credit' | 'custom';
+      media_offering_id: string | null;
+      quantity_granted: number;
+      quantity_redeemed: number;
+    };
+    const balsByKey = new Map<string, Bal>();
+    for (const b of (existingBals ?? []) as Bal[]) {
+      // Key includes media_offering_id so multiple media lines stay
+      // separate (one per offering).
+      const key = `${b.kind}:${b.media_offering_id ?? ''}`;
+      balsByKey.set(key, b);
+    }
+
+    for (const line of templateLines) {
+      const additionalQty = Math.ceil(line.quantity * (months / originalMonths));
+      if (additionalQty <= 0) continue;
+      const key = `${line.kind}:${line.media_offering_id ?? ''}`;
+      const existing = balsByKey.get(key);
+      if (existing) {
+        // Add to existing balance.
+        await service
+          .from('package_entitlement_balances')
+          .update({
+            quantity_granted: existing.quantity_granted + additionalQty,
+          })
+          .eq('id', existing.id);
+      } else {
+        // Insert a new balance row.
+        await service
+          .from('package_entitlement_balances')
+          .insert({
+            entitlement_id: quote.extends_entitlement_id,
+            template_line_id: line.id,
+            kind: line.kind,
+            media_offering_id: line.media_offering_id,
+            full_price_cents: Math.round(line.full_price_cents * (months / originalMonths)),
+            package_value_cents: Math.round(line.package_value_cents * (months / originalMonths)),
+            notes: line.notes,
+            quantity_granted: additionalQty,
+            quantity_redeemed: 0,
+            redemptions: [],
+          });
+      }
+    }
+  }
+
+  return { entitlementId: quote.extends_entitlement_id, alreadyMinted: false };
+}
+

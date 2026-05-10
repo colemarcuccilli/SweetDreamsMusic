@@ -5,6 +5,7 @@ import { DollarSign, TrendingUp, Calendar, Music, Users, Filter, ChevronDown } f
 import { formatCents } from '@/lib/utils';
 import { PRODUCER_COMMISSION, PLATFORM_COMMISSION, ENGINEER_SESSION_SPLIT, BUSINESS_SESSION_SPLIT, MEDIA_SELLER_COMMISSION, MEDIA_BUSINESS_CUT, MEDIA_WORKER_TOTAL, ENGINEERS } from '@/lib/constants';
 import CreditsLiabilityPanel from './CreditsLiabilityPanel';
+import PackageAccounting from './PackageAccounting';
 
 interface Booking {
   id: string;
@@ -1113,6 +1114,11 @@ export default function Accounting() {
 
               {/* Phase E — prepaid credits liability (deferred revenue) */}
               <CreditsLiabilityPanel />
+
+              {/* Round F — packages & memberships rollup */}
+              <div className="mt-6 border-t border-black/10 pt-6">
+                <PackageAccounting />
+              </div>
 
               {/* Monthly breakdown */}
               {sessionsByMonth.length > 0 && (

@@ -38,6 +38,9 @@ export interface ActiveEntitlement {
   starts_at: string;
   ends_at: string;
   current_period_end: string | null;
+  /** Present only for memberships that completed Stripe Checkout. UI uses
+   *  this to decide whether to show the Stripe Billing Portal button. */
+  has_stripe_subscription: boolean;
   template_name: string;
   template_description: string | null;
   template_is_membership: boolean;
@@ -90,6 +93,7 @@ export async function GET() {
     payment_status: 'current' | 'past_due' | 'collections' | 'written_off';
     starts_at: string; ends_at: string;
     current_period_end: string | null;
+    stripe_subscription_id: string | null;
   };
   const entRows = (rows ?? []) as EntRow[];
 
@@ -160,6 +164,7 @@ export async function GET() {
       starts_at: e.starts_at,
       ends_at: e.ends_at,
       current_period_end: e.current_period_end,
+      has_stripe_subscription: !!e.stripe_subscription_id,
       template_name: tpl?.name ?? '(deleted template)',
       template_description: tpl?.description ?? null,
       template_is_membership: tpl?.is_membership ?? false,

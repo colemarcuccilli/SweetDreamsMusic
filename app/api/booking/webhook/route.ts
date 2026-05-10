@@ -11,7 +11,7 @@ import {
   sendMediaPurchaseAdminAlert,
   sendPackageQuoteAccepted,
 } from '@/lib/email';
-import { mintEntitlementFromQuote } from '@/lib/packages-mint';
+import { mintEntitlementFromQuote, extendEntitlement } from '@/lib/packages-mint';
 import { ENGINEERS, type Room } from '@/lib/constants';
 import { calculatePriorityExpiry, getPriorityHoursLabel, calculateRescheduleDeadline } from '@/lib/priority';
 import { awardXP } from '@/lib/xp-system';
@@ -1261,7 +1261,7 @@ export async function POST(request: NextRequest) {
         // has everything it needs to mint balances.
         const { data: quoteRow, error: qErr } = await supabase
           .from('package_quotes')
-          .select('id, template_id, user_id, band_id, status')
+          .select('id, template_id, user_id, band_id, status, extends_entitlement_id')
           .eq('id', quoteId)
           .maybeSingle();
         if (qErr || !quoteRow) {
@@ -1269,7 +1269,11 @@ export async function POST(request: NextRequest) {
           await supabase.from('stripe_webhook_events').delete().eq('event_id', event.id);
           return NextResponse.json({ error: 'Quote not found' }, { status: 500 });
         }
-        type Q = { id: string; template_id: string; user_id: string | null; band_id: string | null; status: string };
+        type Q = {
+          id: string; template_id: string; user_id: string | null; band_id: string | null;
+          status: string;
+          extends_entitlement_id: string | null;
+        };
         const quote = quoteRow as Q;
 
         const [{ data: tplRow }, { data: linesRows }] = await Promise.all([
@@ -1349,25 +1353,70 @@ export async function POST(request: NextRequest) {
         }
 
         try {
-          const result = await mintEntitlementFromQuote(
-            supabase,
-            quote,
-            tpl,
-            lines,
-            {
-              stripeCheckoutSessionId: session.id,
-              stripeSubscriptionId,
-              stripeSubscriptionIterations,
-              currentPeriodEnd,
-            },
-          );
+          // Round H: extension flow detection. A quote with
+          // extends_entitlement_id should EXTEND the existing
+          // entitlement (bump ends_at + add proportional balances)
+          // rather than mint a new one.
+          let result: { entitlementId: string; alreadyMinted: boolean };
+          if (quote.extends_entitlement_id) {
+            // Compute months: subscription_data.metadata captured
+            // membership_months in the create flow. Fallback: derive
+            // from the quote's price vs template's per-month price.
+            const subMetaMonths = session.subscription
+              && stripeSubscriptionIterations
+              ? stripeSubscriptionIterations
+              : tpl.membership_months ?? 1;
+            // Pull total_price_cents from quote to derive months if subscriptions metadata missing.
+            const { data: priceRow } = await supabase
+              .from('package_quotes')
+              .select('total_price_cents')
+              .eq('id', quote.id)
+              .single();
+            const totalPriceCents = (priceRow as { total_price_cents: number } | null)?.total_price_cents ?? 0;
+            // Compute monthly cost from template; months = total / monthly
+            const { data: monthlyRow } = await supabase
+              .from('package_templates')
+              .select('price_cents')
+              .eq('id', quote.template_id)
+              .single();
+            const monthly = (monthlyRow as { price_cents: number } | null)?.price_cents ?? 0;
+            const derivedMonths = monthly > 0 ? Math.round(totalPriceCents / monthly) : subMetaMonths;
+            const monthsToExtend = derivedMonths > 0 ? derivedMonths : subMetaMonths;
+
+            result = await extendEntitlement(
+              supabase,
+              { ...quote, extends_entitlement_id: quote.extends_entitlement_id },
+              tpl,
+              lines,
+              monthsToExtend,
+              {
+                stripeCheckoutSessionId: session.id,
+                stripeSubscriptionId,
+                stripeSubscriptionIterations,
+                currentPeriodEnd,
+              },
+            );
+          } else {
+            result = await mintEntitlementFromQuote(
+              supabase,
+              quote,
+              tpl,
+              lines,
+              {
+                stripeCheckoutSessionId: session.id,
+                stripeSubscriptionId,
+                stripeSubscriptionIterations,
+                currentPeriodEnd,
+              },
+            );
+          }
 
           if (result.alreadyMinted) {
-            console.log(`[webhook][package_quote] already minted entitlement ${result.entitlementId} — dedup`);
+            console.log(`[webhook][package_quote] already minted/extended entitlement ${result.entitlementId} — dedup`);
             break;
           }
 
-          console.log(`[webhook][package_quote] minted entitlement ${result.entitlementId} for quote ${quote.id}`);
+          console.log(`[webhook][package_quote] ${quote.extends_entitlement_id ? 'extended' : 'minted'} entitlement ${result.entitlementId} for quote ${quote.id}`);
 
           // Notify admins. Pull recipient identity for the email.
           try {
