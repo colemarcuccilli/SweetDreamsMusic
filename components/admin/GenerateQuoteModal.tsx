@@ -15,6 +15,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { X, Loader2, Search, Send, FileText, Crown, Users, Calendar, AlertCircle } from 'lucide-react';
 import { formatCents } from '@/lib/packages';
+import { ENGINEERS } from '@/lib/constants';
 
 interface TemplateLite {
   id: string;
@@ -56,6 +57,10 @@ export default function GenerateQuoteModal({ template, onClose, onCreated }: Pro
 
   const [customerMessage, setCustomerMessage] = useState('');
   const [adminNotes, setAdminNotes] = useState('');
+  // Optional salesperson attribution. Empty string = no commission
+  // (the default — most packages won't have a dedicated closer).
+  const [salespersonName, setSalespersonName] = useState('');
+  const [salesCommissionPct, setSalesCommissionPct] = useState('');
   const [expiresAt, setExpiresAt] = useState(() => {
     const d = new Date(Date.now() + DEFAULT_EXPIRY_DAYS * 86400 * 1000);
     return d.toISOString().slice(0, 10); // YYYY-MM-DD for <input type="date">
@@ -114,6 +119,17 @@ export default function GenerateQuoteModal({ template, onClose, onCreated }: Pro
       return;
     }
 
+    // Salesperson is optional, but if one is picked, the % must be set.
+    const pctParsed = salesCommissionPct.trim() === '' ? null : parseFloat(salesCommissionPct);
+    if (salespersonName && (pctParsed === null || Number.isNaN(pctParsed) || pctParsed < 0 || pctParsed > 100)) {
+      setError('Set a commission % between 0 and 100 for the salesperson.');
+      return;
+    }
+    if (!salespersonName && pctParsed !== null) {
+      setError('Pick a salesperson, or clear the commission %.');
+      return;
+    }
+
     setBusy(alsoSend ? 'sending' : 'saving');
     try {
       // Step 1: create draft.
@@ -128,6 +144,8 @@ export default function GenerateQuoteModal({ template, onClose, onCreated }: Pro
           customer_message: customerMessage.trim() || null,
           admin_notes: adminNotes.trim() || null,
           expires_at: expiresAtISO,
+          salesperson_name: salespersonName || null,
+          sales_commission_pct: salespersonName ? pctParsed : null,
         }),
       });
       const createBody = await createRes.json().catch(() => ({}));
@@ -155,7 +173,14 @@ export default function GenerateQuoteModal({ template, onClose, onCreated }: Pro
     } finally {
       setBusy(null);
     }
-  }, [template, recipientUser, recipientBand, customerMessage, adminNotes, expiresAt, onCreated]);
+  }, [template, recipientUser, recipientBand, customerMessage, adminNotes, expiresAt, salespersonName, salesCommissionPct, onCreated]);
+
+  // Live preview of the commission dollar amount, shown under the % input.
+  const commissionPreviewCents = (() => {
+    const pct = parseFloat(salesCommissionPct);
+    if (!salespersonName || Number.isNaN(pct) || pct <= 0) return 0;
+    return Math.round((totalContractCents * pct) / 100);
+  })();
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm overflow-y-auto">
@@ -329,6 +354,60 @@ export default function GenerateQuoteModal({ template, onClose, onCreated }: Pro
                 placeholder="Friend of Jay, will probably try to negotiate. Floor is $1500."
                 className="w-full border-2 border-black px-3 py-2 font-mono text-sm bg-transparent focus:border-accent focus:outline-none resize-y"
               />
+            </div>
+
+            {/* Salesperson + commission — OPTIONAL. Leave blank for no
+                commission (the default). When a salesperson is picked,
+                their commission is earned when the customer pays (the
+                entitlement mints) and shows up in their payroll. */}
+            <div className="border border-black/15 p-3 space-y-3">
+              <p className="font-mono text-[10px] uppercase tracking-wider font-bold text-black/55">
+                Salesperson commission <span className="text-black/35 normal-case">— optional, leave blank for none</span>
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-mono text-[9px] uppercase tracking-wider text-black/45 mb-1">
+                    Salesperson
+                  </label>
+                  <select
+                    value={salespersonName}
+                    onChange={(e) => {
+                      setSalespersonName(e.target.value);
+                      // Clearing the salesperson clears the % too — they move together.
+                      if (!e.target.value) setSalesCommissionPct('');
+                    }}
+                    className="w-full border-2 border-black px-2 py-2 font-mono text-sm bg-transparent focus:border-accent focus:outline-none"
+                  >
+                    <option value="">— none —</option>
+                    {ENGINEERS.map((e) => (
+                      <option key={e.email} value={e.name}>{e.displayName}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-mono text-[9px] uppercase tracking-wider text-black/45 mb-1">
+                    Commission %
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.5"
+                    value={salesCommissionPct}
+                    onChange={(e) => setSalesCommissionPct(e.target.value)}
+                    disabled={!salespersonName}
+                    placeholder={salespersonName ? 'e.g. 15' : '—'}
+                    className="w-full border-2 border-black px-2 py-2 font-mono text-sm bg-transparent focus:border-accent focus:outline-none disabled:opacity-40"
+                  />
+                </div>
+              </div>
+              {commissionPreviewCents > 0 && (
+                <p className="font-mono text-[11px] text-black/65">
+                  <strong>{salespersonName}</strong> earns{' '}
+                  <strong className="text-accent">{formatCents(commissionPreviewCents)}</strong>{' '}
+                  when the customer pays — added to their payroll.
+                </p>
+              )}
             </div>
 
             {/* Total summary */}

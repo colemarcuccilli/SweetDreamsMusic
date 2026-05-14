@@ -1318,7 +1318,7 @@ export async function POST(request: NextRequest) {
         // has everything it needs to mint balances.
         const { data: quoteRow, error: qErr } = await supabase
           .from('package_quotes')
-          .select('id, template_id, user_id, band_id, status, extends_entitlement_id')
+          .select('id, template_id, user_id, band_id, status, extends_entitlement_id, total_price_cents, salesperson_name, sales_commission_pct')
           .eq('id', quoteId)
           .maybeSingle();
         if (qErr || !quoteRow) {
@@ -1330,6 +1330,9 @@ export async function POST(request: NextRequest) {
           id: string; template_id: string; user_id: string | null; band_id: string | null;
           status: string;
           extends_entitlement_id: string | null;
+          total_price_cents: number | null;
+          salesperson_name: string | null;
+          sales_commission_pct: number | null;
         };
         const quote = quoteRow as Q;
 

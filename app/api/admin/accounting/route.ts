@@ -100,6 +100,24 @@ export async function GET(request: NextRequest) {
 
   const { data: mediaBookings } = await mediaBookingsQuery;
 
+  // Package salesperson commissions. When an admin attributes a
+  // salesperson to a package quote, the commission is snapshotted onto
+  // the entitlement at mint time (sales_commission_cents). Commission
+  // is earned ON PAYMENT — so we date-filter by created_at (the mint
+  // timestamp = when the customer paid). Only rows with a salesperson
+  // and a positive commission matter to payroll.
+  let packageCommissionsQuery = supabase
+    .from('package_entitlements')
+    .select('id, salesperson_name, sales_commission_cents, created_at, quote_id, template_id')
+    .not('salesperson_name', 'is', null)
+    .gt('sales_commission_cents', 0)
+    .order('created_at', { ascending: false });
+
+  if (from) packageCommissionsQuery = packageCommissionsQuery.gte('created_at', from);
+  if (to) packageCommissionsQuery = packageCommissionsQuery.lte('created_at', `${to}T23:59:59`);
+
+  const { data: packageCommissions } = await packageCommissionsQuery;
+
   // Hydrate offering titles in one batch — avoids N+1 client-side joins
   // and lets the Accounting page render a "what was sold" column.
   const mediaOfferingIds = Array.from(
@@ -164,6 +182,7 @@ export async function GET(request: NextRequest) {
     mediaSales: mediaSales || [],
     mediaSessions: mediaSessions || [],
     mediaBookings: mediaBookings || [],
+    packageCommissions: packageCommissions || [],
     mediaOfferingMap,
     bandMap,
     engineerNameMap,

@@ -25,6 +25,11 @@ interface CreateQuotePayload {
   admin_notes?: string | null;
   /** Per-quote line tweaks: shape `[{ template_line_id, quantity?, package_value_cents? }]`. */
   custom_adjustments?: unknown;
+  /** Optional salesperson attribution. Both must be set together, or
+   *  both null. Null = no commission (the default). */
+  salesperson_name?: string | null;
+  /** Commission as a whole-number percentage, 0-100 (e.g. 15 = 15%). */
+  sales_commission_pct?: number | null;
 }
 
 export async function GET(request: Request) {
@@ -184,6 +189,25 @@ export async function POST(request: Request) {
   // 256 bits of entropy, hex-encoded → URL-safe.
   const token = randomBytes(32).toString('hex');
 
+  // Salesperson attribution — optional, but both fields move together.
+  // If a name is given without a pct (or vice versa), reject rather than
+  // silently storing a half-set commission.
+  const salespersonName = body.salesperson_name?.trim() || null;
+  const salesCommissionPct =
+    typeof body.sales_commission_pct === 'number' ? body.sales_commission_pct : null;
+  if (salespersonName && (salesCommissionPct === null || salesCommissionPct < 0 || salesCommissionPct > 100)) {
+    return NextResponse.json(
+      { error: 'A salesperson requires a commission percentage between 0 and 100.' },
+      { status: 400 },
+    );
+  }
+  if (!salespersonName && salesCommissionPct !== null) {
+    return NextResponse.json(
+      { error: 'A commission percentage requires a salesperson name.' },
+      { status: 400 },
+    );
+  }
+
   const { data: created, error: insertErr } = await service
     .from('package_quotes')
     .insert({
@@ -200,6 +224,8 @@ export async function POST(request: Request) {
       customer_message: body.customer_message ?? null,
       expires_at: expiresAt,
       created_by_user_id: user.id,
+      salesperson_name: salespersonName,
+      sales_commission_pct: salesCommissionPct,
     })
     .select('*')
     .single();

@@ -189,6 +189,21 @@ export default function Accounting() {
     }>
   >([]);
   const [engineerNameMap, setEngineerNameMap] = useState<Record<string, string>>({});
+  // Package salesperson commissions — snapshotted onto entitlements at
+  // mint time (when the customer paid). Each row credits one
+  // salesperson with sales_commission_cents. Fed into computeEarnings
+  // so package commissions land in the same per-person payroll buckets
+  // as session/media/beat pay.
+  const [allTimePackageCommissions, setAllTimePackageCommissions] = useState<
+    Array<{
+      id: string;
+      salesperson_name: string | null;
+      sales_commission_cents: number | null;
+      created_at: string;
+      quote_id: string;
+      template_id: string;
+    }>
+  >([]);
 
   // Payout tracking
   const [payouts, setPayouts] = useState<{ id: string; person_name: string; amount: number; method: string; note: string | null; period_label: string | null; created_at: string }[]>([]);
@@ -244,6 +259,7 @@ export default function Accounting() {
     setAllTimeMediaSales(data.mediaSales || []);
     setAllTimeCancelledBookings(data.cancelledBookings || []);
     setAllTimeMediaSessions(data.mediaSessions || []);
+    setAllTimePackageCommissions(data.packageCommissions || []);
     setEngineerNameMap(data.engineerNameMap || {});
     setPayouts(payoutsData.payouts || []);
     setCashLedger(cashData.entries || []);
@@ -271,7 +287,7 @@ export default function Accounting() {
     setLoading(false);
   }
 
-  async function recordPayout(personName: string, earningsData?: { sessionPay: number; sessionCount: number; sessionHours: number; mediaCommission: number; mediaWorkerPay: number; beatProducerPay: number; totalEarned: number; totalPaid: number }) {
+  async function recordPayout(personName: string, earningsData?: { sessionPay: number; sessionCount: number; sessionHours: number; mediaCommission: number; mediaWorkerPay: number; beatProducerPay: number; packageCommission: number; totalEarned: number; totalPaid: number }) {
     if (!payoutAmount) return;
     setRecordingPayout(true);
     const res = await fetch('/api/admin/payouts', {
@@ -645,6 +661,9 @@ export default function Accounting() {
     mediaCommission: number; mediaSoldCount: number;
     mediaWorkerPay: number; mediaFilmedCount: number; mediaEditedCount: number;
     beatSales: number; beatProducerPay: number; beatCount: number;
+    // Package salesperson commission — when a person is attributed as
+    // the closer on a package quote, they earn this when the customer pays.
+    packageCommission: number; packageSoldCount: number;
     totalPay: number;
   };
 
@@ -654,9 +673,10 @@ export default function Accounting() {
     beats: BeatPurchase[],
     mediaSessions: typeof allTimeMediaSessions = [],
     engineerNames: Record<string, string> = {},
+    packageCommissions: typeof allTimePackageCommissions = [],
   ): Record<string, PersonEarnings> {
     const people: Record<string, PersonEarnings> = {};
-    const init = (): PersonEarnings => ({ sessionCount: 0, sessionRevenue: 0, sessionPay: 0, sessionHours: 0, mediaCommission: 0, mediaSoldCount: 0, mediaWorkerPay: 0, mediaFilmedCount: 0, mediaEditedCount: 0, beatSales: 0, beatProducerPay: 0, beatCount: 0, totalPay: 0 });
+    const init = (): PersonEarnings => ({ sessionCount: 0, sessionRevenue: 0, sessionPay: 0, sessionHours: 0, mediaCommission: 0, mediaSoldCount: 0, mediaWorkerPay: 0, mediaFilmedCount: 0, mediaEditedCount: 0, beatSales: 0, beatProducerPay: 0, beatCount: 0, packageCommission: 0, packageSoldCount: 0, totalPay: 0 });
 
     bks.forEach(b => {
       // Only count completed sessions for payroll — pending/confirmed sessions haven't happened yet
@@ -725,8 +745,22 @@ export default function Accounting() {
       people[eng].mediaFilmedCount++;
     });
 
+    // Package salesperson commissions. Each entitlement with a
+    // salesperson + positive commission credits that person. The
+    // commission was snapshotted at mint time (= when the customer
+    // paid), so it's a frozen, already-earned number.
+    packageCommissions.forEach((pc) => {
+      const sp = normalizeName(pc.salesperson_name);
+      if (!sp) return;
+      const cents = pc.sales_commission_cents ?? 0;
+      if (cents <= 0) return;
+      if (!people[sp]) people[sp] = init();
+      people[sp].packageCommission += cents;
+      people[sp].packageSoldCount++;
+    });
+
     Object.values(people).forEach(p => {
-      p.totalPay = p.sessionPay + p.mediaCommission + p.mediaWorkerPay + p.beatProducerPay;
+      p.totalPay = p.sessionPay + p.mediaCommission + p.mediaWorkerPay + p.beatProducerPay + p.packageCommission;
     });
     return people;
   }
@@ -777,6 +811,7 @@ export default function Accounting() {
       allTimeBeatPurchases,
       allTimeMediaSessions,
       engineerNameMap,
+      allTimePackageCommissions,
     );
 
     // All-time payouts by person (normalized)
@@ -802,12 +837,19 @@ export default function Accounting() {
     const periodMediaSessions = allTimeMediaSessions.filter(
       (s) => s.starts_at >= periodStartStr && s.starts_at <= periodEndStr,
     );
+    // Package commissions filtered to the pay period by created_at (the
+    // mint timestamp = when the customer paid = when the commission was
+    // earned).
+    const periodPackageCommissions = allTimePackageCommissions.filter(
+      (pc) => pc.created_at >= periodStartStr && pc.created_at <= periodEndStr,
+    );
     const periodPeople = computeEarnings(
       periodBookings,
       periodMedia,
       periodBeats,
       periodMediaSessions,
       engineerNameMap,
+      periodPackageCommissions,
     );
 
     // Pending sessions this period — bookings scheduled within the period that
@@ -840,7 +882,7 @@ export default function Accounting() {
       ...Object.keys(periodPeople),
       ...Object.keys(pendingByEngineer),
     ]);
-    const initEmpty = (): PersonEarnings => ({ sessionCount: 0, sessionRevenue: 0, sessionPay: 0, sessionHours: 0, mediaCommission: 0, mediaSoldCount: 0, mediaWorkerPay: 0, mediaFilmedCount: 0, mediaEditedCount: 0, beatSales: 0, beatProducerPay: 0, beatCount: 0, totalPay: 0 });
+    const initEmpty = (): PersonEarnings => ({ sessionCount: 0, sessionRevenue: 0, sessionPay: 0, sessionHours: 0, mediaCommission: 0, mediaSoldCount: 0, mediaWorkerPay: 0, mediaFilmedCount: 0, mediaEditedCount: 0, beatSales: 0, beatProducerPay: 0, beatCount: 0, packageCommission: 0, packageSoldCount: 0, totalPay: 0 });
     type PeriodPending = { count: number; potentialPay: number; hours: number };
     const entries: [string, PersonEarnings & { allTimeTotal: number; allTimePaid: number; balance: number; periodTotal: number; allTimeData: PersonEarnings; periodPending: PeriodPending }][] = [];
 
@@ -892,7 +934,7 @@ export default function Accounting() {
       periodLabel, periodStart: periodStartStr, periodEnd: periodEndStr,
       periodPayoutTotal,
     };
-  }, [allTimeBookings, allTimeMediaSales, allTimeBeatPurchases, allTimeCancelledBookings, allTimeMediaSessions, engineerNameMap, payouts, payPeriods, payrollPeriodIndex]);
+  }, [allTimeBookings, allTimeMediaSales, allTimeBeatPurchases, allTimeCancelledBookings, allTimeMediaSessions, allTimePackageCommissions, engineerNameMap, payouts, payPeriods, payrollPeriodIndex]);
 
   // Payroll data for overview tab (date-filtered) - keep the existing behavior for overview
   const filteredPayrollData = useMemo(() => {
@@ -1503,6 +1545,14 @@ export default function Accounting() {
                         });
                         const mediaTotal = mediaItems.reduce((s, m) => s + m.totalPay, 0);
 
+                        // Package commissions this person closed in the period.
+                        // Filtered by created_at (mint time = when the customer
+                        // paid = when commission was earned).
+                        const personPackages = allTimePackageCommissions
+                          .filter((pc) => normalizeName(pc.salesperson_name) === name && pc.created_at >= ps && pc.created_at <= pe)
+                          .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+                        const packageTotal = personPackages.reduce((s, pc) => s + (pc.sales_commission_cents ?? 0), 0);
+
                         // Pending (not-yet-completed) sessions in this period.
                         // Shown separately so admins can see upcoming work and
                         // know they need to mark sessions complete to move them
@@ -1520,7 +1570,7 @@ export default function Accounting() {
                         const pendingPotentialPay = Math.round(pendingGross * ENGINEER_SESSION_SPLIT);
                         const pendingHours = personPendingSessions.reduce((s, b) => s + (b.duration || 0), 0);
 
-                        const hasActivity = personSessions.length > 0 || personMedia.length > 0;
+                        const hasActivity = personSessions.length > 0 || personMedia.length > 0 || personPackages.length > 0;
                         const hasAnything = hasActivity || personPendingSessions.length > 0;
 
                         return (
@@ -1570,6 +1620,28 @@ export default function Accounting() {
                               </div>
                             )}
 
+                            {/* Package commissions — salesperson commission
+                                on package/membership quotes this person
+                                closed. Earned when the customer paid. */}
+                            {personPackages.length > 0 && (
+                              <div>
+                                <div className="space-y-1">
+                                  {personPackages.map(pc => (
+                                    <div key={pc.id} className="flex justify-between items-start font-mono text-[11px] py-0.5">
+                                      <div className="text-black/60">
+                                        <span>{new Date(pc.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · Package sale</span>
+                                      </div>
+                                      <span className="text-black/80 font-semibold flex-shrink-0 ml-2">{formatCents(pc.sales_commission_cents ?? 0)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="flex justify-between font-mono text-xs font-bold mt-1 pt-1 border-t border-black/10">
+                                  <span>Package commissions ({personPackages.length})</span>
+                                  <span>{formatCents(packageTotal)}</span>
+                                </div>
+                              </div>
+                            )}
+
                             {/* Pending sessions — scheduled but not yet
                                 completed. Shown in amber to visually
                                 distinguish from confirmed earnings. */}
@@ -1599,11 +1671,13 @@ export default function Accounting() {
                               </div>
                             )}
 
-                            {/* Period total */}
+                            {/* Period total — sessions + media + package
+                                commissions. Reconciles with the "This
+                                Period" column in the What We Owe table. */}
                             {hasActivity && (
                               <div className="flex justify-between font-mono text-sm font-bold pt-2 border-t-2 border-black/20">
                                 <span>Period Total (earned)</span>
-                                <span>{formatCents(sessionPay + mediaTotal)}</span>
+                                <span>{formatCents(sessionPay + mediaTotal + packageTotal)}</span>
                               </div>
                             )}
                           </div>
@@ -1711,6 +1785,7 @@ export default function Accounting() {
                                     mediaCommission: data.allTimeData.mediaCommission,
                                     mediaWorkerPay: data.allTimeData.mediaWorkerPay,
                                     beatProducerPay: data.allTimeData.beatProducerPay,
+                                    packageCommission: data.allTimeData.packageCommission,
                                     totalEarned: data.allTimeTotal,
                                     totalPaid: data.allTimePaid,
                                   })} disabled={!payoutAmount || recordingPayout}

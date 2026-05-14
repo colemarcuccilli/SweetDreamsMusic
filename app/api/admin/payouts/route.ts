@@ -83,6 +83,7 @@ export async function POST(request: NextRequest) {
           mediaCommission: earnings.mediaCommission || 0,
           mediaWorkerPay: earnings.mediaWorkerPay || 0,
           beatProducerPay: earnings.beatProducerPay || 0,
+          packageCommission: earnings.packageCommission || 0,
           totalEarned: earnings.totalEarned || 0,
           totalPaid: (earnings.totalPaid || 0) + amountCents,
           balanceAfter: Math.max(0, (earnings.totalEarned || 0) - (earnings.totalPaid || 0) - amountCents),

@@ -1075,6 +1075,9 @@ export async function sendPaystubEmail(to: string, details: {
   mediaCommission: number;
   mediaWorkerPay: number;
   beatProducerPay: number;
+  /** Package salesperson commission — optional; 0 when the person
+   *  closed no package quotes this period. */
+  packageCommission?: number;
   totalEarned: number;
   totalPaid: number;
   balanceAfter: number;
@@ -1092,6 +1095,7 @@ export async function sendPaystubEmail(to: string, details: {
     if (d.mediaCommission > 0) earningsRows += detail('Media Commission', formatMoney(d.mediaCommission));
     if (d.mediaWorkerPay > 0) earningsRows += detail('Media Work Pay', formatMoney(d.mediaWorkerPay));
     if (d.beatProducerPay > 0) earningsRows += detail('Beat Sales', formatMoney(d.beatProducerPay));
+    if ((d.packageCommission ?? 0) > 0) earningsRows += detail('Package Commission', formatMoney(d.packageCommission ?? 0));
 
     await resend.emails.send({
       from: FROM,

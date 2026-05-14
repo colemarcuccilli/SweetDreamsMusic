@@ -32,6 +32,15 @@ export interface QuoteForMint {
    *  rather than a fresh purchase. The webhook calls extendEntitlement()
    *  instead of mintEntitlementFromQuote() in that case. */
   extends_entitlement_id?: string | null;
+  /** Total customer-facing price in cents — used to compute the
+   *  salesperson commission snapshot. For memberships this is the full
+   *  contract value. */
+  total_price_cents?: number | null;
+  /** Optional salesperson attribution carried over from the quote.
+   *  Null = no commission (the default for most quotes). */
+  salesperson_name?: string | null;
+  /** Commission as a whole-number percentage (0-100). */
+  sales_commission_pct?: number | null;
 }
 
 export interface TemplateForMint {
@@ -148,6 +157,17 @@ export async function mintEntitlementFromQuote(
     // mint anyway — better to have the entitlement than not.
   }
 
+  // Salesperson commission snapshot. Per Cole's rule, commission is
+  // earned ON PAYMENT — this mint function only runs after the webhook
+  // confirms payment, so snapshotting here freezes the earned amount.
+  // A later quote edit can't retroactively change a salesperson's
+  // payroll. Null salesperson → null commission (the default).
+  let salesCommissionCents: number | null = null;
+  if (quote.salesperson_name && typeof quote.sales_commission_pct === 'number' && quote.sales_commission_pct > 0) {
+    const basis = quote.total_price_cents ?? 0;
+    salesCommissionCents = Math.round((basis * quote.sales_commission_pct) / 100);
+  }
+
   // Insert the entitlement row.
   const { data: created, error: insertErr } = await service
     .from('package_entitlements')
@@ -163,6 +183,8 @@ export async function mintEntitlementFromQuote(
       stripe_subscription_id: stripe.stripeSubscriptionId ?? null,
       stripe_subscription_iterations: stripe.stripeSubscriptionIterations ?? null,
       current_period_end: stripe.currentPeriodEnd ?? null,
+      salesperson_name: quote.salesperson_name ?? null,
+      sales_commission_cents: salesCommissionCents,
     })
     .select('id')
     .single();
