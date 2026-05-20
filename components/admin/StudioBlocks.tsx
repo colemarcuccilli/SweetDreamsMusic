@@ -11,6 +11,10 @@ interface Block {
   reason: string | null;
   created_by: string | null;
   created_at: string;
+  /** Set = engineer-scoped block (only that engineer is unavailable;
+   *  studio + other engineers stay bookable). Null = studio-wide
+   *  closure (maintenance, private event — closes the room calendar). */
+  engineer_name: string | null;
 }
 
 function generateTimeOptions() {
@@ -174,13 +178,31 @@ export default function StudioBlocks() {
               return (
                 <div key={block.id} className="flex items-center justify-between border border-black/10 px-4 py-3">
                   <div className="flex items-center gap-4">
-                    <Clock className="w-4 h-4 text-red-500" />
+                    {/* Engineer-scoped blocks use a muted clock — they
+                        don't close the studio, so they're not "red". */}
+                    <Clock className={`w-4 h-4 ${block.engineer_name ? 'text-black/30' : 'text-red-500'}`} />
                     <div>
-                      <p className="font-mono text-sm font-bold">{dateStr}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-mono text-sm font-bold">{dateStr}</p>
+                        {block.engineer_name ? (
+                          <span className="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 border border-black/25 text-black/55">
+                            {block.engineer_name} only
+                          </span>
+                        ) : (
+                          <span className="font-mono text-[9px] uppercase tracking-wider px-1.5 py-0.5 bg-red-100 text-red-700 font-bold">
+                            Studio-wide
+                          </span>
+                        )}
+                      </div>
                       <p className="font-mono text-xs text-black/50">
                         {startStr} — {endStr}
                         {block.reason && <span className="ml-2 text-black/40">({block.reason})</span>}
                       </p>
+                      {block.engineer_name && (
+                        <p className="font-mono text-[10px] text-black/35 mt-0.5">
+                          Engineer self-block — studio stays bookable with other engineers.
+                        </p>
+                      )}
                     </div>
                   </div>
                   <button

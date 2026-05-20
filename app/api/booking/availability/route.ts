@@ -33,10 +33,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to check availability' }, { status: 500 });
   }
 
-  // Query admin block-off times for this date
+  // Query STUDIO-WIDE block-off times for this date.
+  //
+  // `engineer_name IS NULL` is the critical filter: a studio_blocks row
+  // with engineer_name set is an ENGINEER-SCOPED block (created from the
+  // engineer availability tab — e.g. "Jay is shooting off-site"). Those
+  // do NOT close the studio — other engineers + both rooms stay
+  // bookable. Engineer-scoped blocks are enforced separately in
+  // /api/booking/create via isEngineerBlocked() when a customer requests
+  // that specific engineer. Only `engineer_name IS NULL` rows
+  // (admin maintenance, private events) close the room calendar.
   const { data: blocks } = await supabase
     .from('studio_blocks')
     .select('start_time, end_time')
+    .is('engineer_name', null)
     .gte('start_time', dayStart)
     .lte('start_time', dayEnd);
 

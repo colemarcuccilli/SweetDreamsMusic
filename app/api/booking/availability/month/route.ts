@@ -50,10 +50,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to check availability' }, { status: 500 });
   }
 
-  // Fetch all admin block-off times in this month
+  // Fetch STUDIO-WIDE block-off times in this month. `engineer_name IS
+  // NULL` excludes engineer-scoped blocks (created from the engineer
+  // availability tab) — those don't close the studio, they only make
+  // that one engineer unbookable, enforced in /api/booking/create.
+  // Without this filter an engineer self-block greyed out the whole
+  // month calendar for every customer.
   const { data: blocks, error: blockErr } = await supabase
     .from('studio_blocks')
     .select('start_time, end_time')
+    .is('engineer_name', null)
     .gte('start_time', monthStart)
     .lte('start_time', monthEnd);
 
